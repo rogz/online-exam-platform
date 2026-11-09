@@ -259,6 +259,43 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'student dashboard fits a phone screen');
   await shot(phone, '12-phone-dashboard');
 
+  // ── Admins: promote a teacher, create a new admin, owner protection ──
+  await admin.goto(BASE + '/admin#admins');
+  await admin.waitForSelector('#addAdmin');
+  ok((await admin.textContent('#view')).includes('Site owner'), 'owner is marked on the Admins page');
+  await admin.click('#addAdmin');
+  await admin.fill('#adEmail', 'maria@school.edu');
+  await admin.click('.dialog .btn.primary');
+  ok(await toastSays(admin, 'Maria Santos is now an admin'), 'existing teacher promoted to admin');
+  ok((await dbOne(`SELECT role FROM users WHERE email = 'maria@school.edu'`)).role === 'admin', 'role saved');
+  ok((await dbOne(`SELECT count(*)::int AS n FROM exams WHERE title = 'EEE 150 Quiz 1'`)).n === 1, "promoted teacher keeps their exams");
+  await admin.click('#addAdmin');
+  await admin.fill('#adEmail', 'helper@test.local'); await admin.fill('#adName', 'Helper Admin');
+  await admin.click('.dialog .btn.primary');
+  await admin.waitForSelector('.dialog .code-box');
+  const temp = (await admin.textContent('.dialog .code-box')).trim();
+  ok(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(temp), 'new admin created with a temporary password');
+  await shot(admin, '12c-admins');
+  await admin.click('.dialog .btn.primary');
+  const helper = await newUser();
+  await helper.goto(BASE + '/');
+  await helper.fill('#inEmail', 'helper@test.local'); await helper.fill('#inPass', temp); await helper.click('#signIn button[type=submit]');
+  await helper.waitForURL(/\/admin/);
+  ok(true, 'new admin signs in to the admin console');
+  const ownerId = (await dbOne(`SELECT id FROM users WHERE email = 'admin@test.local'`)).id;
+  const post = (path, body) => helper.evaluate(async ([pth, b]) => (await (await fetch(pth, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json()).code, [path, body]);
+  ok(await post('/api/admin/admins/' + ownerId + '/remove', {}) === 'OWNER', "another admin cannot remove the owner's rights");
+  ok(await post('/api/admin/users/' + ownerId, { disabled: true }) === 'OWNER', 'another admin cannot disable the owner');
+  ok(await post('/api/admin/users/' + ownerId + '/reset-password', {}) === 'OWNER_ONLY', "another admin cannot reset the owner's password");
+  const helperId = (await dbOne(`SELECT id FROM users WHERE email = 'helper@test.local'`)).id;
+  ok(await post('/api/admin/admins/' + helperId + '/remove', {}) === 'BAD_INPUT', 'an admin cannot remove their own rights');
+  await admin.goto(BASE + '/admin#admins');
+  await admin.waitForSelector('tr:has-text("maria@school.edu") [data-demote]');
+  await admin.click('tr:has-text("maria@school.edu") [data-demote]');
+  await admin.click('.dialog .btn.danger');
+  ok(await toastSays(admin, 'no longer an admin'), 'owner removes admin rights');
+  ok((await dbOne(`SELECT role FROM users WHERE email = 'maria@school.edu'`)).role === 'teacher', 'back to teacher');
+
   // ── Admin deletes users ──
   await admin.goto(BASE + '/admin#teachers');
   await admin.waitForSelector('tr:has-text("pedro@school.edu") [data-delete]');

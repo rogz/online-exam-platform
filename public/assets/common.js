@@ -83,8 +83,10 @@
   function renderTopbar(me, site, links) {
     const bar = document.createElement('header');
     bar.className = 'topbar';
-    const initial = (site.name || 'Q').trim()[0].toUpperCase();
-    bar.innerHTML = `<a class="brand" href="/"><span class="mark">${esc(initial)}</span><span class="name">${esc(site.name)}</span></a>
+    // Two-tone name: "Exam Wizard" → "Exam" + gold "Wizard"
+    const words = String(site.name || '').trim().split(/\s+/);
+    const name = words.length > 1 ? esc(words.slice(0, -1).join(' ')) + ' <span class="accent">' + esc(words[words.length - 1]) + '</span>' : esc(site.name);
+    bar.innerHTML = `<a class="brand" href="/"><img class="logo" src="/assets/logo.svg" alt="" width="30" height="30"><span class="name">${name}</span></a>
       <div class="who">${me ? esc(me.name) + (me.studentNo ? ' — ' + esc(me.studentNo) : '') + (me.school ? ' — ' + esc(me.school) : '') : ''}</div>
       <nav>${(links || []).map((l) => `<a href="${esc(l.href)}"${l.on ? ' class="on"' : ''}>${esc(l.label)}</a>`).join('')}
       ${me ? '<button type="button" class="menu-btn" id="signOut">Sign out</button>' : ''}</nav>`;

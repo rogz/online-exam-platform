@@ -1,4 +1,4 @@
-# Online Exam Platform
+# Exam Wizard
 
 A website where **teachers** build and publish exams and **students** take them from one dashboard.
 
@@ -16,7 +16,7 @@ The exam screen brings over everything from the Google Sheets version: tab-switc
 |---|---|
 | **Student** (free) | Sign up · join classes with a code · see all exams in one list · take exams · see scores (if the teacher allows) |
 | **Teacher** | Create classes (each gets a 6-character join code) · question bank with pictures, topics, CSV import/export · exam editor with every option · publish (needs access or credits) · results with essay grading, retakes, event log, CSV downloads · redeem codes · request credits |
-| **Admin** | Create access codes (days or credits, single or shared, with expiry) · approve or reject credit requests · give access directly · reset passwords · disable accounts · site name, time zone, sign-up switches, payment instructions |
+| **Admin** | Add other admins (promote a teacher, or create a new admin account) · create access codes (days or credits, single or shared, with expiry) · approve or reject credit requests · give access directly · reset passwords · disable accounts · site name, time zone, sign-up switches, payment instructions |
 
 **Credits:**
 - Publishing an exam the first time costs 1 credit, unless the teacher has days of full access.
@@ -61,6 +61,13 @@ The same code runs anywhere with Node.js and PostgreSQL. On one server (AWS Ligh
 **To move your data from Neon:** run `pg_dump` on the Neon database and `psql` into the new one. Ask me for the exact commands when you get there.
 
 ---
+
+## Admins
+The account set as `ADMIN_EMAIL` is the **site owner**. In **Admin → Admins** you can:
+- **Add admin:** enter a teacher's email to promote them (they keep their classes and exams), or a new email and name to create an admin account with a temporary password.
+- **Remove admin rights:** the person becomes a teacher again.
+
+Safeguards: other admins can't remove, disable or reset the password of the site owner. Only the owner can reset any admin's password. Nobody can remove their own admin rights.
 
 ## Run it on your own computer
 

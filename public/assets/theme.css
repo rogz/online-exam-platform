@@ -40,7 +40,8 @@ h1 { font-size: 22px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .topbar { background: var(--bar); color: var(--bar-text); display: flex; align-items: center; gap: 16px; padding: 0 max(16px, env(safe-area-inset-left, 0px)); height: 52px; position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; color: #fff; letter-spacing: .2px; white-space: nowrap; }
 .brand:hover { text-decoration: none; }
-.brand .mark { width: 26px; height: 26px; border-radius: 6px; background: #fff; color: var(--bar); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; }
+.brand .logo { width: 30px; height: 30px; display: block; }
+.brand .accent { color: #ffc93c; }
 .topbar .who { flex: 1; min-width: 0; font-size: 13.5px; opacity: .92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 1px solid rgba(255, 255, 255, .3); padding-left: 16px; }
 .topbar nav { display: flex; gap: 2px; }
 .topbar nav a, .topbar .menu-btn { color: #fff; padding: 8px 12px; border-radius: 4px; font-size: 13.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; background: none; border: 0; cursor: pointer; font-family: inherit; }

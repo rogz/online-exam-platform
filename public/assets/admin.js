@@ -25,6 +25,7 @@
       else if (name === 'teachers') await users('teacher');
       else if (name === 'students') await users('student');
       else if (name === 'settings') await settings();
+      else if (name === 'admins') await admins();
     } catch (e) { view.innerHTML = '<div class="note bad">' + esc(e.message) + '</div>'; }
   }
   window.addEventListener('hashchange', route);
@@ -129,6 +130,35 @@
     };
     let t; $('#uq').oninput = () => { clearTimeout(t); t = setTimeout(load, 300); };
     await load();
+  }
+
+  async function admins() {
+    const r = await api('/admin/admins');
+    view.innerHTML = `<div class="stack"><div class="panel"><div class="hd"><h2>Admins</h2><button type="button" class="btn primary" id="addAdmin">+ Add admin</button></div>
+      <div class="tablewrap"><table class="list"><thead><tr><th>Name</th><th>Email</th><th>Since</th><th></th></tr></thead><tbody>
+      ${r.admins.map((a) => `<tr><td><b>${esc(a.name)}</b> ${a.isOwner ? '<span class="tag">Site owner</span>' : ''} ${a.isMe ? '<span class="tag grey">You</span>' : ''}${a.disabled ? ' <span class="tag bad">Disabled</span>' : ''}</td>
+        <td>${esc(a.email)}</td><td class="small nowrap">${esc(App.fmtDay(a.created_at))}</td>
+        <td class="nowrap">${a.isOwner || a.isMe ? '' : `<button type="button" class="btn small danger" data-demote="${a.id}">Remove admin rights</button>`}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="note info small">Admins can do everything on this console: create access codes, approve credit requests, manage teachers and students, and change site settings.
+        They can also publish exams without credits. Removing admin rights turns the person back into a teacher; their classes and exams stay.
+        The <b>site owner</b> (the email set as ADMIN_EMAIL on the server) cannot be removed or disabled by other admins, and only the owner can reset an admin's password.</div></div>`;
+    $('#addAdmin').onclick = () => dialog('Add an admin', `<div class="field"><label for="adEmail">Email</label><input type="email" id="adEmail" autocomplete="off">
+        <div class="hint">If a teacher already uses this email, they are made an admin and keep their classes and exams.</div></div>
+      <div class="field"><label for="adName">Full name <span class="muted">(for a new account)</span></label><input type="text" id="adName" autocomplete="off"></div>`, {
+      buttons: [{ label: 'Cancel' }, { label: 'Add admin', primary: true, onClick: async (ov) => {
+        const x = await api('/admin/admins', { email: $('#adEmail', ov).value, name: $('#adName', ov).value });
+        if (x.created) {
+          dialog('Admin account created', `<p style="margin-top:0">Give ${esc(x.name)} this <b>temporary password</b> privately. They should change it after signing in (My account → Change password).</p>
+            <span class="code-box">${esc(x.tempPassword)}</span>`, { buttons: [{ label: 'Done', primary: true }] });
+        } else toast(x.name + ' is now an admin');
+        admins();
+      } }],
+    });
+    $$('[data-demote]').forEach((b) => b.onclick = async () => {
+      const a = r.admins.find((x) => x.id === b.dataset.demote);
+      if (!(await App.confirmBox('Remove admin rights?', a.name + ' will become a teacher. Their classes and exams stay.', 'Remove admin rights', true))) return;
+      try { await api('/admin/admins/' + a.id + '/remove', {}); toast(a.name + ' is no longer an admin'); admins(); } catch (e) { toast(e.message, true); }
+    });
   }
 
   /** Shows what will be removed, then asks for the email before deleting for good. */

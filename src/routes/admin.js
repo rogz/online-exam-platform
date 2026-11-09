@@ -3,7 +3,7 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
 const { getSettings, saveSettings } = require('../settings');
-const { fail, str, int, isUuid, randomCode } = require('../util');
+const { fail, str, int, isUuid, randomCode, emailOk } = require('../util');
 const { grant } = require('./codes');
 
 const router = express.Router();
@@ -42,6 +42,7 @@ router.post('/users/:id', async (req, res) => {
   }
   if (b.disabled !== undefined) {
     if (u.id === req.user.id) throw fail(400, 'BAD_INPUT', 'You cannot disable your own account.');
+    if (u.email === ownerEmail()) throw fail(403, 'OWNER', 'The site owner\'s account cannot be disabled.');
     await db.query('UPDATE users SET disabled = $1 WHERE id = $2', [!!b.disabled, u.id]);
     if (b.disabled) await db.query('DELETE FROM sessions WHERE user_id = $1', [u.id]);
   }
@@ -52,6 +53,51 @@ router.post('/users/:id', async (req, res) => {
 });
 
 /** Sets a temporary password and returns it once, for the admin to pass on. */
+// ───────── Admins ─────────
+
+/** The site owner (ADMIN_EMAIL) can never be demoted or deleted by other admins. */
+const ownerEmail = () => String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+
+router.get('/admins', async (req, res) => {
+  const rows = await db.many(`SELECT id, email, name, school, created_at, disabled FROM users WHERE role = 'admin' ORDER BY created_at`);
+  res.json({ ok: true, admins: rows.map((u) => Object.assign(u, { isOwner: u.email === ownerEmail(), isMe: u.id === req.user.id })) });
+});
+
+/**
+ * Adds an admin. An existing teacher with that email is promoted (keeping their classes and exams);
+ * otherwise a new account is created with a temporary password, shown once.
+ */
+router.post('/admins', async (req, res) => {
+  const b = req.body || {};
+  const email = str(b.email, 200).toLowerCase();
+  if (!emailOk(email)) throw fail(400, 'BAD_INPUT', 'Enter a valid email address.');
+  const existing = await db.one('SELECT id, role, name FROM users WHERE email = $1', [email]);
+  if (existing) {
+    if (existing.role === 'admin') throw fail(409, 'ALREADY_ADMIN', existing.name + ' is already an admin.');
+    if (existing.role === 'student') throw fail(409, 'STUDENT', 'That email belongs to a student account. Use a teacher account or a new email.');
+    await db.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [existing.id]);
+    return res.json({ ok: true, promoted: true, name: existing.name });
+  }
+  const name = str(b.name, 120);
+  if (!name) throw fail(400, 'BAD_INPUT', 'Enter the new admin\'s full name.');
+  const temp = randomCode(4) + '-' + randomCode(4);
+  await db.query(`INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, 'admin')`, [email, await auth.hashPassword(temp), name]);
+  res.json({ ok: true, created: true, name, tempPassword: temp });
+});
+
+/** Removes admin rights: the person becomes a teacher again (their classes and exams stay). */
+router.post('/admins/:id/remove', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
+  const u = await db.one('SELECT id, email, role FROM users WHERE id = $1', [req.params.id]);
+  if (!u || u.role !== 'admin') throw fail(404, 'NOT_FOUND', 'Admin not found.');
+  if (u.id === req.user.id) throw fail(400, 'BAD_INPUT', 'You cannot remove your own admin rights. Ask another admin.');
+  if (u.email === ownerEmail()) throw fail(403, 'OWNER', 'The site owner\'s admin rights cannot be removed.');
+  const n = await db.one(`SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND NOT disabled`);
+  if (n.n <= 1) throw fail(400, 'LAST_ADMIN', 'This is the last admin.');
+  await db.query(`UPDATE users SET role = 'teacher' WHERE id = $1`, [u.id]);
+  res.json({ ok: true });
+});
+
 /** What deleting this user would also delete (shown before confirming). */
 async function deletionImpact(id) {
   return db.one(`SELECT u.id, u.email, u.name, u.role,
@@ -88,7 +134,10 @@ router.post('/users/:id/delete', async (req, res) => {
 
 router.post('/users/:id/reset-password', async (req, res) => {
   if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
-  if (!(await db.one('SELECT 1 FROM users WHERE id = $1', [req.params.id]))) throw fail(404, 'NOT_FOUND', 'User not found.');
+  const target = await db.one('SELECT id, role FROM users WHERE id = $1', [req.params.id]);
+  if (!target) throw fail(404, 'NOT_FOUND', 'User not found.');
+  // Resetting an admin's password would hand over their account: only the site owner may do that.
+  if (target.role === 'admin' && req.user.email !== ownerEmail()) throw fail(403, 'OWNER_ONLY', 'Only the site owner can reset an admin\'s password.');
   const temp = randomCode(4) + '-' + randomCode(4);
   await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await auth.hashPassword(temp), req.params.id]);
   await db.query('DELETE FROM sessions WHERE user_id = $1', [req.params.id]);

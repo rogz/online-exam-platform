@@ -2,7 +2,7 @@
 const db = require('./db');
 
 const DEFAULTS = {
-  siteName: process.env.SITE_NAME || 'OnlineQuiz',
+  siteName: process.env.SITE_NAME || 'Exam Wizard',
   timeZone: process.env.TIME_ZONE || 'Asia/Manila',
   teacherSignup: true,                 // anyone may register as a teacher (then needs a code or credits to publish)
   studentSignup: true,

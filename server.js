@@ -45,7 +45,8 @@ function createApp() {
   app.get('/teacher', page('teacher.html'));
   app.get('/admin', page('admin.html'));
   app.get('/exam', page('exam/index.html'));
-  app.use(express.static(pub, { index: false, maxAge: '1h' }));
+  // no-cache: browsers keep a copy but check for a newer one each time, so updates show up at once
+  app.use(express.static(pub, { index: false, setHeaders: (res) => res.set('Cache-Control', 'no-cache') }));
 
   // Errors → JSON for the API, plain text otherwise
   app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars

@@ -1,0 +1,36 @@
+# Everything on one server (e.g. an AWS Lightsail or EC2 instance):
+#   the website, a PostgreSQL database, and Caddy for free automatic HTTPS.
+# 1. Point your domain (e.g. quiz.abnjworks.com) to the server's static IP (DNS "A" record).
+# 2. Copy .env.example to .env and fill it in.
+# 3. Run: docker compose up -d
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://exam:${POSTGRES_PASSWORD}@db:5432/exam?sslmode=disable
+    depends_on: [db]
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_DB: exam
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from ${DOMAIN} --to app:3000
+    volumes:
+      - caddydata:/data
+    depends_on: [app]
+
+volumes:
+  dbdata:
+  caddydata:

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{site}</title>
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+  .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 420px); gap: 28px; align-items: start; }
+  @media (max-width: 860px) { .hero { grid-template-columns: minmax(0, 1fr); } }
+  .welcome h1 { font-size: 28px; margin-bottom: 8px; }
+  .welcome .lede { font-size: 16px; color: var(--muted); max-width: 56ch; margin: 0 0 18px; }
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+  .feature { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; }
+  .feature b { display: block; margin-bottom: 2px; color: var(--bar); }
+  .feature span { color: var(--muted); font-size: 13px; }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; padding: 12px; border: 0; background: var(--panel-alt); font: 600 14px var(--font); color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
+  .tabs button.on { background: #fff; color: var(--bar); border-bottom-color: var(--bar); }
+  .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .roles label { border: 1px solid var(--line); border-radius: 4px; padding: 10px; cursor: pointer; font-weight: 600; font-size: 13.5px; display: flex; gap: 8px; align-items: center; margin: 0; }
+  .roles label:has(input:checked) { border-color: var(--primary); background: var(--select); color: var(--bar); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="hero">
+    <section class="welcome">
+      <h1 id="siteTitle">Online exams for your classes</h1>
+      <p class="lede">Teachers build timed quizzes and exams from their own question bank. Students see every exam from all their classes in one place, and take them in a secure exam screen.</p>
+      <div class="features">
+        <div class="feature"><b>One list for students</b><span>Upcoming, open and completed exams from every class, in one side panel.</span></div>
+        <div class="feature"><b>Automatic grading</b><span>Multiple choice, true/false and fill-in-the-blank are scored instantly. Essays are graded by the teacher.</span></div>
+        <div class="feature"><b>Exam integrity</b><span>Tab-switch and second-monitor detection, optional camera check, time limits and exam passwords.</span></div>
+        <div class="feature"><b>Question bank</b><span>Reuse questions with topics and pictures, and give each student a random set.</span></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Sign in or create an account">
+      <div class="tabs" role="tablist">
+        <button type="button" id="tabIn" class="on" role="tab">Sign in</button>
+        <button type="button" id="tabUp" role="tab">Create account</button>
+      </div>
+      <div class="bd">
+        <form id="signIn" novalidate>
+          <div class="field"><label for="inEmail">Email</label><input type="email" id="inEmail" autocomplete="email" required></div>
+          <div class="field"><label for="inPass">Password</label><input type="password" id="inPass" autocomplete="current-password" required></div>
+          <div id="inMsg" class="note bad" hidden></div>
+          <div class="row" style="margin-top:12px"><button class="btn primary big" type="submit">Sign in</button></div>
+          <p class="hint" style="margin-top:12px">Forgot your password? Ask your teacher or the site administrator to reset it.</p>
+        </form>
+
+        <form id="signUp" novalidate hidden>
+          <div class="roles" role="radiogroup" aria-label="I am a">
+            <label><input type="radio" name="role" value="student" checked> I'm a student</label>
+            <label><input type="radio" name="role" value="teacher"> I'm a teacher</label>
+          </div>
+          <div class="field"><label for="upName">Full name</label><input type="text" id="upName" autocomplete="name" required></div>
+          <div class="field"><label for="upEmail">Email</label><input type="email" id="upEmail" autocomplete="email" required></div>
+          <div class="field"><label for="upPass">Password</label><input type="password" id="upPass" autocomplete="new-password" minlength="8" required><div class="hint">At least 8 characters.</div></div>
+          <div class="field" id="studentNoWrap"><label for="upStudentNo">Student number <span class="muted">(optional)</span></label><input type="text" id="upStudentNo"></div>
+          <div class="field"><label for="upSchool">School <span class="muted">(optional)</span></label><input type="text" id="upSchool" autocomplete="organization"></div>
+          <div class="field" id="codeWrap" hidden><label for="upCode">Access code <span class="muted">(optional)</span></label><input type="text" id="upCode" autocomplete="off">
+            <div class="hint">Teachers need an access code or credits to publish exams. You can also add one later under My Account.</div></div>
+          <p class="hint">By creating an account you agree that your name, email and exam results are stored on this site so your teachers can see them.</p>
+          <div id="upMsg" class="note bad" hidden></div>
+          <div class="row" style="margin-top:12px"><button class="btn primary big" type="submit">Create account</button></div>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="/assets/common.js"></script>
+<script>
+(async function () {
+  const { $, api } = App;
+  const next = new URLSearchParams(location.search).get('next');
+  const go = (u) => { location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : App.homeFor(u); };
+  const me = await api('/auth/me', undefined, { allowSignedOut: true });
+  if (me.user) return go(me.user);
+  App.renderTopbar(null, me.site, []);
+  $('#siteTitle').textContent = 'Online exams for your classes';
+  const tab = (up) => { $('#signIn').hidden = up; $('#signUp').hidden = !up; $('#tabIn').classList.toggle('on', !up); $('#tabUp').classList.toggle('on', up); };
+  $('#tabIn').onclick = () => tab(false);
+  $('#tabUp').onclick = () => tab(true);
+  if (location.hash === '#signup') tab(true);
+  const role = () => document.querySelector('input[name=role]:checked').value;
+  document.querySelectorAll('input[name=role]').forEach((r) => r.addEventListener('change', () => {
+    $('#studentNoWrap').hidden = role() !== 'student'; $('#codeWrap').hidden = role() !== 'teacher';
+  }));
+  if (!me.site.teacherSignup) document.querySelector('input[value=teacher]').closest('label').hidden = true;
+
+  $('#signIn').onsubmit = async (e) => {
+    e.preventDefault(); $('#inMsg').hidden = true;
+    try { const r = await api('/auth/login', { email: $('#inEmail').value, password: $('#inPass').value }); go(r.user); }
+    catch (err) { $('#inMsg').textContent = err.message; $('#inMsg').hidden = false; }
+  };
+  $('#signUp').onsubmit = async (e) => {
+    e.preventDefault(); $('#upMsg').hidden = true;
+    try {
+      const r = await api('/auth/register', { role: role(), name: $('#upName').value, email: $('#upEmail').value, password: $('#upPass').value,
+        studentNo: $('#upStudentNo').value, school: $('#upSchool').value, accessCode: $('#upCode').value });
+      if (r.codeMessage) { try { sessionStorage.setItem('welcome', r.codeMessage); } catch (e2) { /* ignore */ } }
+      go(r.user);
+    } catch (err) { $('#upMsg').textContent = err.message; $('#upMsg').hidden = false; }
+  };
+})();
+</script>
+</body>
+</html>

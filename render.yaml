@@ -1,0 +1,23 @@
+# Render blueprint: Dashboard → New → Blueprint → pick this repository.
+# You will be asked for the values marked "sync: false".
+services:
+  - type: web
+    name: online-exam
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=optional
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL        # from Neon (free PostgreSQL): the connection string
+        sync: false
+      - key: ADMIN_EMAIL         # your email: this account becomes the site admin
+        sync: false
+      - key: ADMIN_PASSWORD      # used only the first time, to create the admin account
+        sync: false
+      - key: SITE_NAME
+        value: OnlineQuiz
+      - key: TIME_ZONE
+        value: Asia/Manila

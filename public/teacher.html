@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher — {site}</title>
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+  .classcard { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px; border-bottom: 1px solid var(--line-soft); }
+  .classcard:last-child { border-bottom: 0; }
+  .classcard h3 { margin: 0 0 2px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .toolbar input[type=search] { max-width: 260px; }
+  .toolbar select { width: auto; }
+  .choice-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .choice-row .letter { font-weight: 700; width: 18px; }
+  .imgprev { max-width: 100%; max-height: 220px; border: 1px solid var(--line); border-radius: 4px; display: block; margin-top: 8px; background: #fff; }
+  .editor { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 1000px) { .editor { grid-template-columns: minmax(0, 1fr); } }
+  .editor .panel > .bd { max-height: none; }
+  fieldset { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin: 0 0 12px; }
+  legend { font-weight: 700; font-size: 13px; padding: 0 6px; color: var(--bar); }
+  .picker { max-height: 620px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; }
+  .picker table.list th { position: sticky; top: 0; z-index: 1; }
+  .sumbar { position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 10px 0 0; margin-top: 10px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .qtext { max-width: 520px; }
+  .qtext .choices { color: var(--muted); font-size: 12.5px; }
+  .resp { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; }
+  .resp .q { white-space: pre-wrap; margin: 4px 0 8px; }
+  .resp .a { white-space: pre-wrap; background: var(--panel-alt); padding: 6px 8px; border-radius: 3px; }
+  .access { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="accessBanner" class="note warn" style="margin-bottom:16px" hidden></div>
+  <div class="cols">
+    <aside class="sidenav" aria-label="Teacher menu">
+      <div class="me"><div class="avatar" id="avatar"></div><b id="meName"></b><div class="small muted" id="meAccess"></div></div>
+      <a href="#classes" data-view="classes">Classes</a>
+      <a href="#questions" data-view="questions">Question bank</a>
+      <a href="#exams" data-view="exams">Exams &amp; results</a>
+      <a href="#account" data-view="account">My account</a>
+      <a href="/admin" id="adminLink" hidden>Admin console</a>
+    </aside>
+    <main id="view" aria-live="polite"><div class="empty">Loading…</div></main>
+  </div>
+</div>
+<script src="/assets/common.js"></script>
+<script src="/assets/teacher.js"></script>
+</body>
+</html>

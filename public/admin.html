@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — {site}</title>
+<link rel="stylesheet" href="/assets/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="cols">
+    <aside class="sidenav" aria-label="Admin menu">
+      <div class="me"><div class="avatar">A</div><b id="meName"></b><div class="small muted">Administrator</div></div>
+      <a href="#overview" data-view="overview">Overview</a>
+      <a href="#requests" data-view="requests">Credit requests <span class="badge" id="reqBadge" hidden></span></a>
+      <a href="#codes" data-view="codes">Access codes</a>
+      <a href="#teachers" data-view="teachers">Teachers</a>
+      <a href="#students" data-view="students">Students</a>
+      <a href="#settings" data-view="settings">Site settings</a>
+      <a href="/teacher">Teacher tools</a>
+    </aside>
+    <main id="view"><div class="empty">Loading…</div></main>
+  </div>
+</div>
+<script src="/assets/common.js"></script>
+<script src="/assets/admin.js"></script>
+</body>
+</html>

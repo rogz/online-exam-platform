@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Exams — {site}</title>
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+  body { display: flex; flex-direction: column; }
+  .shell { flex: 1; display: grid; grid-template-columns: 360px minmax(0, 1fr); min-height: calc(100vh - 52px); }
+  @media (max-width: 820px) { .shell { grid-template-columns: minmax(0, 1fr); } }
+  .side { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+  .side .top { padding: 16px; border-bottom: 1px solid var(--line); }
+  .side .top h1 { font-size: 19px; margin-bottom: 6px; }
+  .group h2 { margin: 0; padding: 8px 16px; background: var(--panel-alt); border-bottom: 1px solid var(--line); border-top: 1px solid var(--line); font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #4a5560; }
+  .item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; text-align: left; background: #fff; border: 0; border-bottom: 1px solid var(--line-soft); padding: 11px 16px; cursor: pointer; font: inherit; color: var(--text); }
+  .item:hover { background: #f7f9fb; }
+  .item.on { background: var(--select); box-shadow: inset 4px 0 0 var(--bar); }
+  .item b { display: block; font-size: 14px; }
+  .item span { display: block; font-size: 12.5px; color: var(--muted); }
+  .item .mark { font-size: 18px; font-weight: 700; }
+  .mark.ok { color: var(--ok); } .mark.bad { color: var(--bad); } .mark.live { color: var(--primary); }
+  .side .foot { margin-top: auto; padding: 12px 16px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+  .classes { font-size: 13px; }
+  .classes li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+  .classes ul { list-style: none; margin: 6px 0 0; padding: 0; }
+  .main { padding: 24px max(16px, env(safe-area-inset-right, 0px)) 48px 28px; min-width: 0; }
+  @media (max-width: 820px) { .main { padding-left: 16px; border-top: 1px solid var(--line); } }
+  .main h1 { font-size: 21px; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  .startbox { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 16px; margin-bottom: 22px; max-width: 760px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 12px; max-width: 760px; margin-bottom: 22px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 14px 10px; text-align: center; font-size: 13px; }
+  .tile svg { width: 30px; height: 30px; display: block; margin: 0 auto 8px; color: #33404d; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 760px; }
+  @media (max-width: 640px) { .two { grid-template-columns: 1fr; } }
+  .kv { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .kv td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); }
+  .kv tr:nth-child(odd) td { background: #f3f5f7; }
+  .kv td:last-child { text-align: right; color: var(--muted); font-weight: 600; }
+  .countdown { font: 700 26px/1.2 var(--font); font-variant-numeric: tabular-nums; color: var(--bar); }
+  .score { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .instructions { white-space: pre-wrap; max-width: 760px; margin: 0 0 18px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side" aria-label="My exams">
+    <div class="top">
+      <h1>My Exams</h1>
+      <div class="small muted">Don't see your exam? <button type="button" class="linkbtn" id="refresh">Refresh the list</button>. If it's still missing, ask your teacher.</div>
+    </div>
+    <div id="list"></div>
+    <div class="foot">
+      <button type="button" class="btn primary" id="joinBtn">+ Join a class</button>
+      <div class="classes"><b>My classes</b><ul id="classList"></ul></div>
+    </div>
+  </aside>
+  <main class="main" id="detail"><div class="empty">Loading…</div></main>
+</div>
+<script src="/assets/common.js"></script>
+<script src="/assets/student.js"></script>
+</body>
+</html>

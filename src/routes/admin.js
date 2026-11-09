@@ -1,0 +1,136 @@
+// Admin: teachers, students, access codes, credit requests, site settings.
+const express = require('express');
+const db = require('../db');
+const auth = require('../auth');
+const { getSettings, saveSettings } = require('../settings');
+const { fail, str, int, isUuid, randomCode } = require('../util');
+const { grant } = require('./codes');
+
+const router = express.Router();
+router.use(auth.requireRole('admin'));
+
+router.get('/overview', async (req, res) => {
+  const c = await db.one(`SELECT
+      (SELECT count(*) FROM users WHERE role = 'teacher')::int AS teachers,
+      (SELECT count(*) FROM users WHERE role = 'student')::int AS students,
+      (SELECT count(*) FROM exams WHERE published)::int AS exams,
+      (SELECT count(*) FROM attempts)::int AS attempts,
+      (SELECT count(*) FROM credit_requests WHERE status = 'pending')::int AS pending_requests`);
+  res.json({ ok: true, counts: c });
+});
+
+router.get('/users', async (req, res) => {
+  const role = ['teacher', 'student', 'admin'].includes(req.query.role) ? req.query.role : 'teacher';
+  const q = '%' + str(req.query.q, 100).toLowerCase() + '%';
+  const rows = await db.many(
+    `SELECT u.id, u.email, u.name, u.role, u.student_no, u.school, u.teacher_until, u.credits, u.disabled, u.created_at,
+            (SELECT count(*) FROM exams e WHERE e.teacher_id = u.id)::int AS exam_count,
+            (SELECT count(*) FROM classes c WHERE c.teacher_id = u.id)::int AS class_count
+       FROM users u WHERE u.role = $1 AND (lower(u.email) LIKE $2 OR lower(u.name) LIKE $2)
+      ORDER BY u.created_at DESC LIMIT 500`, [role, q]);
+  res.json({ ok: true, users: rows });
+});
+
+router.post('/users/:id', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
+  const u = await db.one('SELECT * FROM users WHERE id = $1', [req.params.id]);
+  if (!u) throw fail(404, 'NOT_FOUND', 'User not found.');
+  const b = req.body || {};
+  if (b.credits || b.days) {
+    if (u.role === 'student') throw fail(400, 'BAD_INPUT', 'Credits and access are for teachers.');
+    await grant(u.id, { credits: int(b.credits, 0, -100000, 100000), days: int(b.days, 0, -3650, 3650) }, 'Admin: ' + (str(b.reason, 200) || 'manual change'));
+  }
+  if (b.disabled !== undefined) {
+    if (u.id === req.user.id) throw fail(400, 'BAD_INPUT', 'You cannot disable your own account.');
+    await db.query('UPDATE users SET disabled = $1 WHERE id = $2', [!!b.disabled, u.id]);
+    if (b.disabled) await db.query('DELETE FROM sessions WHERE user_id = $1', [u.id]);
+  }
+  if (b.role && ['teacher', 'student'].includes(b.role) && u.role !== 'admin') {
+    await db.query('UPDATE users SET role = $1 WHERE id = $2', [b.role, u.id]);
+  }
+  res.json({ ok: true, user: await db.one('SELECT id, email, name, role, teacher_until, credits, disabled FROM users WHERE id = $1', [u.id]) });
+});
+
+/** Sets a temporary password and returns it once, for the admin to pass on. */
+router.post('/users/:id/reset-password', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
+  if (!(await db.one('SELECT 1 FROM users WHERE id = $1', [req.params.id]))) throw fail(404, 'NOT_FOUND', 'User not found.');
+  const temp = randomCode(4) + '-' + randomCode(4);
+  await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await auth.hashPassword(temp), req.params.id]);
+  await db.query('DELETE FROM sessions WHERE user_id = $1', [req.params.id]);
+  res.json({ ok: true, tempPassword: temp });
+});
+
+router.get('/users/:id/ledger', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
+  res.json({ ok: true, ledger: await db.many('SELECT * FROM credit_ledger WHERE teacher_id = $1 ORDER BY at DESC LIMIT 200', [req.params.id]) });
+});
+
+// ───────── Access codes ─────────
+
+router.get('/codes', async (req, res) => {
+  const rows = await db.many(
+    `SELECT c.*, COALESCE((SELECT json_agg(json_build_object('name', u.name, 'email', u.email, 'at', r.at) ORDER BY r.at)
+                             FROM code_redemptions r JOIN users u ON u.id = r.user_id WHERE r.code = c.code), '[]') AS used_by
+       FROM access_codes c ORDER BY c.created_at DESC LIMIT 1000`);
+  res.json({ ok: true, codes: rows });
+});
+
+router.post('/codes', async (req, res) => {
+  const b = req.body || {};
+  const kind = b.kind === 'credits' ? 'credits' : 'days';
+  const amount = int(b.amount, 0, 1, 100000);
+  if (!amount) throw fail(400, 'BAD_INPUT', kind === 'days' ? 'Enter the number of days.' : 'Enter the number of credits.');
+  const count = int(b.count, 1, 1, 200);
+  const maxUses = int(b.maxUses, 1, 1, 100000);
+  const expires = b.expiresAt ? new Date(b.expiresAt) : null;
+  if (expires && isNaN(expires)) throw fail(400, 'BAD_INPUT', 'The expiry date is not valid.');
+  const created = [];
+  for (let i = 0; i < count; i++) {
+    const code = (kind === 'days' ? 'T' : 'C') + randomCode(3) + '-' + randomCode(4);
+    await db.query('INSERT INTO access_codes (code, kind, amount, max_uses, expires_at, note, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [code, kind, amount, maxUses, expires, str(b.note, 200) || null, req.user.id]);
+    created.push(code);
+  }
+  res.json({ ok: true, codes: created });
+});
+
+router.post('/codes/:code', async (req, res) => {
+  await db.query('UPDATE access_codes SET active = $1 WHERE code = $2', [!!(req.body && req.body.active), str(req.params.code, 40)]);
+  res.json({ ok: true });
+});
+
+// ───────── Credit requests ─────────
+
+router.get('/requests', async (req, res) => {
+  const rows = await db.many(
+    `SELECT r.*, u.name AS teacher_name, u.email AS teacher_email, u.credits AS teacher_credits, u.teacher_until
+       FROM credit_requests r JOIN users u ON u.id = r.teacher_id
+      ORDER BY (r.status = 'pending') DESC, r.created_at DESC LIMIT 500`);
+  res.json({ ok: true, requests: rows });
+});
+
+router.post('/requests/:id', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'Request not found.');
+  const r = await db.one('SELECT * FROM credit_requests WHERE id = $1', [req.params.id]);
+  if (!r) throw fail(404, 'NOT_FOUND', 'Request not found.');
+  if (r.status !== 'pending') throw fail(409, 'DONE', 'This request was already handled.');
+  const b = req.body || {};
+  if (b.action === 'approve') {
+    const credits = int(b.credits, r.credits, 0, 100000);
+    const days = int(b.days, 0, 0, 3650);
+    if (!credits && !days) throw fail(400, 'BAD_INPUT', 'Enter credits or days to give.');
+    await grant(r.teacher_id, { credits, days }, 'Approved request' + (r.reference ? ' (ref ' + r.reference + ')' : ''));
+    await db.query(`UPDATE credit_requests SET status = 'approved', credits = $1, handled_by = $2, handled_at = now() WHERE id = $3`, [credits, req.user.id, r.id]);
+  } else {
+    await db.query(`UPDATE credit_requests SET status = 'rejected', handled_by = $1, handled_at = now() WHERE id = $2`, [req.user.id, r.id]);
+  }
+  res.json({ ok: true });
+});
+
+// ───────── Settings ─────────
+
+router.get('/settings', async (req, res) => res.json({ ok: true, settings: await getSettings() }));
+router.post('/settings', async (req, res) => res.json({ ok: true, settings: await saveSettings(req.body || {}) }));
+
+module.exports = router;

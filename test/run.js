@@ -256,6 +256,39 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'student dashboard fits a phone screen');
   await shot(phone, '12-phone-dashboard');
 
+  // ── Admin deletes users ──
+  await admin.goto(BASE + '/admin#teachers');
+  await admin.waitForSelector('tr:has-text("pedro@school.edu") [data-delete]');
+  await admin.click('tr:has-text("pedro@school.edu") [data-delete]');
+  await admin.waitForSelector('.dialog #delEmail');
+  const impact = await admin.textContent('.dialog .note.bad');
+  ok(impact.includes('1 class') && impact.includes('1 exam') && impact.includes('1 question'), 'delete shows what will be removed: ' + impact.replace(/\s+/g, ' ').trim());
+  await shot(admin, '13-delete-user');
+  await admin.fill('#delEmail', 'wrong@school.edu');
+  await admin.click('.dialog .btn.danger');
+  ok(await toastSays(admin, 'Type the user'), 'wrong email does not delete');
+  await admin.fill('#delEmail', 'pedro@school.edu');
+  await admin.click('.dialog .btn.danger');
+  ok(await toastSays(admin, 'was deleted'), 'teacher deleted');
+  const left = await dbOne(`SELECT (SELECT count(*) FROM users WHERE email = 'pedro@school.edu')::int AS u,
+    (SELECT count(*) FROM exams WHERE title = 'Physics quiz')::int AS x, (SELECT count(*) FROM classes WHERE name = 'Physics')::int AS c`);
+  ok(left.u === 0 && left.x === 0 && left.c === 0, 'teacher, their class and exam are gone');
+  await admin.goto(BASE + '/admin#students');
+  await admin.waitForSelector('tr:has-text("juan@student.edu") [data-delete]');
+  await admin.click('tr:has-text("juan@student.edu") [data-delete]');
+  await admin.waitForSelector('.dialog #delEmail');
+  ok((await admin.textContent('.dialog .note.bad')).includes('2 exam attempts'), 'student delete lists their attempts');
+  await admin.fill('#delEmail', 'JUAN@student.edu');
+  await admin.click('.dialog .btn.danger');
+  ok(await toastSays(admin, 'was deleted'), 'student deleted');
+  ok((await dbOne(`SELECT count(*)::int AS n FROM attempts`)).n === 0, "student's attempts removed");
+  const selfDel = await admin.evaluate(async () => {
+    const me = (await (await fetch('/api/auth/me')).json()).user;
+    return (await (await fetch('/api/admin/users/' + me.id + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ confirmEmail: me.email }) })).json()).error;
+  });
+  ok(/own account/.test(selfDel || ''), 'admin cannot delete their own account');
+  ok((await phone.evaluate(async () => (await fetch('/api/student/dashboard')).status)) === 401, "deleted student's session no longer works");
+
   ok(errors.length === 0, 'no browser errors ' + errors.join(' | '));
   await browser.close(); server.close(); await db.close();
   console.log('Screenshots: ' + SHOTS);

@@ -103,12 +103,13 @@
       <div class="tablewrap"><table class="list"><thead><tr><th>Name</th><th>Email</th>${role === 'teacher' ? '<th>Access</th><th>Classes / exams</th>' : '<th>Student no.</th>'}<th>Joined</th><th></th></tr></thead><tbody id="urows"></tbody></table></div></div>`;
     const load = async () => {
       const r = await api('/admin/users?role=' + role + '&q=' + encodeURIComponent($('#uq').value));
-      $('#urows').innerHTML = r.users.length ? r.users.map((u) => `<tr${u.disabled ? ' style="opacity:.55"' : ''}><td><b>${esc(u.name)}</b>${u.school ? '<div class="small muted">' + esc(u.school) + '</div>' : ''}${u.disabled ? ' <span class="tag bad">Disabled</span>' : ''}</td>
+      $('#urows').innerHTML = r.users.length ? r.users.map((u) => `<tr${u.disabled ? ' style="opacity:.55"' : ''}><td class="user-name"><b>${esc(u.name)}</b>${u.school ? '<div class="small muted">' + esc(u.school) + '</div>' : ''}${u.disabled ? ' <span class="tag bad">Disabled</span>' : ''}</td>
         <td>${esc(u.email)}</td>
         ${role === 'teacher' ? `<td class="small">${u.teacher_until && new Date(u.teacher_until) > Date.now() ? '<span class="tag ok">Until ' + esc(App.fmtDay(u.teacher_until)) + '</span>' : ''} ${u.credits} credit${u.credits === 1 ? '' : 's'}</td><td class="num">${u.class_count} / ${u.exam_count}</td>` : `<td>${esc(u.student_no || '')}</td>`}
         <td class="small nowrap">${esc(App.fmtDay(u.created_at))}</td>
-        <td class="nowrap">${role === 'teacher' ? `<button type="button" class="btn small primary" data-grant="${u.id}">Give access…</button> ` : ''}
-          <button type="button" class="btn small" data-reset="${u.id}">Reset password</button> <button type="button" class="btn small${u.disabled ? '' : ' danger'}" data-disable="${u.id}" data-state="${u.disabled}">${u.disabled ? 'Enable' : 'Disable'}</button></td></tr>`).join('')
+        <td><div class="user-actions">${role === 'teacher' ? `<button type="button" class="btn small primary" data-grant="${u.id}">Give access…</button> ` : ''}
+          <button type="button" class="btn small" data-reset="${u.id}">Reset password</button> <button type="button" class="btn small${u.disabled ? '' : ' danger'}" data-disable="${u.id}" data-state="${u.disabled}">${u.disabled ? 'Enable' : 'Disable'}</button>
+          <button type="button" class="btn small danger" data-delete="${u.id}">Delete</button></div></td></tr>`).join('')
         : '<tr><td colspan="6"><div class="empty">Nobody found.</div></td></tr>';
       $$('[data-grant]').forEach((b) => b.onclick = () => {
         const u = r.users.find((x) => x.id === b.dataset.grant);
@@ -126,9 +127,30 @@
         dialog('Temporary password', `<p style="margin-top:0">Give this to the user privately. They can change it after signing in.</p><span class="code-box">${esc(x.tempPassword)}</span>`, { buttons: [{ label: 'Done', primary: true }] });
       });
       $$('[data-disable]').forEach((b) => b.onclick = async () => { await api('/admin/users/' + b.dataset.disable, { disabled: b.dataset.state !== 'true' }); load(); });
+      $$('[data-delete]').forEach((b) => b.onclick = () => deleteUser(b.dataset.delete, load));
     };
     let t; $('#uq').oninput = () => { clearTimeout(t); t = setTimeout(load, 300); };
     await load();
+  }
+
+  /** Shows what will be removed, then asks for the email before deleting for good. */
+  async function deleteUser(id, after) {
+    let u;
+    try { u = (await api('/admin/users/' + id + '/impact')).impact; } catch (e) { toast(e.message, true); return; }
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const lost = u.role === 'teacher'
+      ? [plural(u.classes, 'class', 'classes'), plural(u.exams, 'exam', 'exams'), plural(u.questions, 'question', 'questions'), plural(u.student_attempts, 'student result', 'student results')]
+      : [plural(u.own_attempts, 'exam attempt', 'exam attempts') + ' and their answers', plural(u.enrollments, 'class membership', 'class memberships')];
+    dialog('Delete ' + u.name + '?', `<div class="note bad" style="margin-bottom:12px"><b>This cannot be undone.</b> Deleting this ${u.role} also permanently deletes:
+        <ul style="margin:6px 0 0;padding-left:18px">${lost.map((l) => '<li>' + esc(l) + '</li>').join('')}</ul></div>
+      ${u.role === 'teacher' && u.exams ? '<p class="small">Tip: to keep their exams and results, use <b>Disable</b> instead: they can no longer sign in, but nothing is lost.</p>' : ''}
+      <div class="field"><label for="delEmail">Type <b>${esc(u.email)}</b> to confirm</label><input type="text" id="delEmail" autocomplete="off"></div>`, {
+      buttons: [{ label: 'Cancel' }, { label: 'Delete permanently', danger: true, onClick: async (ov) => {
+        await api('/admin/users/' + u.id + '/delete', { confirmEmail: $('#delEmail', ov).value });
+        toast(u.name + ' was deleted');
+        after();
+      } }],
+    });
   }
 
   async function settings() {

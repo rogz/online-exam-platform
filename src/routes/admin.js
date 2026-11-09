@@ -52,6 +52,40 @@ router.post('/users/:id', async (req, res) => {
 });
 
 /** Sets a temporary password and returns it once, for the admin to pass on. */
+/** What deleting this user would also delete (shown before confirming). */
+async function deletionImpact(id) {
+  return db.one(`SELECT u.id, u.email, u.name, u.role,
+      (SELECT count(*) FROM classes WHERE teacher_id = u.id)::int AS classes,
+      (SELECT count(*) FROM exams WHERE teacher_id = u.id)::int AS exams,
+      (SELECT count(*) FROM questions WHERE teacher_id = u.id)::int AS questions,
+      (SELECT count(*) FROM attempts a JOIN exams x ON x.id = a.exam_id WHERE x.teacher_id = u.id)::int AS student_attempts,
+      (SELECT count(*) FROM attempts WHERE student_id = u.id)::int AS own_attempts,
+      (SELECT count(*) FROM enrollments WHERE student_id = u.id)::int AS enrollments
+    FROM users u WHERE u.id = $1`, [id]);
+}
+
+router.get('/users/:id/impact', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
+  const impact = await deletionImpact(req.params.id);
+  if (!impact) throw fail(404, 'NOT_FOUND', 'User not found.');
+  res.json({ ok: true, impact });
+});
+
+/** Permanently deletes a user and everything that belongs to them. */
+router.post('/users/:id/delete', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
+  const u = await deletionImpact(req.params.id);
+  if (!u) throw fail(404, 'NOT_FOUND', 'User not found.');
+  if (u.id === req.user.id) throw fail(400, 'BAD_INPUT', 'You cannot delete your own account.');
+  if (u.role === 'admin') throw fail(400, 'BAD_INPUT', 'Admin accounts cannot be deleted here.');
+  if (str(req.body && req.body.confirmEmail, 200).toLowerCase() !== u.email) {
+    throw fail(400, 'BAD_INPUT', 'Type the user\'s email exactly to confirm.');
+  }
+  // Classes, exams, questions, pictures, attempts, answers, sessions and requests are removed with the account.
+  await db.query('DELETE FROM users WHERE id = $1', [u.id]);
+  res.json({ ok: true, deleted: u });
+});
+
 router.post('/users/:id/reset-password', async (req, res) => {
   if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
   if (!(await db.one('SELECT 1 FROM users WHERE id = $1', [req.params.id]))) throw fail(404, 'NOT_FOUND', 'User not found.');

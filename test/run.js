@@ -251,6 +251,9 @@ fs.mkdirSync(SHOTS, { recursive: true });
   // ── Phone layout ──
   const phone = await newUser({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
   await phone.goto(BASE + '/');
+  await phone.waitForSelector('#signIn');
+  ok(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'home page fits a phone screen');
+  await shot(phone, '01b-home-phone');
   await phone.fill('#inEmail', 'juan@student.edu'); await phone.fill('#inPass', 'student-pass-1'); await phone.click('#signIn button[type=submit]');
   await phone.waitForSelector('.item');
   ok(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'student dashboard fits a phone screen');
@@ -259,6 +262,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   // ── Admin deletes users ──
   await admin.goto(BASE + '/admin#teachers');
   await admin.waitForSelector('tr:has-text("pedro@school.edu") [data-delete]');
+  await shot(admin, '12b-admin-teachers');
   await admin.click('tr:has-text("pedro@school.edu") [data-delete]');
   await admin.waitForSelector('.dialog #delEmail');
   const impact = await admin.textContent('.dialog .note.bad');

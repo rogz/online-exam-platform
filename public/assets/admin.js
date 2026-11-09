@@ -100,16 +100,14 @@
 
   async function users(role) {
     view.innerHTML = `<div class="panel"><div class="hd"><h2>${role === 'teacher' ? 'Teachers' : 'Students'}</h2><input type="search" id="uq" placeholder="Search name or email…" style="max-width:260px" aria-label="Search"></div>
-      <div class="tablewrap"><table class="list"><thead><tr><th>Name</th><th>Email</th>${role === 'teacher' ? '<th>Access</th><th>Classes / exams</th>' : '<th>Student no.</th>'}<th>Joined</th><th></th></tr></thead><tbody id="urows"></tbody></table></div></div>`;
+      <div class="tablewrap"><table class="list"><thead><tr><th>Name</th><th>Email</th>${role === 'teacher' ? '<th>Access</th><th>Classes / exams</th>' : '<th>Student no.</th>'}<th></th></tr></thead><tbody id="urows"></tbody></table></div></div>`;
     const load = async () => {
       const r = await api('/admin/users?role=' + role + '&q=' + encodeURIComponent($('#uq').value));
       $('#urows').innerHTML = r.users.length ? r.users.map((u) => `<tr${u.disabled ? ' style="opacity:.55"' : ''}><td class="user-name"><b>${esc(u.name)}</b>${u.school ? '<div class="small muted">' + esc(u.school) + '</div>' : ''}${u.disabled ? ' <span class="tag bad">Disabled</span>' : ''}</td>
-        <td>${esc(u.email)}</td>
+        <td>${esc(u.email)}<div class="small muted">Joined ${esc(App.fmtDay(u.created_at))}</div></td>
         ${role === 'teacher' ? `<td class="small">${u.teacher_until && new Date(u.teacher_until) > Date.now() ? '<span class="tag ok">Until ' + esc(App.fmtDay(u.teacher_until)) + '</span>' : ''} ${u.credits} credit${u.credits === 1 ? '' : 's'}</td><td class="num">${u.class_count} / ${u.exam_count}</td>` : `<td>${esc(u.student_no || '')}</td>`}
-        <td class="small nowrap">${esc(App.fmtDay(u.created_at))}</td>
-        <td><div class="user-actions">${role === 'teacher' ? `<button type="button" class="btn small primary" data-grant="${u.id}">Give access…</button> ` : ''}
-          <button type="button" class="btn small" data-reset="${u.id}">Reset password</button> <button type="button" class="btn small${u.disabled ? '' : ' danger'}" data-disable="${u.id}" data-state="${u.disabled}">${u.disabled ? 'Enable' : 'Disable'}</button>
-          <button type="button" class="btn small danger" data-delete="${u.id}">Delete</button></div></td></tr>`).join('')
+        <td><div class="user-actions${role === 'teacher' ? ' two' : ''}">${role === 'teacher' ? `<button type="button" class="btn small primary" data-grant="${u.id}">Give access…</button>` : ''}
+          <button type="button" class="btn small" data-reset="${u.id}">Reset password</button><button type="button" class="btn small" data-disable="${u.id}" data-state="${u.disabled}">${u.disabled ? 'Enable' : 'Disable'}</button><button type="button" class="btn small danger" data-delete="${u.id}">Delete</button></div></td></tr>`).join('')
         : '<tr><td colspan="6"><div class="empty">Nobody found.</div></td></tr>';
       $$('[data-grant]').forEach((b) => b.onclick = () => {
         const u = r.users.find((x) => x.id === b.dataset.grant);

@@ -3,7 +3,7 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
 const { getSettings } = require('../settings');
-const { fail, str, emailOk } = require('../util');
+const { fail, str, emailOk, isUuid } = require('../util');
 const { redeemCode } = require('./codes');
 
 const router = express.Router();
@@ -34,7 +34,7 @@ router.post('/register', async (req, res) => {
     try { codeMessage = await redeemCode(user.id, b.accessCode); } catch (e) { codeMessage = 'Your account was created, but the access code was not applied: ' + e.message; }
   }
   await auth.startSession(res, user.id, req.secure);
-  const fresh = await db.one('SELECT * FROM users WHERE id = $1', [user.id]);
+  const fresh = await auth.userById(user.id);
   res.json({ ok: true, user: auth.publicUser(fresh), codeMessage });
 });
 
@@ -49,7 +49,7 @@ router.post('/login', async (req, res) => {
   }
   if (user.disabled) throw fail(403, 'DISABLED', 'This account has been disabled. Contact the site administrator.');
   await auth.startSession(res, user.id, req.secure);
-  res.json({ ok: true, user: auth.publicUser(user) });
+  res.json({ ok: true, user: auth.publicUser(await auth.userById(user.id)) });
 });
 
 router.post('/logout', async (req, res) => {
@@ -62,7 +62,31 @@ router.post('/profile', auth.requireUser, async (req, res) => {
   const name = str(b.name, 120) || req.user.name;
   await db.query('UPDATE users SET name = $1, student_no = $2, school = $3 WHERE id = $4',
     [name, req.user.role === 'student' ? str(b.studentNo, 60) || null : req.user.student_no, str(b.school, 160) || null, req.user.id]);
-  res.json({ ok: true, user: auth.publicUser(await db.one('SELECT * FROM users WHERE id = $1', [req.user.id])) });
+  res.json({ ok: true, user: auth.publicUser(await auth.userById(req.user.id)) });
+});
+
+/** Profile picture: the page sends a small square JPEG (it crops and shrinks it first). */
+router.post('/avatar', auth.requireUser, express.json({ limit: '1mb' }), async (req, res) => {
+  const m = String((req.body && req.body.dataUrl) || '').match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) throw fail(400, 'BAD_INPUT', 'That file is not a JPEG, PNG or WebP picture.');
+  const bytes = Buffer.from(m[2], 'base64');
+  if (bytes.length > 300 * 1024) throw fail(413, 'TOO_LARGE', 'The picture is too large. Try a smaller one.');
+  await db.query(`INSERT INTO avatars (user_id, mime, data, updated_at) VALUES ($1, $2, $3, now())
+                  ON CONFLICT (user_id) DO UPDATE SET mime = EXCLUDED.mime, data = EXCLUDED.data, updated_at = now()`, [req.user.id, m[1], bytes]);
+  res.json({ ok: true, user: auth.publicUser(await auth.userById(req.user.id)) });
+});
+
+router.post('/avatar/remove', auth.requireUser, async (req, res) => {
+  await db.query('DELETE FROM avatars WHERE user_id = $1', [req.user.id]);
+  res.json({ ok: true, user: auth.publicUser(await auth.userById(req.user.id)) });
+});
+
+/** Anyone signed in can see profile pictures (links only appear next to people they share a class with). */
+router.get('/avatar/:id', auth.requireUser, async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'No picture.');
+  const a = await db.one('SELECT mime, data FROM avatars WHERE user_id = $1', [req.params.id]);
+  if (!a) throw fail(404, 'NOT_FOUND', 'No picture.');
+  res.set('Content-Type', a.mime).set('Cache-Control', 'private, max-age=86400').send(Buffer.from(a.data));
 });
 
 router.post('/password', auth.requireUser, async (req, res) => {

@@ -15,7 +15,7 @@ The exam screen brings over everything from the Google Sheets version: tab-switc
 | Who | Can do |
 |---|---|
 | **Student** (free) | Sign up · join classes with a code · see all exams in one list · take exams · see scores (if the teacher allows) |
-| **Teacher** | Create classes (each gets a 6-character join code) · question bank with pictures, topics, CSV import/export · exam editor with every option · publish (needs access or credits) · results with essay grading, retakes, event log, CSV downloads · redeem codes · request credits |
+| **Teacher** | Create classes (each gets a 6-character join code) · question bank with **folders and subfolders**, pictures, topics, CSV import/export (optional Folder column, e.g. `EEE 150/Midterm`) · exam editor with every option · publish (needs access or credits) · results with essay grading, retakes, event log, CSV downloads · redeem codes · request credits |
 | **Admin** | Add other admins (promote a teacher, or create a new admin account) · create access codes (days or credits, single or shared, with expiry) · approve or reject credit requests · give access directly · reset passwords · disable accounts · site name, time zone, sign-up switches, payment instructions |
 
 **Credits:**
@@ -61,6 +61,9 @@ The same code runs anywhere with Node.js and PostgreSQL. On one server (AWS Ligh
 **To move your data from Neon:** run `pg_dump` on the Neon database and `psql` into the new one. Ask me for the exact commands when you get there.
 
 ---
+
+## Profiles
+Everyone (students, teachers, admins) can click their name in the top bar to open **My profile**: profile picture, name, student number, school, and password. Pictures are cropped to a square and shrunk to about 10–30 KB. Teachers see student pictures in class lists and results. Pictures are only shown to signed-in users.
 
 ## Admins
 The account set as `ADMIN_EMAIL` is the **site owner**. In **Admin → Admins** you can:

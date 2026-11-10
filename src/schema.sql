@@ -199,3 +199,21 @@ CREATE TABLE IF NOT EXISTS violations (
   at         timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS violations_attempt ON violations (attempt_id, at);
+
+-- Question bank folders (nested). Deleting a folder moves its questions and subfolders up to the parent.
+CREATE TABLE IF NOT EXISTS question_folders (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id  uuid REFERENCES question_folders(id) ON DELETE CASCADE,
+  name       text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS folder_id uuid REFERENCES question_folders(id) ON DELETE SET NULL;
+
+-- Profile pictures (small square JPEGs)
+CREATE TABLE IF NOT EXISTS avatars (
+  user_id    uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  mime       text NOT NULL,
+  data       bytea NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);

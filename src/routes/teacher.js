@@ -34,7 +34,7 @@ router.get('/account', async (req, res) => {
 
 router.post('/redeem', async (req, res) => {
   const message = await redeemCode(req.user.id, req.body && req.body.code);
-  res.json({ ok: true, message, user: auth.publicUser(await db.one('SELECT * FROM users WHERE id = $1', [req.user.id])) });
+  res.json({ ok: true, message, user: auth.publicUser(await auth.userById(req.user.id)) });
 });
 
 router.post('/requests', async (req, res) => {
@@ -91,9 +91,10 @@ router.post('/classes/:id', async (req, res) => {
 
 router.get('/classes/:id/students', async (req, res) => {
   const c = await mine('classes', req.params.id, req.user.id, 'Class');
-  res.json({ ok: true, students: await db.many(
-    `SELECT u.id, u.name, u.email, u.student_no, e.joined_at FROM enrollments e JOIN users u ON u.id = e.student_id
-      WHERE e.class_id = $1 ORDER BY u.name`, [c.id]) });
+  res.json({ ok: true, students: (await db.many(
+    `SELECT u.id, u.name, u.email, u.student_no, e.joined_at, (SELECT updated_at FROM avatars a WHERE a.user_id = u.id) AS avatar_updated
+       FROM enrollments e JOIN users u ON u.id = e.student_id
+      WHERE e.class_id = $1 ORDER BY u.name`, [c.id])).map((s) => Object.assign(s, { avatarUrl: auth.avatarUrl(s.id, s.avatar_updated) })) });
 });
 
 router.post('/classes/:id/students/:sid/remove', async (req, res) => {
@@ -140,6 +141,7 @@ function questionInput(b) {
     topic: str(b.topic, 120),
     imageId: isUuid(b.imageId) ? b.imageId : null,
     imageUrl: b.imageId ? null : imageUrl,
+    folderId: isUuid(b.folderId) ? b.folderId : null,
   };
 }
 
@@ -155,19 +157,105 @@ async function saveQuestion(teacherId, q, id) {
   if (q.imageId && !(await db.one('SELECT 1 FROM images WHERE id = $1 AND teacher_id = $2', [q.imageId, teacherId]))) {
     throw fail(400, 'BAD_INPUT', 'That picture was not found. Upload it again.');
   }
+  if (q.folderId && !(await db.one('SELECT 1 FROM question_folders WHERE id = $1 AND teacher_id = $2', [q.folderId, teacherId]))) {
+    throw fail(400, 'BAD_INPUT', 'That folder was not found.');
+  }
   if (!q.code) q.code = await nextQuestionCode(teacherId);
   const clash = await db.one('SELECT id FROM questions WHERE teacher_id = $1 AND code = $2', [teacherId, q.code]);
   if (clash && clash.id !== id) throw fail(409, 'DUPLICATE', 'You already have a question with ID "' + q.code + '".');
-  const vals = [q.code, q.type, q.text, JSON.stringify(q.choices), q.answer, q.points, q.topic, q.imageId, q.imageUrl];
+  const vals = [q.code, q.type, q.text, JSON.stringify(q.choices), q.answer, q.points, q.topic, q.imageId, q.imageUrl, q.folderId];
   if (id) {
-    return db.one(`UPDATE questions SET code=$1, type=$2, text=$3, choices=$4, answer=$5, points=$6, topic=$7, image_id=$8, image_url=$9, updated_at=now()
-                    WHERE id = $10 AND teacher_id = $11 RETURNING *`, [...vals, id, teacherId]);
+    return db.one(`UPDATE questions SET code=$1, type=$2, text=$3, choices=$4, answer=$5, points=$6, topic=$7, image_id=$8, image_url=$9, folder_id=$10, updated_at=now()
+                    WHERE id = $11 AND teacher_id = $12 RETURNING *`, [...vals, id, teacherId]);
   }
-  return db.one(`INSERT INTO questions (code, type, text, choices, answer, points, topic, image_id, image_url, teacher_id)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [...vals, teacherId]);
+  return db.one(`INSERT INTO questions (code, type, text, choices, answer, points, topic, image_id, image_url, folder_id, teacher_id)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [...vals, teacherId]);
 }
 
-const questionOut = (r) => Object.assign(core.questionFromRow(r), { problems: core.validateQuestion(core.questionFromRow(r)), updatedAt: r.updated_at });
+const questionOut = (r) => Object.assign(core.questionFromRow(r), { problems: core.validateQuestion(core.questionFromRow(r)), updatedAt: r.updated_at, folderId: r.folder_id || null });
+
+// ───────── Question folders ─────────
+
+router.get('/folders', async (req, res) => {
+  res.json({ ok: true, folders: await db.many(
+    `SELECT f.id, f.name, f.parent_id, (SELECT count(*) FROM questions q WHERE q.folder_id = f.id)::int AS question_count
+       FROM question_folders f WHERE f.teacher_id = $1 ORDER BY lower(f.name)`, [req.user.id]) });
+});
+
+async function folderNameCheck(teacherId, parentId, name, exceptId) {
+  if (!name) throw fail(400, 'BAD_INPUT', 'Enter a folder name.');
+  const clash = await db.one(`SELECT 1 FROM question_folders WHERE teacher_id = $1 AND parent_id IS NOT DISTINCT FROM $2 AND lower(name) = lower($3) AND id IS DISTINCT FROM $4`,
+    [teacherId, parentId, name, exceptId || null]);
+  if (clash) throw fail(409, 'DUPLICATE', 'There is already a folder named "' + name + '" here.');
+}
+
+router.post('/folders', async (req, res) => {
+  const name = str(req.body && req.body.name, 100);
+  const parentId = isUuid(req.body && req.body.parentId) ? req.body.parentId : null;
+  if (parentId) await mine('question_folders', parentId, req.user.id, 'Folder');
+  await folderNameCheck(req.user.id, parentId, name);
+  res.json({ ok: true, folder: await db.one('INSERT INTO question_folders (teacher_id, parent_id, name) VALUES ($1, $2, $3) RETURNING *', [req.user.id, parentId, name]) });
+});
+
+router.post('/folders/:id', async (req, res) => {
+  const f = await mine('question_folders', req.params.id, req.user.id, 'Folder');
+  const b = req.body || {};
+  if (b.delete) {
+    // Nothing is lost: questions and subfolders move up to the parent folder
+    await db.tx(async (t) => {
+      await t.query('UPDATE questions SET folder_id = $1 WHERE folder_id = $2', [f.parent_id, f.id]);
+      await t.query('UPDATE question_folders SET parent_id = $1 WHERE parent_id = $2', [f.parent_id, f.id]);
+      await t.query('DELETE FROM question_folders WHERE id = $1', [f.id]);
+    });
+    return res.json({ ok: true, deleted: true });
+  }
+  let parentId = f.parent_id;
+  if (b.parentId !== undefined) {
+    parentId = isUuid(b.parentId) ? b.parentId : null;
+    if (parentId) {
+      await mine('question_folders', parentId, req.user.id, 'Folder');
+      // A folder cannot go inside itself or one of its own subfolders
+      for (let cur = parentId; cur;) {
+        if (cur === f.id) throw fail(400, 'BAD_INPUT', 'A folder cannot be moved into itself or one of its subfolders.');
+        cur = (await db.one('SELECT parent_id FROM question_folders WHERE id = $1', [cur]) || {}).parent_id;
+      }
+    }
+  }
+  const name = b.name === undefined ? f.name : str(b.name, 100);
+  await folderNameCheck(req.user.id, parentId, name, f.id);
+  res.json({ ok: true, folder: await db.one('UPDATE question_folders SET name = $1, parent_id = $2 WHERE id = $3 RETURNING *', [name, parentId, f.id]) });
+});
+
+/** Moves several questions into a folder (or out of all folders with folderId null). */
+router.post('/questions/move', async (req, res) => {
+  const ids = (Array.isArray(req.body && req.body.ids) ? req.body.ids : []).filter(isUuid).slice(0, 5000);
+  const folderId = isUuid(req.body && req.body.folderId) ? req.body.folderId : null;
+  if (!ids.length) throw fail(400, 'BAD_INPUT', 'Select questions to move.');
+  if (folderId) await mine('question_folders', folderId, req.user.id, 'Folder');
+  const r = await db.query('UPDATE questions SET folder_id = $1, updated_at = now() WHERE teacher_id = $2 AND id = ANY($3::uuid[])', [folderId, req.user.id, ids]);
+  res.json({ ok: true, moved: r.rowCount !== undefined ? r.rowCount : r.affectedRows });
+});
+
+/** Finds or creates folders from a path like "EEE 150/Midterm". Returns the last folder's id. */
+async function folderFromPath(teacherId, path, cache) {
+  const parts = String(path || '').split('/').map((p) => str(p, 100)).filter(Boolean);
+  let parent = null;
+  for (let i = 0; i < parts.length; i++) {
+    const key = parts.slice(0, i + 1).join('/').toLowerCase();
+    if (cache.has(key)) { parent = cache.get(key); continue; }
+    const found = await db.one(`SELECT id FROM question_folders WHERE teacher_id = $1 AND parent_id IS NOT DISTINCT FROM $2 AND lower(name) = lower($3)`, [teacherId, parent, parts[i]]);
+    parent = found ? found.id : (await db.one('INSERT INTO question_folders (teacher_id, parent_id, name) VALUES ($1, $2, $3) RETURNING id', [teacherId, parent, parts[i]])).id;
+    cache.set(key, parent);
+  }
+  return parent;
+}
+
+async function folderPaths(teacherId) {
+  const fs = await db.many('SELECT id, name, parent_id FROM question_folders WHERE teacher_id = $1', [teacherId]);
+  const byId = new Map(fs.map((f) => [f.id, f]));
+  const path = (id) => { const out = []; for (let f = byId.get(id), n = 0; f && n < 50; f = byId.get(f.parent_id), n++) out.unshift(f.name); return out.join('/'); };
+  return path;
+}
 
 router.get('/questions', async (req, res) => {
   const rows = await db.many('SELECT * FROM questions WHERE teacher_id = $1 ORDER BY code', [req.user.id]);
@@ -185,7 +273,10 @@ router.post('/questions/import', express.json({ limit: '5mb' }), async (req, res
   const head = rows[0].map((h) => String(h).trim().toLowerCase().replace(/[^a-z]/g, ''));
   const col = (...names) => head.findIndex((h) => names.includes(h));
   const ix = { code: col('questionid', 'id', 'code'), type: col('type'), text: col('question', 'text'), choices: col('choices', 'options'),
-    answer: col('answer', 'correctanswer'), points: col('points', 'score'), topic: col('topic'), image: col('image', 'imageurl', 'picture') };
+    answer: col('answer', 'correctanswer'), points: col('points', 'score'), topic: col('topic'), image: col('image', 'imageurl', 'picture'), folder: col('folder') };
+  const targetFolder = isUuid(req.body && req.body.folderId) ? req.body.folderId : null;
+  if (targetFolder) await mine('question_folders', targetFolder, req.user.id, 'Folder');
+  const folderCache = new Map();
   if (ix.type < 0 || ix.text < 0) throw fail(400, 'BAD_INPUT', 'The first row must include at least "Type" and "Question" columns.');
   let created = 0, updated = 0;
   const errors = [];
@@ -195,6 +286,7 @@ router.post('/questions/import', express.json({ limit: '5mb' }), async (req, res
     try {
       const q = questionInput({ code: get('code'), type: get('type'), text: get('text'), choices: get('choices'), answer: get('answer'),
         points: get('points'), topic: get('topic'), imageUrl: /^https?:\/\//i.test(String(get('image')).trim()) ? get('image') : '' });
+      q.folderId = String(get('folder')).trim() ? await folderFromPath(req.user.id, get('folder'), folderCache) : targetFolder;
       const existing = q.code ? await db.one('SELECT id FROM questions WHERE teacher_id = $1 AND code = $2', [req.user.id, q.code]) : null;
       await saveQuestion(req.user.id, q, existing && existing.id);
       if (existing) updated++; else created++;
@@ -218,8 +310,9 @@ router.post('/questions/:id', async (req, res) => {
 
 router.get('/questions/export.csv', async (req, res) => {
   const rows = await db.many('SELECT * FROM questions WHERE teacher_id = $1 ORDER BY code', [req.user.id]);
-  const out = [['QuestionID', 'Type', 'Question', 'Choices', 'Answer', 'Points', 'Topic', 'Image']].concat(
-    rows.map((r) => [r.code, r.type, r.text, (r.choices || []).join(' | '), r.answer, r.points, r.topic, r.image_url || (r.image_id ? '(uploaded picture)' : '')]));
+  const path = await folderPaths(req.user.id);
+  const out = [['QuestionID', 'Type', 'Question', 'Choices', 'Answer', 'Points', 'Topic', 'Image', 'Folder']].concat(
+    rows.map((r) => [r.code, r.type, r.text, (r.choices || []).join(' | '), r.answer, r.points, r.topic, r.image_url || (r.image_id ? '(uploaded picture)' : ''), r.folder_id ? path(r.folder_id) : '']));
   res.set('Content-Type', 'text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="question-bank.csv"').send(toCsv(out));
 });
 
@@ -345,7 +438,7 @@ router.post('/exams/:id', async (req, res) => {
       await t.query('UPDATE exams SET published = true, published_at = COALESCE(published_at, now()), credit_spent = credit_spent OR $2, updated_at = now() WHERE id = $1', [x.id, charge || a.timeOk || a.isAdmin]);
       return charge;
     });
-    return res.json({ ok: true, charged, exam: await db.one('SELECT * FROM exams WHERE id = $1', [x.id]), user: auth.publicUser(await db.one('SELECT * FROM users WHERE id = $1', [req.user.id])) });
+    return res.json({ ok: true, charged, exam: await db.one('SELECT * FROM exams WHERE id = $1', [x.id]), user: auth.publicUser(await auth.userById(req.user.id)) });
   }
   const e = examInput(b);
   const p = await examProblems(req.user.id, e, x.published);
@@ -362,8 +455,10 @@ router.get('/exams/:id/results', async (req, res) => {
   const x = await mine('exams', req.params.id, req.user.id, 'Exam');
   const attempts = await db.many(
     `SELECT a.*, u.name AS student_name, u.email AS student_email, u.student_no,
-            (SELECT count(*) FROM violations v WHERE v.attempt_id = a.id)::int AS event_count
+            (SELECT count(*) FROM violations v WHERE v.attempt_id = a.id)::int AS event_count,
+            (SELECT updated_at FROM avatars av WHERE av.user_id = u.id) AS avatar_updated
        FROM attempts a JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at`, [x.id]);
+  attempts.forEach((a) => { a.avatarUrl = auth.avatarUrl(a.student_id, a.avatar_updated); });
   const notStarted = await db.many(
     `SELECT u.id, u.name, u.email, u.student_no FROM enrollments e JOIN users u ON u.id = e.student_id
       WHERE e.class_id = $1 AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.exam_id = $2 AND a.student_id = u.id) ORDER BY u.name`, [x.class_id, x.id]);

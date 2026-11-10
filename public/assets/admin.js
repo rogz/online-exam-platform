@@ -4,6 +4,9 @@
   const me = await App.requireRole(['admin']);
   App.renderTopbar(me.user, me.site, [{ href: '/admin', label: 'Admin', on: true }, { href: '/teacher', label: 'Teacher' }]);
   $('#meName').textContent = me.user.name;
+  const drawMe = () => { $('.sidenav .avatar').outerHTML = '<div class="avatar">' + App.avatarHtml(me.user, 44) + '</div>'; $('#meName').textContent = me.user.name; };
+  drawMe();
+  window.addEventListener('profile-changed', (e) => { me.user = Object.assign(me.user, e.detail); drawMe(); });
   const view = $('#view');
 
   async function badge() {

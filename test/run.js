@@ -102,6 +102,32 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok((await teacher.textContent('#csvOut')).includes('2 added'), 'CSV import adds 2 questions');
   await teacher.click('.dialog .x');
   await teacher.waitForFunction(() => document.querySelectorAll('#qRows tr').length === 6);
+  // folders
+  const folderOf = async (code) => (await dbOne(`SELECT f.name FROM questions q LEFT JOIN question_folders f ON f.id = q.folder_id WHERE q.code = $1`, [code])).name;
+  await teacher.click('#newFolder'); await teacher.fill('#fName', 'Circuits'); await teacher.click('.dialog .btn.primary');
+  await teacher.waitForSelector('.folder.on:has-text("Circuits")');
+  ok((await teacher.textContent('#qRows')).includes('No questions in this folder'), 'new folder opens empty');
+  await teacher.click('[data-folder="all"]');
+  await teacher.waitForSelector('#qRows [data-sel]');
+  for (const code of ['H-1', 'H-2']) await teacher.check(`#qRows tr:has-text("${code}") [data-sel]`);
+  ok((await teacher.textContent('#moveCount')).startsWith('2 selected'), 'move bar shows 2 selected');
+  const circuitsId = (await dbOne(`SELECT id FROM question_folders WHERE name = 'Circuits'`)).id;
+  await teacher.selectOption('#moveTo', circuitsId); await teacher.click('#moveBtn');
+  ok(await toastSays(teacher, '2 question(s) moved'), 'questions moved into the folder');
+  ok((await folderOf('H-1')) === 'Circuits' && (await folderOf('H-2')) === 'Circuits', 'saved in the folder');
+  await teacher.click('.folder:has-text("Circuits")'); await teacher.click('#subFolder');
+  await teacher.fill('#fName', 'Units'); await teacher.click('.dialog .btn.primary');
+  await teacher.waitForSelector('.folder.on:has-text("Units")');
+  await teacher.click('[data-folder="all"]'); await teacher.waitForSelector('#qRows tr:has-text("Q004") [data-edit]');
+  await teacher.click('#qRows tr:has-text("Q004") [data-edit]');
+  const unitsId = (await dbOne(`SELECT id FROM question_folders WHERE name = 'Units'`)).id;
+  await teacher.selectOption('#qeFolder', unitsId); await teacher.click('.dialog .btn.primary');
+  await teacher.waitForSelector('#qRows tr:has-text("Q004")');
+  ok((await folderOf('Q004')) === 'Units', 'question editor puts a question in a subfolder');
+  await teacher.click('.folder:has-text("Circuits")');
+  await teacher.waitForFunction(() => document.querySelectorAll('#qRows [data-sel]').length === 3);
+  ok(true, 'a folder lists its subfolders\' questions too (3)');
+  ok((await teacher.textContent('.folder:has-text("Not in a folder")')).includes('3'), '"Not in a folder" counts the rest');
   await shot(teacher, '04-question-bank');
 
   // exam
@@ -111,6 +137,10 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.fill('#eTitle', 'EEE 150 Quiz 1');
   await teacher.fill('#eLimit', '20');
   await teacher.fill('#ePass', 'ohm');
+  await teacher.selectOption('#pFolder', unitsId);
+  await teacher.waitForFunction(() => document.querySelectorAll('#pRows [data-q]').length === 1);
+  ok(true, 'exam editor filters the bank by folder');
+  await teacher.selectOption('#pFolder', 'all');
   await teacher.check('#pAll');
   await teacher.waitForFunction(() => document.querySelector('#pSum').textContent.startsWith('6 selected'));
   await shot(teacher, '05-exam-editor');
@@ -130,6 +160,26 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok((await student.textContent('#list')).includes('Open now'), 'exam listed under "Open now"');
   await student.waitForSelector('#startbox a.btn.primary');
   ok((await student.textContent('.tiles')).includes('Password'), 'detail pane shows settings tiles');
+  // profile picture
+  const face = await student.evaluate(() => { const c = document.createElement('canvas'); c.width = 900; c.height = 600; const g = c.getContext('2d');
+    g.fillStyle = '#7fa8d8'; g.fillRect(0, 0, 900, 600); g.fillStyle = '#f2c9a0'; g.beginPath(); g.arc(450, 300, 180, 0, 7); g.fill(); return c.toDataURL('image/jpeg', 0.9); });
+  const faceFile = path.join(os.tmpdir(), 'face.jpg'); fs.writeFileSync(faceFile, Buffer.from(face.split(',')[1], 'base64'));
+  await student.click('#profileBtn');
+  await student.waitForSelector('.dialog #pfFile', { state: 'attached' });
+  await student.setInputFiles('#pfFile', faceFile);
+  await student.waitForSelector('#pfPic img.avatar-img');
+  await student.waitForSelector('#profileBtn img.avatar-img');
+  ok(true, 'student adds a profile picture; it shows in the top bar');
+  const av = await dbOne(`SELECT octet_length(data) AS n, mime FROM avatars a JOIN users u ON u.id = a.user_id WHERE u.email = 'juan@student.edu'`);
+  ok(av && av.mime === 'image/jpeg' && av.n < 60000, 'picture cropped and shrunk (' + (av && Math.round(av.n / 1024)) + ' KB)');
+  await student.fill('#pfNo', '2024-0001A');
+  await shot(student, '06b-profile');
+  await student.click('.dialog .btn.primary');
+  ok(await toastSays(student, 'Profile saved'), 'student edits their profile');
+  const avUrl = await student.getAttribute('#profileBtn img', 'src');
+  const avStatus = await teacher.evaluate(async (u) => { const r = await fetch(u); return r.status + ' ' + r.headers.get('content-type'); }, avUrl);
+  ok(avStatus === '200 image/jpeg', 'teacher can load the student picture');
+  ok((await fetch(BASE + avUrl)).status === 401, 'pictures need sign-in');
   await shot(student, '06-student-dashboard');
   await student.click('#startbox a.btn.primary');
   await student.waitForSelector('#screen-rules:not([hidden])');
@@ -170,6 +220,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.click('a[href^="#results/"]');
   await teacher.waitForSelector('[data-answers]');
   ok((await teacher.textContent('.statgrid')).includes('Essays to grade'), 'results page shows stats');
+  ok(await teacher.isVisible('tr:has-text("Juan Dela Cruz") img.avatar-img'), 'results show the student picture');
   await teacher.click('[data-answers]');
   await teacher.waitForSelector('.dialog [data-pts]');
   const essayInput = await teacher.$('.dialog .resp:has-text("Explain Ohm") [data-pts]');
@@ -258,6 +309,15 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await phone.waitForSelector('.item');
   ok(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'student dashboard fits a phone screen');
   await shot(phone, '12-phone-dashboard');
+
+  // ── Deleting a folder never deletes questions ──
+  await teacher.goto(BASE + '/teacher#questions');
+  await teacher.waitForSelector('.folder:has-text("Circuits")');
+  await teacher.click('.folder:has-text("Circuits")'); await teacher.click('#delFolder'); await teacher.click('.dialog .btn.danger');
+  ok(await toastSays(teacher, 'Folder deleted'), 'folder deleted');
+  const after = await dbOne(`SELECT (SELECT count(*) FROM questions WHERE teacher_id = (SELECT id FROM users WHERE email = 'maria@school.edu'))::int AS q,
+    (SELECT parent_id FROM question_folders WHERE name = 'Units') AS parent`);
+  ok(after.q === 6 && after.parent === null && (await folderOf('Q004')) === 'Units' && (await folderOf('H-1')) === null, 'questions kept; subfolder moved up');
 
   // ── Admins: promote a teacher, create a new admin, owner protection ──
   await admin.goto(BASE + '/admin#admins');

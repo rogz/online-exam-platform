@@ -45,7 +45,8 @@ async function loadUser(req, res, next) {
   const token = parseCookies(req.headers.cookie)[COOKIE];
   if (token) {
     req.user = await db.one(
-      `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+      `SELECT u.*, (SELECT updated_at FROM avatars a WHERE a.user_id = u.id) AS avatar_updated
+         FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled`, [sha256(token)]);
   }
   next();
@@ -91,9 +92,15 @@ function teacherAccess(u) {
   };
 }
 
+/** A user row including avatar_updated (for the profile picture link). */
+const userById = (id) => db.one('SELECT u.*, (SELECT updated_at FROM avatars a WHERE a.user_id = u.id) AS avatar_updated FROM users u WHERE u.id = $1', [id]);
+
+/** Link to a user's profile picture, or null. The ?v= part changes when the picture changes. */
+const avatarUrl = (id, updated) => (updated ? '/api/auth/avatar/' + id + '?v=' + new Date(updated).getTime() : null);
+
 function publicUser(u) {
   if (!u) return null;
-  const out = { id: u.id, email: u.email, name: u.name, role: u.role, studentNo: u.student_no || '', school: u.school || '' };
+  const out = { id: u.id, email: u.email, name: u.name, role: u.role, studentNo: u.student_no || '', school: u.school || '', avatarUrl: avatarUrl(u.id, u.avatar_updated) };
   if (u.role !== 'student') {
     const a = teacherAccess(u);
     out.access = { until: a.until, timeOk: a.timeOk, credits: a.credits, canPublish: a.canPublish };
@@ -103,5 +110,5 @@ function publicUser(u) {
 
 module.exports = {
   hashPassword, checkPassword, passwordProblem, startSession, endSession, loadUser,
-  requireUser, requireRole, sameSiteOnly, tooManyTries, noteFailedTry, teacherAccess, publicUser,
+  requireUser, requireRole, sameSiteOnly, tooManyTries, noteFailedTry, teacherAccess, publicUser, userById, avatarUrl,
 };

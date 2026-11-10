@@ -87,13 +87,79 @@
     const words = String(site.name || '').trim().split(/\s+/);
     const name = words.length > 1 ? esc(words.slice(0, -1).join(' ')) + ' <span class="accent">' + esc(words[words.length - 1]) + '</span>' : esc(site.name);
     bar.innerHTML = `<a class="brand" href="/"><img class="logo" src="/assets/logo.svg" alt="" width="30" height="30"><span class="name">${name}</span></a>
-      <div class="who">${me ? esc(me.name) + (me.studentNo ? ' — ' + esc(me.studentNo) : '') + (me.school ? ' — ' + esc(me.school) : '') : ''}</div>
+      <div class="who">${me ? `<button type="button" class="me-btn" id="profileBtn" title="My profile">${avatarHtml(me, 30)}<span class="me-text">${esc(me.name)}${me.studentNo ? ' — ' + esc(me.studentNo) : ''}${me.school ? ' — ' + esc(me.school) : ''}</span></button>` : ''}</div>
       <nav>${(links || []).map((l) => `<a href="${esc(l.href)}"${l.on ? ' class="on"' : ''}>${esc(l.label)}</a>`).join('')}
       ${me ? '<button type="button" class="menu-btn" id="signOut">Sign out</button>' : ''}</nav>`;
     document.body.prepend(bar);
     const so = $('#signOut', bar);
     if (so) so.onclick = async () => { await api('/auth/logout', {}); location.href = '/'; };
+    const pb = $('#profileBtn', bar);
+    if (pb) pb.onclick = () => openProfile(me);
     document.title = document.title.replace('{site}', site.name);
+  }
+
+  /** A round profile picture, or the person's initial when there is none. */
+  function avatarHtml(u, size) {
+    const s = size || 32;
+    const initial = esc(String((u && u.name) || '?').trim().charAt(0).toUpperCase() || '?');
+    return u && u.avatarUrl
+      ? `<img class="avatar-img" src="${esc(u.avatarUrl)}" alt="" width="${s}" height="${s}" style="width:${s}px;height:${s}px">`
+      : `<span class="avatar-img initial" style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.45)}px" aria-hidden="true">${initial}</span>`;
+  }
+
+  /** Crops a photo to the centre square and shrinks it to 256 × 256 (a small JPEG). */
+  async function cropAvatar(file) {
+    const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('The file could not be read.')); r.readAsDataURL(file); });
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('That file is not a picture this browser can open (use JPEG or PNG).')); i.src = url; });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, 256, 256);
+    g.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+    return c.toDataURL('image/jpeg', 0.86);
+  }
+
+  /** "My profile": picture, name, student number, school and password, for every kind of account. */
+  function openProfile(me) {
+    let user = me;
+    const d = dialog('My profile', `<div class="profile-pic"><div id="pfPic">${avatarHtml(user, 96)}</div>
+        <div><label class="btn small" for="pfFile" style="cursor:pointer">Change picture</label><input type="file" id="pfFile" accept="image/*" class="sr-only">
+          <button type="button" class="btn small danger" id="pfRemove"${user.avatarUrl ? '' : ' hidden'}>Remove</button>
+          <div class="hint">A clear photo of your face helps your teachers recognise you. It is cropped to a square.</div></div></div>
+      <div class="field"><label for="pfName">Full name</label><input type="text" id="pfName" value="${esc(user.name)}"></div>
+      ${user.role === 'student' ? `<div class="field"><label for="pfNo">Student number</label><input type="text" id="pfNo" value="${esc(user.studentNo)}"></div>` : ''}
+      <div class="field"><label for="pfSchool">School name</label><input type="text" id="pfSchool" value="${esc(user.school)}"></div>
+      <p class="small muted" style="margin:0">Signed in as ${esc(user.email)}</p>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">Change password</summary>
+        <div class="field" style="margin-top:8px"><label for="pfOld">Current password</label><input type="password" id="pfOld" autocomplete="current-password"></div>
+        <div class="field"><label for="pfNew">New password</label><input type="password" id="pfNew" autocomplete="new-password"><div class="hint">At least 8 characters.</div></div>
+        <button type="button" class="btn small" id="pfPw">Change password</button></details>`, {
+      buttons: [{ label: 'Close' }, { label: 'Save profile', primary: true, onClick: async (ov) => {
+        const r = await api('/auth/profile', { name: $('#pfName', ov).value, studentNo: $('#pfNo', ov) ? $('#pfNo', ov).value : undefined, school: $('#pfSchool', ov).value });
+        updated(r.user); toast('Profile saved');
+      } }],
+    });
+    const ov = d.el;
+    function updated(u) {
+      user = u;
+      Object.assign(me, u);
+      $('#pfPic', ov).innerHTML = avatarHtml(u, 96);
+      $('#pfRemove', ov).hidden = !u.avatarUrl;
+      const pb = $('#profileBtn');
+      if (pb) pb.innerHTML = avatarHtml(u, 30) + `<span class="me-text">${esc(u.name)}${u.studentNo ? ' — ' + esc(u.studentNo) : ''}${u.school ? ' — ' + esc(u.school) : ''}</span>`;
+      window.dispatchEvent(new CustomEvent('profile-changed', { detail: u }));
+    }
+    $('#pfFile', ov).onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { const r = await api('/auth/avatar', { dataUrl: await cropAvatar(f) }); updated(r.user); toast('Picture updated'); }
+      catch (err) { toast(err.message, true); }
+      e.target.value = '';
+    };
+    $('#pfRemove', ov).onclick = async () => { const r = await api('/auth/avatar/remove', {}); updated(r.user); toast('Picture removed'); };
+    $('#pfPw', ov).onclick = async () => {
+      try { await api('/auth/password', { current: $('#pfOld', ov).value, next: $('#pfNew', ov).value }); $('#pfOld', ov).value = ''; $('#pfNew', ov).value = ''; toast('Password changed'); }
+      catch (err) { toast(err.message, true); }
+    };
   }
 
   /** Loads the signed-in user; sends them to the right page if their role doesn't match. */
@@ -128,5 +194,5 @@
     return { dataUrl: out, note: 'Shrunk from ' + (file.size / 1048576).toFixed(1) + ' MB to ' + (bytes(out) / 1048576).toFixed(2) + ' MB (' + w + ' × ' + h + ')' };
   }
 
-  window.App = { $, $$, esc, api, toast, dialog, confirmBox, fmtDate, fmtDay, toLocalInput, fromLocalInput, copyText, renderTopbar, requireRole, homeFor, pictureToDataUrl };
+  window.App = { $, $$, esc, api, toast, dialog, confirmBox, fmtDate, fmtDay, toLocalInput, fromLocalInput, copyText, renderTopbar, requireRole, homeFor, pictureToDataUrl, avatarHtml, openProfile };
 })();

@@ -6,12 +6,12 @@
   const view = $('#view');
   const TYPE = { MC: 'Multiple choice', TF: 'True / False', FIB: 'Fill in the blank', ESSAY: 'Essay' };
   const TYPE_SHORT = { MC: 'MC', TF: 'T/F', FIB: 'Blank', ESSAY: 'Essay' };
-  let cache = { classes: null, questions: null };
+  let cache = { classes: null, questions: null, folders: [] };
 
   // ───────── header / access ─────────
   function renderMe() {
     const u = me.user;
-    $('#avatar').textContent = (u.name || '?').trim()[0].toUpperCase();
+    $('#avatar').innerHTML = App.avatarHtml(u, 44);
     $('#meName').textContent = u.name;
     $('#adminLink').hidden = u.role !== 'admin';
     const a = u.access || {};
@@ -21,6 +21,7 @@
     b.innerHTML = 'You can build classes, questions and exams now. To <b>publish</b> an exam to students you need an <b>access code</b> or <b>credits</b>. <a href="#account">Go to My account</a>.';
   }
   async function refreshMe() { me = await api('/auth/me'); renderMe(); }
+  window.addEventListener('profile-changed', (e) => { me.user = Object.assign(me.user, e.detail); renderMe(); });
   try { const w = sessionStorage.getItem('welcome'); if (w) { toast(w); sessionStorage.removeItem('welcome'); } } catch (e) { /* ignore */ }
 
   // ───────── router ─────────
@@ -93,7 +94,7 @@
   async function studentsDialog(c) {
     const r = await api('/teacher/classes/' + c.id + '/students');
     const d = dialog(c.name + ' — students', r.students.length ? `<div class="tablewrap"><table class="list"><thead><tr><th>Name</th><th>Student no.</th><th>Email</th><th>Joined</th><th></th></tr></thead><tbody>
-      ${r.students.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.student_no || '')}</td><td>${esc(s.email)}</td><td class="nowrap">${esc(App.fmtDay(s.joined_at))}</td>
+      ${r.students.map((s) => `<tr><td><span class="person">${App.avatarHtml(s, 32)}${esc(s.name)}</span></td><td>${esc(s.student_no || '')}</td><td>${esc(s.email)}</td><td class="nowrap">${esc(App.fmtDay(s.joined_at))}</td>
         <td><button type="button" class="btn small danger" data-remove="${s.id}">Remove</button></td></tr>`).join('')}</tbody></table></div>`
       : `<div class="empty">No students yet. Give them the class code <span class="code-box">${esc(c.join_code)}</span></div>`, { wide: true });
     $$('[data-remove]', d.el).forEach((b) => b.onclick = async () => {
@@ -103,32 +104,130 @@
     });
   }
 
-  // ───────── Question bank ─────────
+  // ───────── Question bank (with folders) ─────────
+  let currentFolder = 'all'; // 'all', 'none' or a folder id
+  try { currentFolder = sessionStorage.getItem('qFolder') || 'all'; } catch (e) { /* ignore */ }
+  const getFolders = async () => (cache.folders = (await api('/teacher/folders')).folders);
+
+  /** Folders in tree order: [{ f, depth }] */
+  function folderTree(folders) {
+    const kids = (pid) => folders.filter((f) => (f.parent_id || null) === pid).sort((a, b) => a.name.localeCompare(b.name));
+    const out = [];
+    const walk = (pid, depth) => kids(pid).forEach((f) => { out.push({ f, depth }); walk(f.id, depth + 1); });
+    walk(null, 0);
+    return out;
+  }
+  /** The folder and all folders inside it */
+  function folderAndBelow(folders, id) {
+    const set = new Set([id]);
+    let grew = true;
+    while (grew) { grew = false; folders.forEach((f) => { if (f.parent_id && set.has(f.parent_id) && !set.has(f.id)) { set.add(f.id); grew = true; } }); }
+    return set;
+  }
+  const folderPath = (folders, id) => { const out = []; let f = folders.find((x) => x.id === id); for (let n = 0; f && n < 50; n++) { out.unshift(f.name); f = folders.find((x) => x.id === f.parent_id); } return out.join(' / '); };
+  /** <option>s for a folder picker, indented by depth */
+  const folderOptions = (folders, selected, extra) => (extra || '') + folderTree(folders).map(({ f, depth }) =>
+    `<option value="${f.id}"${f.id === selected ? ' selected' : ''}>${'   '.repeat(depth)}${esc(f.name)}</option>`).join('');
+  const inFolder = (folders, q, sel) => sel === 'all' || (sel === 'none' ? !q.folderId : !!q.folderId && folderAndBelow(folders, sel).has(q.folderId));
+
   async function viewQuestions() {
-    const qs = await getQuestions(true);
+    const [qs, folders] = await Promise.all([getQuestions(true), getFolders()]);
+    if (currentFolder !== 'all' && currentFolder !== 'none' && !folders.some((f) => f.id === currentFolder)) currentFolder = 'all';
     const topics = [...new Set(qs.map((q) => q.topic).filter(Boolean))].sort();
+    const selected = new Set();
     view.innerHTML = `<div class="panel"><div class="hd"><h2>Question bank <span class="muted small">(${qs.length})</span></h2>
         <div class="toolbar"><button type="button" class="btn" id="importBtn">Import CSV</button><a class="btn" href="/api/teacher/questions/export.csv">Export CSV</a>
         <button type="button" class="btn primary" id="addQ">+ Add question</button></div></div>
-      <div class="bd"><div class="toolbar" style="margin-bottom:10px">
-        <input type="search" id="qSearch" placeholder="Search text or ID…" aria-label="Search questions">
-        <select id="qType" aria-label="Type"><option value="">All types</option>${Object.keys(TYPE).map((t) => `<option value="${t}">${TYPE[t]}</option>`).join('')}</select>
-        <select id="qTopic" aria-label="Topic"><option value="">All topics</option>${topics.map((t) => `<option>${esc(t)}</option>`).join('')}</select></div>
-      <div class="tablewrap"><table class="list"><thead><tr><th>ID</th><th>Type</th><th>Question</th><th>Pts</th><th>Topic</th><th></th></tr></thead><tbody id="qRows"></tbody></table></div></div></div>`;
-    const draw = () => {
-      const s = $('#qSearch').value.trim().toLowerCase(), t = $('#qType').value, tp = $('#qTopic').value;
-      const rows = qs.filter((q) => (!t || q.type === t) && (!tp || q.topic === tp) && (!s || q.code.toLowerCase().includes(s) || q.text.toLowerCase().includes(s)));
-      $('#qRows').innerHTML = rows.length ? rows.map((q) => `<tr><td class="nowrap">${esc(q.code)}</td><td><span class="tag">${TYPE_SHORT[q.type]}</span></td>
+      <div class="bank"><nav class="folders" aria-label="Folders"><div class="folders-hd"><b>Folders</b><button type="button" class="btn small" id="newFolder">+ New</button></div>
+          <div id="folderList"></div><div class="folder-actions" id="folderActions"></div></nav>
+        <div class="bank-main"><div class="toolbar" style="margin-bottom:10px">
+          <input type="search" id="qSearch" placeholder="Search text or ID…" aria-label="Search questions">
+          <select id="qType" aria-label="Type"><option value="">All types</option>${Object.keys(TYPE).map((t) => `<option value="${t}">${TYPE[t]}</option>`).join('')}</select>
+          <select id="qTopic" aria-label="Topic"><option value="">All topics</option>${topics.map((t) => `<option>${esc(t)}</option>`).join('')}</select></div>
+        <div class="movebar" id="moveBar" hidden><b id="moveCount"></b> <label for="moveTo" class="sr-only">Move to folder</label>
+          <select id="moveTo">${folderOptions(folders, null, '<option value="">Not in a folder</option>')}</select>
+          <button type="button" class="btn small primary" id="moveBtn">Move</button> <button type="button" class="linkbtn small" id="clearSel">Clear selection</button></div>
+        <div class="tablewrap"><table class="list"><thead><tr><th><input type="checkbox" id="qAll" aria-label="Select all listed"></th><th>ID</th><th>Type</th><th>Question</th><th>Pts</th><th>Topic</th><th></th></tr></thead><tbody id="qRows"></tbody></table></div></div></div></div>`;
+
+    function drawFolders() {
+      const count = (sel) => qs.filter((q) => inFolder(folders, q, sel)).length;
+      const item = (id, label, depth, n) => `<button type="button" class="folder${currentFolder === id ? ' on' : ''}" data-folder="${id}" style="padding-left:${10 + depth * 16}px">
+        <span class="fi" aria-hidden="true">${id === 'all' ? '▦' : id === 'none' ? '○' : '📁'}</span><span class="fname">${label}</span><span class="fcount">${n}</span></button>`;
+      $('#folderList').innerHTML = item('all', 'All questions', 0, qs.length) +
+        folderTree(folders).map(({ f, depth }) => item(f.id, esc(f.name), depth, count(f.id))).join('') +
+        item('none', 'Not in a folder', 0, count('none'));
+      $$('[data-folder]').forEach((b) => b.onclick = () => {
+        currentFolder = b.dataset.folder;
+        try { sessionStorage.setItem('qFolder', currentFolder); } catch (e) { /* ignore */ }
+        selected.clear(); drawFolders(); draw();
+      });
+      const f = folders.find((x) => x.id === currentFolder);
+      $('#folderActions').innerHTML = f ? `<div class="small muted" style="margin-bottom:6px">${esc(folderPath(folders, f.id))}</div>
+        <button type="button" class="btn small" id="subFolder">+ Subfolder</button> <button type="button" class="btn small" id="editFolder">Rename / move</button>
+        <button type="button" class="btn small danger" id="delFolder">Delete</button>` : '';
+      if (f) {
+        $('#subFolder').onclick = () => folderDialog(null, f.id);
+        $('#editFolder').onclick = () => folderDialog(f);
+        $('#delFolder').onclick = async () => {
+          const n = qs.filter((q) => q.folderId === f.id).length;
+          if (!(await App.confirmBox('Delete folder?', 'Delete the folder "' + f.name + '"? Its ' + n + ' question(s) and any subfolders move up to ' +
+            (f.parent_id ? '"' + folderPath(folders, f.parent_id) + '"' : '"Not in a folder"') + '. No questions are deleted.', 'Delete folder', true))) return;
+          await api('/teacher/folders/' + f.id, { delete: true }); toast('Folder deleted'); currentFolder = f.parent_id || 'all'; viewQuestions();
+        };
+      }
+    }
+    function folderDialog(f, parentId) {
+      const exclude = f ? folderAndBelow(folders, f.id) : new Set();
+      const parentOpts = '<option value="">Top level</option>' + folderTree(folders).filter(({ f: x }) => !exclude.has(x.id)).map(({ f: x, depth }) =>
+        `<option value="${x.id}"${x.id === (f ? f.parent_id : parentId) ? ' selected' : ''}>${'   '.repeat(depth)}${esc(x.name)}</option>`).join('');
+      dialog(f ? 'Rename or move folder' : 'New folder', `<div class="field"><label for="fName">Folder name</label><input type="text" id="fName" value="${esc(f ? f.name : '')}" placeholder="e.g. EEE 150 — Midterm"></div>
+        <div class="field"><label for="fParent">Inside</label><select id="fParent">${parentOpts}</select></div>`, {
+        buttons: [{ label: 'Cancel' }, { label: f ? 'Save' : 'Create folder', primary: true, onClick: async (ov) => {
+          const body = { name: $('#fName', ov).value, parentId: $('#fParent', ov).value || null };
+          const r = await api(f ? '/teacher/folders/' + f.id : '/teacher/folders', body);
+          toast(f ? 'Folder saved' : 'Folder created'); currentFolder = r.folder.id;
+          try { sessionStorage.setItem('qFolder', currentFolder); } catch (e) { /* ignore */ }
+          viewQuestions();
+        } }],
+      });
+    }
+    const listed = () => {
+      const s2 = $('#qSearch').value.trim().toLowerCase(), t = $('#qType').value, tp = $('#qTopic').value;
+      return qs.filter((q) => inFolder(folders, q, currentFolder) && (!t || q.type === t) && (!tp || q.topic === tp) && (!s2 || q.code.toLowerCase().includes(s2) || q.text.toLowerCase().includes(s2)));
+    };
+    function syncMoveBar() {
+      $('#moveBar').hidden = !selected.size;
+      $('#moveCount').textContent = selected.size + ' selected — move to';
+      const rows = listed();
+      $('#qAll').checked = rows.length > 0 && rows.every((q) => selected.has(q.id));
+    }
+    function draw() {
+      const rows = listed();
+      const showFolder = currentFolder === 'all';
+      $('#qRows').innerHTML = rows.length ? rows.map((q) => `<tr><td><input type="checkbox" data-sel="${q.id}"${selected.has(q.id) ? ' checked' : ''} aria-label="Select ${esc(q.code)}"></td>
+        <td class="nowrap">${esc(q.code)}</td><td><span class="tag">${TYPE_SHORT[q.type]}</span></td>
         <td class="qtext">${q.imageId || q.imageUrl ? '🖼 ' : ''}${esc(q.text.length > 200 ? q.text.slice(0, 200) + '…' : q.text)}
           ${q.type === 'MC' ? '<div class="choices">' + q.choices.map((c, i) => String.fromCharCode(65 + i) + '. ' + esc(c)).join(' &nbsp; ') + '</div>' : ''}
+          ${showFolder && q.folderId ? '<div class="small muted">📁 ' + esc(folderPath(folders, q.folderId)) + '</div>' : ''}
           ${q.problems.length ? '<div class="small" style="color:var(--bad)">⚠ ' + esc(q.problems.join('; ')) + '</div>' : ''}</td>
         <td class="num">${q.points}</td><td>${esc(q.topic)}</td>
         <td class="nowrap"><button type="button" class="btn small" data-edit="${q.id}">Edit</button></td></tr>`).join('')
-        : `<tr><td colspan="6"><div class="empty">${qs.length ? 'No questions match.' : 'No questions yet. Add one, or import your existing question bank from a CSV file.'}</div></td></tr>`;
+        : `<tr><td colspan="7"><div class="empty">${qs.length ? (currentFolder === 'all' ? 'No questions match.' : 'No questions in this folder yet. Add one, or select questions elsewhere and move them here.') : 'No questions yet. Add one, or import your existing question bank from a CSV file.'}</div></td></tr>`;
       $$('[data-edit]').forEach((b) => b.onclick = () => questionDialog(qs.find((q) => q.id === b.dataset.edit)));
-    };
+      $$('[data-sel]').forEach((c) => c.onchange = () => { if (c.checked) selected.add(c.dataset.sel); else selected.delete(c.dataset.sel); syncMoveBar(); });
+      syncMoveBar();
+    }
     ['qSearch', 'qType', 'qTopic'].forEach((id) => $('#' + id).addEventListener('input', draw));
-    draw();
+    $('#qAll').onchange = (e) => { listed().forEach((q) => (e.target.checked ? selected.add(q.id) : selected.delete(q.id))); draw(); };
+    $('#clearSel').onclick = () => { selected.clear(); draw(); };
+    $('#moveBtn').onclick = async () => {
+      const folderId = $('#moveTo').value || null;
+      const r = await api('/teacher/questions/move', { ids: [...selected], folderId });
+      toast(r.moved + ' question(s) moved to ' + (folderId ? folderPath(folders, folderId) : '"Not in a folder"'));
+      viewQuestions();
+    };
+    $('#newFolder').onclick = () => folderDialog(null, null);
+    drawFolders(); draw();
     $('#addQ').onclick = () => questionDialog(null);
     $('#importBtn').onclick = importDialog;
   }
@@ -148,6 +247,7 @@
       <div class="field"><label for="qeText">Question</label><textarea id="qeText" rows="3">${esc(q ? q.text : '')}</textarea>
         <div class="hint" id="qeTextHint"></div></div>
       <div id="qeAnswer"></div>
+      <div class="field"><label for="qeFolder">Folder</label><select id="qeFolder">${folderOptions(cache.folders || [], q ? q.folderId : (currentFolder !== 'all' && currentFolder !== 'none' ? currentFolder : null), '<option value="">Not in a folder</option>')}</select></div>
       <div class="field"><label for="qeTopic">Topic <span class="muted">(optional, for filtering and per-topic picking)</span></label><input type="text" id="qeTopic" list="qeTopics" value="${esc(q ? q.topic : '')}">
         <datalist id="qeTopics">${topics.map((t) => `<option value="${esc(t)}">`).join('')}</datalist></div>
       <fieldset><legend>Picture (optional)</legend>
@@ -167,7 +267,8 @@
           if (st.newImage) imageId = (await api('/teacher/images', { dataUrl: st.newImage })).image.id;
           const url = $('#qeUrl', ov).value.trim();
           const body = { type: st.type, text: $('#qeText', ov).value, points: $('#qePoints', ov).value, code: $('#qeCode', ov).value, topic: $('#qeTopic', ov).value,
-            choices: st.choices, answer: st.answer, imageId: url && !st.newImage ? null : imageId, imageUrl: url && !st.newImage ? url : null };
+            choices: st.choices, answer: st.answer, imageId: url && !st.newImage ? null : imageId, imageUrl: url && !st.newImage ? url : null,
+            folderId: $('#qeFolder', ov).value || null };
           await api(q ? '/teacher/questions/' + q.id : '/teacher/questions', body);
           toast('Question saved'); cache.questions = null; route();
         } },
@@ -230,12 +331,14 @@
     dialog('Import questions from CSV', `<p style="margin-top:0">Use the same columns as the Google Sheets version:
       <b>QuestionID, Type, Question, Choices, Answer, Points, Topic, Image</b>. In Google Sheets: open the Questions tab, then <b>File → Download → CSV</b>.</p>
       <ul class="small"><li><b>Type</b>: MC, TF, FIB or ESSAY</li><li><b>Choices</b> (MC): separated by |</li><li><b>Answer</b>: MC letter (A, B…), TRUE/FALSE, accepted blanks separated by |</li>
-      <li>Rows with an existing QuestionID update that question.</li></ul>
+      <li>Rows with an existing QuestionID update that question.</li>
+      <li>Optional <b>Folder</b> column, e.g. <i>EEE 150/Midterm</i>: folders are created as needed.</li></ul>
+      <div class="field"><label for="csvFolder">Put imported questions in</label><select id="csvFolder">${folderOptions(cache.folders || [], currentFolder !== 'all' && currentFolder !== 'none' ? currentFolder : null, '<option value="">Not in a folder</option>')}</select></div>
       <input type="file" id="csvFile" accept=".csv,text/csv" aria-label="CSV file"><div id="csvOut" style="margin-top:12px"></div>`, {
       buttons: [{ label: 'Close' }, { label: 'Import', primary: true, onClick: async (ov) => {
         const f = $('#csvFile', ov).files[0];
         if (!f) throw new Error('Choose a CSV file first.');
-        const r = await api('/teacher/questions/import', { csv: await f.text() });
+        const r = await api('/teacher/questions/import', { csv: await f.text(), folderId: $('#csvFolder', ov).value || null });
         $('#csvOut', ov).innerHTML = `<div class="note ${r.errors.length ? 'warn' : 'ok'}">${r.created} added, ${r.updated} updated.${r.errors.length ? '<br>' + r.errors.map(esc).join('<br>') : ''}</div>`;
         cache.questions = null;
         if (location.hash === '#questions') viewQuestions();
@@ -266,7 +369,7 @@
 
   // ───────── Exam editor ─────────
   async function viewExamEditor(id) {
-    const [classes, qs] = await Promise.all([getClasses(true), getQuestions(true)]);
+    const [classes, qs, folders] = await Promise.all([getClasses(true), getQuestions(true), getFolders()]);
     const x = id && id !== 'new' ? (await api('/teacher/exams/' + id)).exam : null;
     if (!classes.filter((c) => !c.archived).length && !x) {
       view.innerHTML = '<div class="note warn">Create a class first: exams are given to a class. <a href="#classes">Go to Classes</a></div>';
@@ -328,13 +431,14 @@
       <div class="panel"><div class="hd"><h3>Question bank — select questions for this exam</h3><a class="small" href="#questions">Manage questions</a></div><div class="bd">
         <div class="toolbar" style="margin-bottom:8px"><input type="search" id="pSearch" placeholder="Search…" aria-label="Search">
           <select id="pType" aria-label="Type"><option value="">All types</option>${Object.keys(TYPE).map((t) => `<option value="${t}">${TYPE[t]}</option>`).join('')}</select>
-          <select id="pTopic" aria-label="Topic"><option value="">All topics</option>${topics.map((t) => `<option>${esc(t)}</option>`).join('')}</select></div>
+          <select id="pTopic" aria-label="Topic"><option value="">All topics</option>${topics.map((t) => `<option>${esc(t)}</option>`).join('')}</select>
+          <select id="pFolder" aria-label="Folder">${folderOptions(folders, null, '<option value="all">All folders</option><option value="none">Not in a folder</option>')}</select></div>
         <div class="picker"><table class="list"><thead><tr><th><input type="checkbox" id="pAll" aria-label="Select all listed"></th><th>ID</th><th>Type</th><th>Question</th><th>Pts</th><th>Topic</th></tr></thead><tbody id="pRows"></tbody></table></div>
         <div class="sumbar"><b id="pSum"></b></div></div></div></div>`;
 
     const visible = () => {
-      const s = $('#pSearch').value.trim().toLowerCase(), t = $('#pType').value, tp = $('#pTopic').value;
-      return qs.filter((q) => (!t || q.type === t) && (!tp || q.topic === tp) && (!s || q.code.toLowerCase().includes(s) || q.text.toLowerCase().includes(s)));
+      const s = $('#pSearch').value.trim().toLowerCase(), t = $('#pType').value, tp = $('#pTopic').value, pf = $('#pFolder').value;
+      return qs.filter((q) => inFolder(folders, q, pf) && (!t || q.type === t) && (!tp || q.topic === tp) && (!s || q.code.toLowerCase().includes(s) || q.text.toLowerCase().includes(s)));
     };
     const toggle = (qid, on) => { if (on && !sel.has(qid)) { sel.add(qid); order.push(qid); } if (!on && sel.has(qid)) { sel.delete(qid); order.splice(order.indexOf(qid), 1); } };
     function drawPicker() {
@@ -377,7 +481,7 @@
       if (!one) $('#eBack').checked = true; if (perQ) $('#eBack').checked = false;
       $('#ePrev').disabled = $('#eFace').value !== 'ALWAYS';
     }
-    ['pSearch', 'pType', 'pTopic'].forEach((i) => $('#' + i).addEventListener('input', drawPicker));
+    ['pSearch', 'pType', 'pTopic', 'pFolder'].forEach((i) => $('#' + i).addEventListener('input', drawPicker));
     $('#pAll').onchange = (e) => { visible().filter((q) => !q.problems.length).forEach((q) => toggle(q.id, e.target.checked)); drawPicker(); };
     ['eMode', 'eQsec', 'eFace'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
     $('#ePick').addEventListener('input', drawSum);
@@ -440,7 +544,7 @@
         <div class="stat"><b>${r.notStarted.length}</b><span>Not started</span></div>
         <div class="stat"><b>${sub.reduce((s, a) => s + (a.pending_essays || 0), 0)}</b><span>Essays to grade</span></div></div>
       <div class="panel"><div class="hd"><h3>Attempts</h3></div><div class="tablewrap"><table class="list"><thead><tr><th>Student</th><th>Status</th><th>Score</th><th>Started</th><th>Submitted</th><th>Notes</th><th></th></tr></thead><tbody>
-      ${r.attempts.length ? r.attempts.map((a) => `<tr><td><b>${esc(a.student_name)}</b><div class="small muted">${esc(a.student_no || a.student_email)}</div></td>
+      ${r.attempts.length ? r.attempts.map((a) => `<tr><td><span class="person">${App.avatarHtml({ name: a.student_name, avatarUrl: a.avatarUrl }, 36)}<span><b>${esc(a.student_name)}</b><div class="small muted">${esc(a.student_no || a.student_email)}</div></span></span></td>
         <td>${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}</td>
         <td class="num">${a.score !== null ? a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span>' : '—'}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}</td>
         <td class="nowrap small">${esc(App.fmtDate(a.started_at))}</td><td class="nowrap small">${esc(App.fmtDate(a.submitted_at))}${a.late ? ' <span class="tag warn">Late</span>' : ''}</td>
@@ -510,10 +614,9 @@
           <td><span class="tag ${q.status === 'approved' ? 'ok' : q.status === 'rejected' ? 'bad' : 'warn'}">${esc(q.status)}</span></td></tr>`).join('') : '<tr><td><div class="empty">No requests yet.</div></td></tr>'}</tbody></table></div></div>
         <div class="panel"><div class="hd"><h3>History</h3></div><div class="tablewrap"><table class="list"><tbody>${r.ledger.length ? r.ledger.map((l) => `<tr><td class="small nowrap">${esc(App.fmtDate(l.at))}</td><td>${esc(l.reason)}</td>
           <td class="num nowrap">${l.credits ? (l.credits > 0 ? '+' : '') + l.credits + ' cr' : ''}${l.days ? ' ' + (l.days > 0 ? '+' : '') + l.days + ' days' : ''}</td></tr>`).join('') : '<tr><td><div class="empty">Nothing yet.</div></td></tr>'}</tbody></table></div></div></div>
-      <div class="panel"><div class="hd"><h3>Profile</h3></div><div class="bd"><div class="grid2">
-        <div class="field"><label for="pName">Name</label><input type="text" id="pName" value="${esc(r.user.name)}"></div>
-        <div class="field"><label for="pSchool">School</label><input type="text" id="pSchool" value="${esc(r.user.school)}"></div></div>
-        <button type="button" class="btn" id="saveProfile">Save profile</button> <button type="button" class="btn" id="changePw">Change password</button></div></div></div>`;
+      <div class="panel"><div class="hd"><h3>Profile</h3></div><div class="bd"><div class="person">${App.avatarHtml(r.user, 56)}<div><b>${esc(r.user.name)}</b>
+        <div class="small muted">${esc(r.user.email)}${r.user.school ? ' · ' + esc(r.user.school) : ''}</div></div></div>
+        <button type="button" class="btn" id="editProfile" style="margin-top:10px">Edit profile, picture or password</button></div></div></div>`;
     $('#rqKind').onchange = () => { $('#rqCredWrap').hidden = $('#rqKind').value !== 'credits'; };
     $('#redeem').onclick = async () => {
       try { const x = await api('/teacher/redeem', { code: $('#code').value }); toast(x.message); me.user = x.user; viewAccount(); } catch (e) { toast(e.message, true); }
@@ -522,8 +625,7 @@
       try { await api('/teacher/requests', { kind: $('#rqKind').value, credits: $('#rqCredits').value, reference: $('#rqRef').value, message: $('#rqMsg').value }); toast('Request sent to the administrator'); viewAccount(); }
       catch (e) { toast(e.message, true); }
     };
-    $('#saveProfile').onclick = async () => { const x = await api('/auth/profile', { name: $('#pName').value, school: $('#pSchool').value }); me.user = x.user; renderMe(); toast('Profile saved'); };
-    $('#changePw').onclick = passwordDialog;
+    $('#editProfile').onclick = () => App.openProfile(me.user);
   }
 
   function passwordDialog() {

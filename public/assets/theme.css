@@ -162,3 +162,9 @@ table.list tr:hover td { background: #fafbfc; }
 .paymethod { border: 1px solid var(--line-soft); border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel-alt); }
 .paymethod .field { margin: 8px 0 0; }
 .paymethod .note { margin-top: 8px; }
+.qrbox { display: flex; gap: 14px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 4px; background: #fff; margin-bottom: 12px; }
+.qrbox img { width: 180px; height: 180px; object-fit: contain; flex: none; border: 1px solid var(--line-soft); border-radius: 4px; background: #fff; }
+@media (max-width: 560px) { .qrbox { flex-direction: column; text-align: center; } .qrbox img { width: 220px; height: 220px; } }
+.qrrow { display: flex; gap: 12px; align-items: flex-start; }
+.qrthumb { width: 96px; height: 96px; object-fit: contain; border: 1px solid var(--line); border-radius: 4px; background: #fff; flex: none; }
+.qrthumb.empty { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }

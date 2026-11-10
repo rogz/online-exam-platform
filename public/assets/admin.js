@@ -187,6 +187,12 @@
     });
   }
 
+  /** QR code upload for a payment method (saved right away). */
+  const qrField = (method, id) => `<div class="field qrfield"><label>QR code <span class="muted">(optional)</span></label>
+    <div class="qrrow">${id ? `<img src="/api/admin/payment-qr/${method}?v=${encodeURIComponent(id)}" alt="QR code" class="qrthumb">` : '<div class="qrthumb empty">No QR</div>'}
+      <div><input type="file" accept="image/*" data-qr="${method}"> ${id ? `<button type="button" class="btn small danger" data-qrdel="${method}">Remove</button>` : ''}
+      <div class="hint">Use the "Receive money" QR (QR Ph) from GCash, Maya or your bank app. Teachers scan it, and only part of your name is shown.</div></div></div></div>`;
+
   async function settings() {
     const s = (await api('/admin/settings')).settings;
     view.innerHTML = `<div class="panel"><div class="hd"><h2>Site settings</h2></div><div class="bd">
@@ -200,15 +206,26 @@
         <div class="field"><label for="sCur">Currency</label><input type="text" id="sCur" value="${esc(s.currency)}" maxlength="3" style="text-transform:uppercase;max-width:120px"><div class="hint">PHP, USD …</div></div></div>
       <h3 class="settings-h">Payment methods</h3>
       <div class="paymethod"><label class="check"><input type="checkbox" id="sBankOn"${s.bankEnabled ? ' checked' : ''}> <b>Bank transfer</b></label>
-        <div class="field"><label for="sBank">Bank details shown to teachers</label><textarea id="sBank" rows="4">${esc(s.bankDetails)}</textarea><div class="hint">Bank name, account name, account number (and branch or SWIFT code if needed).</div></div></div>
+        <div class="field"><label for="sBank">Bank details shown to teachers</label><textarea id="sBank" rows="4">${esc(s.bankDetails)}</textarea><div class="hint">Bank name, account name, account number. <b>To hide your account number</b>, leave this blank and upload a QR code instead.</div></div>
+        ${qrField('bank', s.bankQr)}</div>
       <div class="paymethod"><label class="check"><input type="checkbox" id="sPpOn"${s.paypalEnabled ? ' checked' : ''}> <b>PayPal</b></label>
         <div id="sPpStatus" class="note small"></div>
         <div class="field"><label for="sPpLink">PayPal.me link or PayPal email <span class="muted">(used when automatic checkout is not set up)</span></label><input type="text" id="sPpLink" value="${esc(s.paypalLink)}" placeholder="https://paypal.me/yourname"></div></div>
       <div class="paymethod"><label class="check"><input type="checkbox" id="sOtherOn"${s.otherEnabled ? ' checked' : ''}> <b>GCash / other</b></label>
-        <div class="field"><label for="sPay">Instructions shown to teachers</label><textarea id="sPay" rows="3">${esc(s.paymentInstructions)}</textarea></div></div>
+        <div class="field"><label for="sPay">Instructions shown to teachers</label><textarea id="sPay" rows="3">${esc(s.paymentInstructions)}</textarea>
+          <div class="hint">To hide your GCash number, remove it from this text and upload your GCash QR code instead.</div></div>
+        ${qrField('other', s.otherQr)}</div>
       <h3 class="settings-h">Support</h3>
       <div class="field"><label for="sSupport">Support contact <span class="muted">(optional)</span></label><input type="text" id="sSupport" value="${esc(s.supportContact)}" placeholder="e.g. Email support@abnjworks.com"></div>
       <button type="button" class="btn primary" id="sSave">Save settings</button></div></div>`;
+    $$('[data-qr]').forEach((inp) => { inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      try { const pic = await App.pictureToDataUrl(f); await api('/admin/payment-qr', { method: inp.dataset.qr, dataUrl: pic.dataUrl }); toast('QR code saved'); settings(); }
+      catch (e) { toast(e.message, true); inp.value = ''; }
+    }; });
+    $$('[data-qrdel]').forEach((b) => { b.onclick = async () => {
+      await api('/admin/payment-qr', { method: b.dataset.qrdel, remove: true }); toast('QR code removed'); settings();
+    }; });
     api('/admin/payments').then((x) => {
       const n = $('#sPpStatus'); if (!n) return;
       n.className = 'note small ' + (x.paypalCheckout ? 'ok' : 'info');

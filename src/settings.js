@@ -15,6 +15,8 @@ const DEFAULTS = {
   paypalEnabled: false,
   paypalLink: '',                      // e.g. https://paypal.me/yourname (used when PayPal checkout keys are not set)
   otherEnabled: true,
+  bankQr: '',                          // picture ids of the QR codes teachers scan to pay (uploaded in Site settings)
+  otherQr: '',
   paymentInstructions: 'To buy credits, send payment by GCash to 09XX XXX XXXX (ABNJ Works), then submit a request with the reference number. Credits are added once the payment is confirmed.',
   supportContact: '',
 };
@@ -38,6 +40,7 @@ async function saveSettings(patch) {
     let v = patch[key];
     if (typeof DEFAULTS[key] === 'boolean') v = v === true || v === 'true';
     else v = String(v).slice(0, 4000);
+    if ((key === 'bankQr' || key === 'otherQr') && v && !/^[0-9a-f-]{36}$/i.test(v)) continue;
     if (key === 'currency') {
       v = v.trim().toUpperCase();
       if (!/^[A-Z]{3}$/.test(v)) { const { fail } = require('./util'); throw fail(400, 'BAD_INPUT', 'The currency must be a 3-letter code such as PHP or USD.'); }

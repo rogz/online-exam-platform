@@ -200,6 +200,33 @@ router.get('/requests/:id/proof', async (req, res) => {
   res.set('Content-Type', img.mime).set('Cache-Control', 'private, max-age=3600').send(Buffer.from(img.data));
 });
 
+// QR codes for payment methods: stored as pictures owned by the admin who uploads them.
+router.post('/payment-qr', express.json({ limit: '4mb' }), async (req, res) => {
+  const b = req.body || {};
+  const key = b.method === 'bank' ? 'bankQr' : b.method === 'other' ? 'otherQr' : null;
+  if (!key) throw fail(400, 'BAD_INPUT', 'Unknown payment method.');
+  const old = (await getSettings())[key];
+  let id = '';
+  if (!b.remove) {
+    const m = String(b.dataUrl || '').match(/^data:(image\/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) throw fail(400, 'BAD_INPUT', 'That file is not a JPEG, PNG, GIF or WebP picture.');
+    const bytes = Buffer.from(m[2], 'base64');
+    if (bytes.length > 2 * 1024 * 1024) throw fail(413, 'TOO_LARGE', 'The picture is larger than 2 MB.');
+    id = (await db.one('INSERT INTO images (teacher_id, mime, bytes, data) VALUES ($1,$2,$3,$4) RETURNING id', [req.user.id, m[1], bytes.length, bytes])).id;
+  }
+  await saveSettings({ [key]: id });
+  if (isUuid(old)) await db.query('DELETE FROM images WHERE id = $1', [old]);
+  res.json({ ok: true, id });
+});
+
+router.get('/payment-qr/:method', async (req, res) => {
+  const s = await getSettings();
+  const id = req.params.method === 'bank' ? s.bankQr : req.params.method === 'other' ? s.otherQr : null;
+  const img = isUuid(id) ? await db.one('SELECT mime, data FROM images WHERE id = $1', [id]) : null;
+  if (!img) throw fail(404, 'NOT_FOUND', 'No QR code.');
+  res.set('Content-Type', img.mime).set('Cache-Control', 'no-cache').send(Buffer.from(img.data));
+});
+
 router.get('/payments', async (req, res) => {
   const pp = require('../paypal').config();
   res.json({ ok: true, paypalCheckout: pp ? { sandbox: pp.sandbox } : null });

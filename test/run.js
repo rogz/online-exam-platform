@@ -318,6 +318,22 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const proofOther = await t2.evaluate(async (u) => (await fetch(u)).status, proofHref);
   ok(proofOther === 403, 'teachers cannot open the admin receipt link');
 
+  // ── QR code instead of account details ──
+  await admin.goto(BASE + '/admin#settings'); await admin.waitForSelector('[data-qr=bank]');
+  const qrPng = await admin.evaluate(() => { const c = document.createElement('canvas'); c.width = 120; c.height = 120; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 120, 120); g.fillStyle = '#000'; for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) if ((i * 7 + j * 3) % 5 < 2) g.fillRect(i * 10, j * 10, 10, 10); return c.toDataURL('image/png'); });
+  await admin.setInputFiles('[data-qr=bank]', { name: 'qr.png', mimeType: 'image/png', buffer: Buffer.from(qrPng.split(',')[1], 'base64') });
+  ok(await toastSays(admin, 'QR code saved'), 'admin uploads a bank QR code');
+  await admin.waitForSelector('img.qrthumb');
+  await admin.fill('#sBank', ''); await admin.click('#sSave'); await toastSays(admin, 'Settings saved');
+  await t2.goto(BASE + '/teacher#classes'); await t2.goto(BASE + '/teacher#account'); await t2.reload(); await t2.waitForSelector('.methods');
+  await t2.click('.method:has-text("Bank transfer")');
+  await t2.waitForSelector('.qrbox img');
+  const qrShown = await t2.evaluate(async () => { const i = document.querySelector('.qrbox img'); await i.decode(); return i.naturalWidth; });
+  ok(qrShown === 120 && !(await t2.isVisible('.paydetails')), 'teacher sees only the QR code, no account number');
+  await shot(t2, '14-teacher-pay-qr');
+  const qrStudent = await student.evaluate(async () => (await fetch('/api/teacher/payment-qr/bank')).status);
+  ok(qrStudent === 403, 'students cannot see the payment QR code');
+
   // ── PayPal checkout (against a pretend PayPal server) ──
   const http = require('http');
   const orders = {};

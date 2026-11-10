@@ -20,15 +20,20 @@ const mine = async (table, id, teacherId, what) => {
 
 // ───────── Account, codes, credits ─────────
 
+/** Payment text without empty "Label:" lines; empty when nothing is filled in (then only the QR code is shown). */
+function shownText(text) {
+  return String(text || '').split(/\r?\n/).filter((l) => !/^[^:]{1,40}:\s*$/.test(l)).join('\n').trim();
+}
+
 /** The payment methods the admin turned on, with what teachers need to see for each. */
 function paymentMethods(s) {
   const pp = paypal.config();
   const m = [];
-  if (s.bankEnabled) m.push({ id: 'bank', label: 'Bank transfer', details: s.bankDetails });
+  if (s.bankEnabled) m.push({ id: 'bank', label: 'Bank transfer', details: shownText(s.bankDetails), qr: s.bankQr || null });
   if (s.paypalEnabled && (pp || s.paypalLink)) {
     m.push({ id: 'paypal', label: 'PayPal', link: s.paypalLink || '', checkout: pp ? { clientId: pp.clientId, sandbox: pp.sandbox } : null });
   }
-  if (s.otherEnabled) m.push({ id: 'other', label: 'GCash / other', details: s.paymentInstructions });
+  if (s.otherEnabled) m.push({ id: 'other', label: 'GCash / other', details: shownText(s.paymentInstructions), qr: s.otherQr || null });
   return m;
 }
 
@@ -76,6 +81,15 @@ router.post('/requests', async (req, res) => {
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
   [req.user.id, kind, credits, reference, str(b.message, 1000) || null, method, amount, amount === null ? null : s.currency, proof]);
   res.json({ ok: true });
+});
+
+// The QR code a teacher scans to pay (only signed-in teachers can see it).
+router.get('/payment-qr/:method', async (req, res) => {
+  const s = await getSettings();
+  const id = req.params.method === 'bank' ? (s.bankEnabled && s.bankQr) : req.params.method === 'other' ? (s.otherEnabled && s.otherQr) : null;
+  const img = isUuid(id) ? await db.one('SELECT mime, data FROM images WHERE id = $1', [id]) : null;
+  if (!img) throw fail(404, 'NOT_FOUND', 'No QR code.');
+  res.set('Content-Type', img.mime).set('Cache-Control', 'private, max-age=86400').send(Buffer.from(img.data));
 });
 
 // PayPal checkout: the teacher pays in a PayPal window and the credits are added at once.

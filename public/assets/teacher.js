@@ -673,7 +673,10 @@
         const link = /^https:\/\/(www\.)?paypal\.me\//i.test(m.link) && p ? m.link.replace(/\/+$/, '') + '/' + p.price + r.currency : m.link;
         h = `${due}<div class="note info small paydetails">Send the amount by PayPal to ${/^https:/i.test(m.link) ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(m.link)}</a>` : '<b>' + esc(m.link) + '</b>'}, then enter the transaction ID below.</div>${manualForm(m)}`;
       } else if (m) {
-        h = `${due}<div class="note info small paydetails">${esc(m.details)}</div>${manualForm(m)}`;
+        const qr = m.qr ? '/api/teacher/payment-qr/' + m.id + '?v=' + encodeURIComponent(m.qr) : '';
+        h = `${due}${qr ? `<div class="qrbox"><img src="${qr}" alt="QR code to pay"><div><b>Scan to pay</b> with GCash, Maya or your bank app${p ? ' and enter <b>' + esc(amt) + '</b>' : ''}.
+          <div class="small muted" style="margin-top:6px">On your phone? <a href="${qr}" download="payment-qr">Save the QR picture</a>, then in your app tap <i>Scan QR → Upload QR</i> and choose it.</div></div></div>` : ''}
+          ${m.details ? `<div class="note info small paydetails">${esc(m.details)}</div>` : ''}${manualForm(m)}`;
       } else h = due + manualForm(null);
       $('#payBox').innerHTML = h;
       proofId = null;

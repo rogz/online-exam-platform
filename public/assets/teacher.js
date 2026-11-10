@@ -588,6 +588,22 @@
   }
 
   // ───────── Account ─────────
+  const money = (n, cur) => { try { return new Intl.NumberFormat('en-PH', { style: 'currency', currency: cur || 'PHP' }).format(n); } catch (e) { return (cur || '') + ' ' + n; } };
+  const methodName = (m) => ({ bank: 'Bank transfer', paypal: 'PayPal', other: 'GCash / other' })[m] || '';
+  let paypalSdk = null;
+  /** Loads PayPal's checkout script once. */
+  function loadPayPal(clientId, currency) {
+    if (window.paypal && window.paypal.Buttons) return Promise.resolve(window.paypal);
+    if (!paypalSdk) paypalSdk = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(clientId) + '&currency=' + encodeURIComponent(currency) + '&intent=capture&components=buttons';
+      sc.onload = () => (window.paypal ? resolve(window.paypal) : reject(new Error('PayPal not loaded')));
+      sc.onerror = () => { paypalSdk = null; reject(new Error('PayPal not loaded')); };
+      document.head.appendChild(sc);
+    });
+    return paypalSdk;
+  }
+
   async function viewAccount() {
     const r = await api('/teacher/account');
     me.user = r.user; renderMe();
@@ -601,29 +617,93 @@
         <div class="panel"><div class="hd"><h3>Redeem an access code</h3></div><div class="bd">
           <div class="field"><label for="code">Access code</label><input type="text" id="code" autocomplete="off" placeholder="e.g. TABC-DEFG" style="text-transform:uppercase"></div>
           <button type="button" class="btn primary" id="redeem">Redeem</button><div class="hint">Access codes are given by the site administrator. They add days of full access or credits.</div></div></div>
-        <div class="panel"><div class="hd"><h3>Buy credits / request access</h3></div><div class="bd">
-          <div class="note info small" style="white-space:pre-wrap;margin-bottom:10px">${esc(r.creditPackages)}\n\n${esc(r.paymentInstructions)}</div>
-          <div class="grid2"><div class="field"><label for="rqKind">I'm requesting</label><select id="rqKind"><option value="credits">Credits</option><option value="access">Free access (no payment)</option></select></div>
-            <div class="field" id="rqCredWrap"><label for="rqCredits">Credits</label><input type="number" id="rqCredits" min="1" value="10"></div></div>
-          <div class="field"><label for="rqRef">Payment reference number <span class="muted">(if you paid)</span></label><input type="text" id="rqRef"></div>
-          <div class="field"><label for="rqMsg">Message <span class="muted">(optional)</span></label><textarea id="rqMsg" rows="2" placeholder="e.g. school, subject, number of classes"></textarea></div>
-          <button type="button" class="btn primary" id="request">Send request</button>${r.supportContact ? '<div class="hint">Questions? ' + esc(r.supportContact) + '</div>' : ''}</div></div></div>
+        <div class="panel" id="buyPanel"><div class="hd"><h3>Buy credits</h3></div><div class="bd">
+          <div class="field"><label>1. Choose a package</label>${r.packages.length ? `<div class="packs">${r.packages.map((p, i) => `<label class="pack"><input type="radio" name="pack" value="${p.credits}"${i === 0 ? ' checked' : ''}>
+            <b>${p.credits} credit${p.credits === 1 ? '' : 's'}</b><span>${esc(money(p.price, r.currency))}</span><small>${esc(money(p.price / p.credits, r.currency))} per exam</small></label>`).join('')}</div>`
+            : '<input type="number" id="rqCredits" min="1" value="10">'}<div class="hint">1 credit = publish 1 exam. Editing and re-publishing it later is free.</div></div>
+          <div class="field"><label>2. Choose how to pay</label>${r.methods.length ? `<div class="methods">${r.methods.map((m, i) => `<label class="method"><input type="radio" name="method" value="${m.id}"${i === 0 ? ' checked' : ''}>${esc(m.label)}</label>`).join('')}</div>`
+            : '<div class="note warn small">Payment methods are not set up yet. Send a request and the administrator will contact you.</div>'}</div>
+          <div id="payBox"></div>
+          <div class="hint" style="margin-top:12px">Need free access instead (e.g. a school trial)? <a href="#account" id="askAccess">Request free access</a>${r.supportContact ? ' · Questions? ' + esc(r.supportContact) : ''}</div></div></div></div>
       <div class="grid2">
         <div class="panel"><div class="hd"><h3>My requests</h3></div><div class="tablewrap"><table class="list"><tbody>${r.requests.length ? r.requests.map((q) => `<tr><td class="small nowrap">${esc(App.fmtDate(q.created_at))}</td>
-          <td>${q.kind === 'access' ? 'Access' : q.credits + ' credits'}${q.reference ? '<div class="small muted">Ref ' + esc(q.reference) + '</div>' : ''}</td>
+          <td>${q.kind === 'access' ? 'Access' : q.credits + ' credits'}${q.amount ? ' · ' + esc(money(q.amount, q.currency || r.currency)) : ''}<div class="small muted">${esc(methodName(q.method))}${q.reference ? ' · Ref ' + esc(q.reference) : ''}</div></td>
           <td><span class="tag ${q.status === 'approved' ? 'ok' : q.status === 'rejected' ? 'bad' : 'warn'}">${esc(q.status)}</span></td></tr>`).join('') : '<tr><td><div class="empty">No requests yet.</div></td></tr>'}</tbody></table></div></div>
         <div class="panel"><div class="hd"><h3>History</h3></div><div class="tablewrap"><table class="list"><tbody>${r.ledger.length ? r.ledger.map((l) => `<tr><td class="small nowrap">${esc(App.fmtDate(l.at))}</td><td>${esc(l.reason)}</td>
           <td class="num nowrap">${l.credits ? (l.credits > 0 ? '+' : '') + l.credits + ' cr' : ''}${l.days ? ' ' + (l.days > 0 ? '+' : '') + l.days + ' days' : ''}</td></tr>`).join('') : '<tr><td><div class="empty">Nothing yet.</div></td></tr>'}</tbody></table></div></div></div>
       <div class="panel"><div class="hd"><h3>Profile</h3></div><div class="bd"><div class="person">${App.avatarHtml(r.user, 56)}<div><b>${esc(r.user.name)}</b>
         <div class="small muted">${esc(r.user.email)}${r.user.school ? ' · ' + esc(r.user.school) : ''}</div></div></div>
         <button type="button" class="btn" id="editProfile" style="margin-top:10px">Edit profile, picture or password</button></div></div></div>`;
-    $('#rqKind').onchange = () => { $('#rqCredWrap').hidden = $('#rqKind').value !== 'credits'; };
     $('#redeem').onclick = async () => {
       try { const x = await api('/teacher/redeem', { code: $('#code').value }); toast(x.message); me.user = x.user; viewAccount(); } catch (e) { toast(e.message, true); }
     };
-    $('#request').onclick = async () => {
-      try { await api('/teacher/requests', { kind: $('#rqKind').value, credits: $('#rqCredits').value, reference: $('#rqRef').value, message: $('#rqMsg').value }); toast('Request sent to the administrator'); viewAccount(); }
-      catch (e) { toast(e.message, true); }
+    const credits = () => Number((($('input[name=pack]:checked') || {}).value) || ($('#rqCredits') || {}).value || 0);
+    const pack = () => r.packages.find((p) => p.credits === credits());
+    const method = () => r.methods.find((m) => m.id === (($('input[name=method]:checked') || {}).value));
+    let proofId = null;
+    const manualForm = (m) => `<div class="field"><label for="rqRef">3. Payment reference number</label><input type="text" id="rqRef" autocomplete="off" placeholder="${m && m.id === 'bank' ? 'e.g. transfer reference' : m && m.id === 'paypal' ? 'PayPal transaction ID' : 'e.g. GCash reference no.'}"></div>
+      <div class="field"><label for="rqProof">Picture of your receipt <span class="muted">(optional)</span></label><input type="file" id="rqProof" accept="image/*"><div class="hint" id="rqProofNote"></div></div>
+      <div class="field"><label for="rqMsg">Message <span class="muted">(optional)</span></label><textarea id="rqMsg" rows="2"></textarea></div>
+      <button type="button" class="btn primary" id="request">Send payment details</button><div class="hint">Credits are added once the administrator confirms your payment.</div>`;
+    const renderPayPal = (co, p) => {
+      loadPayPal(co.clientId, r.currency).then((paypal) => {
+        const box = $('#ppButtons'); if (!box) return;
+        box.innerHTML = '';
+        paypal.Buttons({
+          style: { layout: 'vertical', shape: 'rect', label: 'pay' },
+          createOrder: async () => (await api('/teacher/paypal/order', { credits: p.credits })).id,
+          onApprove: async (data) => {
+            try {
+              const x = await api('/teacher/paypal/capture', { orderId: data.orderID });
+              me.user = x.user; toast('Payment complete: ' + x.credits + ' credits added. Thank you!'); viewAccount();
+            } catch (e) { toast(e.message, true); }
+          },
+          onError: (err) => toast('PayPal error: ' + ((err && err.message) || 'please try again'), true),
+        }).render(box);
+      }).catch(() => { const box = $('#ppButtons'); if (box) box.innerHTML = '<div class="note warn small">PayPal could not be loaded. Check your internet connection or ad blocker, then reload the page.</div>'; });
+    };
+    const paintPay = () => {
+      const m = method(), p = pack(), amt = p ? money(p.price, r.currency) : '';
+      const due = p ? `<div class="due">Amount to pay: <b>${esc(amt)}</b> for ${p.credits} credit${p.credits === 1 ? '' : 's'}</div>` : '';
+      let h = '';
+      if (m && m.id === 'paypal' && m.checkout && p) {
+        h = `${due}<div id="ppButtons" class="pp-buttons"><div class="muted small">Loading PayPal…</div></div>
+          <div class="hint">Pay with your PayPal account or a debit/credit card. Your credits are added right away.${m.checkout.sandbox ? ' <b>(Test mode: no real money.)</b>' : ''}</div>`;
+      } else if (m && m.id === 'paypal') {
+        const link = /^https:\/\/(www\.)?paypal\.me\//i.test(m.link) && p ? m.link.replace(/\/+$/, '') + '/' + p.price + r.currency : m.link;
+        h = `${due}<div class="note info small paydetails">Send the amount by PayPal to ${/^https:/i.test(m.link) ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(m.link)}</a>` : '<b>' + esc(m.link) + '</b>'}, then enter the transaction ID below.</div>${manualForm(m)}`;
+      } else if (m) {
+        h = `${due}<div class="note info small paydetails">${esc(m.details)}</div>${manualForm(m)}`;
+      } else h = due + manualForm(null);
+      $('#payBox').innerHTML = h;
+      proofId = null;
+      if ($('#ppButtons')) renderPayPal(m.checkout, p);
+      if ($('#rqProof')) $('#rqProof').onchange = async () => {
+        const f = $('#rqProof').files[0]; proofId = null; if (!f) return;
+        try {
+          $('#rqProofNote').textContent = 'Uploading…';
+          const pic = await App.pictureToDataUrl(f);
+          proofId = (await api('/teacher/images', { dataUrl: pic.dataUrl })).image.id;
+          $('#rqProofNote').textContent = '✓ Receipt attached';
+        } catch (e) { $('#rqProofNote').textContent = ''; $('#rqProof').value = ''; toast(e.message, true); }
+      };
+      if ($('#request')) $('#request').onclick = async () => {
+        try {
+          await api('/teacher/requests', { kind: 'credits', credits: credits(), method: m ? m.id : '', reference: $('#rqRef').value, proofImageId: proofId, message: $('#rqMsg').value });
+          toast('Request sent to the administrator'); viewAccount();
+        } catch (e) { toast(e.message, true); }
+      };
+    };
+    $$('input[name=pack], input[name=method]').forEach((i) => { i.onchange = paintPay; });
+    paintPay();
+    $('#askAccess').onclick = (ev) => {
+      ev.preventDefault();
+      dialog('Request free access', `<p style="margin-top:0">Tell the administrator about your school and classes. If approved, you get days of full access.</p>
+        <div class="field"><label for="faMsg">Message</label><textarea id="faMsg" rows="3" placeholder="e.g. school, subject, number of classes"></textarea></div>`, {
+        buttons: [{ label: 'Cancel' }, { label: 'Send request', primary: true, onClick: async (ov) => {
+          await api('/teacher/requests', { kind: 'access', message: $('#faMsg', ov).value }); toast('Request sent to the administrator'); viewAccount();
+        } }],
+      });
     };
     $('#editProfile').onclick = () => App.openProfile(me.user);
   }

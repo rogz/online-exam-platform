@@ -21,8 +21,22 @@ The exam screen brings over everything from the Google Sheets version: tab-switc
 **Credits:**
 - Publishing an exam the first time costs 1 credit, unless the teacher has days of full access.
 - Editing, unpublishing and re-publishing that exam later is free.
-- Teachers who pay (e.g. by GCash) submit a request with their reference number. You approve it once you've checked the payment.
-- Online card or GCash checkout (e.g. PayMongo) can be added later.
+- Teachers pick a package (e.g. 10 credits for ₱100) and a payment method: **bank transfer**, **PayPal** or **GCash / other**.
+- For bank transfer and GCash, the teacher sends the money, then enters the reference number and can attach a picture of the receipt. You approve the request once you've checked the payment.
+
+### Payments setup
+In **Admin → Site settings**:
+- **Credit packages:** one per line, `credits = price` (e.g. `10 = 100`). Set the currency (PHP, USD …).
+- **Bank transfer:** tick it and type your bank name, account name and account number.
+- **PayPal:** tick it and enter your PayPal.me link (e.g. `https://paypal.me/yourname`). Teachers send the money there and you approve the request, as with a bank transfer.
+- **GCash / other:** tick it and type the instructions.
+
+**Automatic PayPal checkout (optional):** teachers pay by PayPal or debit/credit card and their credits are added at once, with no approval needed.
+1. Sign in at developer.paypal.com with your PayPal **Business** account → **Apps & Credentials** → **Create App**.
+2. In Render, open the service → **Environment** and add `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` from that app.
+3. To try it first with fake money, use the **Sandbox** keys and also add `PAYPAL_ENV` = `sandbox`. Switch to the **Live** keys and remove `PAYPAL_ENV` when you're ready.
+
+Site settings shows whether automatic checkout is on. If a PayPal amount doesn't match the package, the payment is held as a request for you to check. Keep the secret key only in Render; never paste it into chat or into the code.
 
 ---
 

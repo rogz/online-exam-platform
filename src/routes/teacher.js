@@ -3,9 +3,10 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
 const core = require('../exam-core');
-const { getSettings } = require('../settings');
+const { getSettings, parsePackages } = require('../settings');
+const paypal = require('../paypal');
 const { fail, str, int, bool, isUuid, randomCode, toCsv, parseCsv } = require('../util');
-const { redeemCode } = require('./codes');
+const { redeemCode, grantWith } = require('./codes');
 
 const router = express.Router();
 router.use(auth.requireRole('teacher', 'admin'));
@@ -19,15 +20,29 @@ const mine = async (table, id, teacherId, what) => {
 
 // ───────── Account, codes, credits ─────────
 
+/** The payment methods the admin turned on, with what teachers need to see for each. */
+function paymentMethods(s) {
+  const pp = paypal.config();
+  const m = [];
+  if (s.bankEnabled) m.push({ id: 'bank', label: 'Bank transfer', details: s.bankDetails });
+  if (s.paypalEnabled && (pp || s.paypalLink)) {
+    m.push({ id: 'paypal', label: 'PayPal', link: s.paypalLink || '', checkout: pp ? { clientId: pp.clientId, sandbox: pp.sandbox } : null });
+  }
+  if (s.otherEnabled) m.push({ id: 'other', label: 'GCash / other', details: s.paymentInstructions });
+  return m;
+}
+
 router.get('/account', async (req, res) => {
   const s = await getSettings();
   res.json({
     ok: true,
     user: auth.publicUser(req.user),
     ledger: await db.many('SELECT * FROM credit_ledger WHERE teacher_id = $1 ORDER BY at DESC LIMIT 50', [req.user.id]),
-    requests: await db.many('SELECT * FROM credit_requests WHERE teacher_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]),
-    paymentInstructions: s.paymentInstructions,
-    creditPackages: s.creditPackages,
+    requests: await db.many(`SELECT id, kind, credits, reference, message, status, method, amount, currency, proof_image_id, created_at, handled_at
+      FROM credit_requests WHERE teacher_id = $1 ORDER BY created_at DESC LIMIT 50`, [req.user.id]),
+    packages: parsePackages(s.creditPackages),
+    currency: s.currency,
+    methods: paymentMethods(s),
     supportContact: s.supportContact,
   });
 });
@@ -39,14 +54,76 @@ router.post('/redeem', async (req, res) => {
 
 router.post('/requests', async (req, res) => {
   const b = req.body || {};
+  const s = await getSettings();
   const kind = b.kind === 'access' ? 'access' : 'credits';
   const credits = kind === 'credits' ? int(b.credits, 0, 1, 10000) : 0;
-  if (kind === 'credits' && !credits) throw fail(400, 'BAD_INPUT', 'Enter how many credits you are buying.');
+  if (kind === 'credits' && !credits) throw fail(400, 'BAD_INPUT', 'Choose how many credits you are buying.');
+  let method = null, amount = null;
+  if (kind === 'credits') {
+    const methods = paymentMethods(s).map((x) => x.id);
+    method = methods.includes(b.method) ? b.method : null;
+    if (methods.length && !method) throw fail(400, 'BAD_INPUT', 'Choose how you paid.');
+    const pack = parsePackages(s.creditPackages).find((p) => p.credits === credits);
+    amount = pack ? pack.price : null;
+  }
+  const reference = str(b.reference, 120) || null;
+  if (kind === 'credits' && !reference && !isUuid(b.proofImageId)) throw fail(400, 'BAD_INPUT', 'Enter the payment reference number, or attach a picture of your receipt.');
+  let proof = null;
+  if (isUuid(b.proofImageId)) proof = (await mine('images', b.proofImageId, req.user.id, 'Receipt picture')).id;
   const pending = await db.one(`SELECT count(*)::int AS n FROM credit_requests WHERE teacher_id = $1 AND status = 'pending'`, [req.user.id]);
   if (pending.n >= 5) throw fail(429, 'TOO_MANY', 'You already have 5 requests waiting. Please wait for the administrator.');
-  await db.query('INSERT INTO credit_requests (teacher_id, kind, credits, reference, message) VALUES ($1,$2,$3,$4,$5)',
-    [req.user.id, kind, credits, str(b.reference, 120) || null, str(b.message, 1000) || null]);
+  await db.query(`INSERT INTO credit_requests (teacher_id, kind, credits, reference, message, method, amount, currency, proof_image_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+  [req.user.id, kind, credits, reference, str(b.message, 1000) || null, method, amount, amount === null ? null : s.currency, proof]);
   res.json({ ok: true });
+});
+
+// PayPal checkout: the teacher pays in a PayPal window and the credits are added at once.
+async function paypalPackage(credits) {
+  const s = await getSettings();
+  if (!s.paypalEnabled || !paypal.config()) throw fail(400, 'PAYPAL_OFF', 'PayPal checkout is not available on this site.');
+  const pack = parsePackages(s.creditPackages).find((p) => p.credits === Number(credits));
+  if (!pack) throw fail(400, 'BAD_INPUT', 'Choose one of the credit packages.');
+  return { s, pack };
+}
+
+router.post('/paypal/order', async (req, res) => {
+  const { s, pack } = await paypalPackage(req.body && req.body.credits);
+  const id = await paypal.createOrder({ teacherId: req.user.id, credits: pack.credits, price: pack.price, currency: s.currency, siteName: s.siteName });
+  res.json({ ok: true, id });
+});
+
+router.post('/paypal/capture', async (req, res) => {
+  const orderId = str(req.body && req.body.orderId, 64);
+  if (!/^[A-Z0-9-]{5,64}$/i.test(orderId)) throw fail(400, 'BAD_INPUT', 'Unknown PayPal order.');
+  const done = await db.one('SELECT teacher_id, credits FROM credit_requests WHERE paypal_order_id = $1', [orderId]);
+  if (done) {
+    if (done.teacher_id !== req.user.id) throw fail(404, 'NOT_FOUND', 'Unknown PayPal order.');
+    return res.json({ ok: true, credits: done.credits, already: true, user: auth.publicUser(await auth.userById(req.user.id)) });
+  }
+  const c = await paypal.captureOrder(orderId);
+  const [teacherId, creditsText] = String(c.customId).split(':');
+  if (teacherId !== req.user.id) throw fail(404, 'NOT_FOUND', 'This PayPal payment belongs to another account.');
+  if (c.status !== 'COMPLETED') {
+    throw fail(402, 'PAYMENT_PENDING', c.status === 'PENDING'
+      ? 'PayPal is still checking this payment. Your credits will be added by the administrator once it clears (PayPal order ' + orderId + ').'
+      : 'PayPal did not complete the payment (' + (c.status || 'unknown') + '). No credits were added.');
+  }
+  const s = await getSettings();
+  const credits = Number(creditsText);
+  const pack = parsePackages(s.creditPackages).find((p) => p.credits === credits);
+  // The price is checked against the package at the time of payment; a mismatch goes to the admin instead.
+  const matches = pack && c.currency === s.currency && Math.abs(c.amount - pack.price) < 0.005;
+  const added = await db.tx(async (t) => {
+    const row = (await t.query(`INSERT INTO credit_requests (teacher_id, kind, credits, reference, message, method, amount, currency, paypal_order_id, status, handled_at)
+      VALUES ($1, 'credits', $2, $3, $4, 'paypal', $5, $6, $7, $8, $9) ON CONFLICT (paypal_order_id) DO NOTHING RETURNING id`,
+    [req.user.id, credits, c.captureId || orderId, matches ? 'Paid with PayPal checkout' : 'Paid with PayPal, but the amount did not match the package. Please check.',
+      c.amount || null, c.currency || null, orderId, matches ? 'approved' : 'pending', matches ? new Date() : null])).rows[0];
+    if (row && matches) await grantWith(t, req.user.id, { credits }, 'PayPal payment (' + (c.captureId || orderId) + ')');
+    return row ? (matches ? credits : 0) : null;
+  });
+  if (added === 0) throw fail(409, 'CHECK_NEEDED', 'Payment received, but the amount did not match the package. The administrator will check it and add your credits.');
+  res.json({ ok: true, credits, already: added === null, user: auth.publicUser(await auth.userById(req.user.id)) });
 });
 
 // ───────── Classes ─────────

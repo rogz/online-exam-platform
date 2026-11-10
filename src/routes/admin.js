@@ -193,6 +193,18 @@ router.get('/requests', async (req, res) => {
   res.json({ ok: true, requests: rows });
 });
 
+router.get('/requests/:id/proof', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'Receipt not found.');
+  const img = await db.one('SELECT i.mime, i.data FROM credit_requests r JOIN images i ON i.id = r.proof_image_id WHERE r.id = $1', [req.params.id]);
+  if (!img) throw fail(404, 'NOT_FOUND', 'Receipt not found.');
+  res.set('Content-Type', img.mime).set('Cache-Control', 'private, max-age=3600').send(Buffer.from(img.data));
+});
+
+router.get('/payments', async (req, res) => {
+  const pp = require('../paypal').config();
+  res.json({ ok: true, paypalCheckout: pp ? { sandbox: pp.sandbox } : null });
+});
+
 router.post('/requests/:id', async (req, res) => {
   if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'Request not found.');
   const r = await db.one('SELECT * FROM credit_requests WHERE id = $1', [req.params.id]);

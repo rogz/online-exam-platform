@@ -47,13 +47,16 @@
           <li>Teachers who pay send a <a href="#requests">credit request</a> with their payment reference; approve it once you have checked the payment.</li></ul></div></div>`;
   }
 
+  const money = (n, cur) => { try { return new Intl.NumberFormat('en-PH', { style: 'currency', currency: cur || 'PHP' }).format(n); } catch (e) { return (cur || '') + ' ' + n; } };
+  const methodName = (m) => ({ bank: 'Bank transfer', paypal: 'PayPal', other: 'GCash / other' })[m] || m || '';
+
   async function requests() {
     const r = await api('/admin/requests');
     view.innerHTML = `<div class="panel"><div class="hd"><h2>Credit requests</h2></div><div class="tablewrap"><table class="list"><thead><tr><th>Date</th><th>Teacher</th><th>Request</th><th>Reference / message</th><th>Status</th><th></th></tr></thead><tbody>
       ${r.requests.length ? r.requests.map((q) => `<tr><td class="small nowrap">${esc(App.fmtDate(q.created_at))}</td>
         <td><b>${esc(q.teacher_name)}</b><div class="small muted">${esc(q.teacher_email)}</div><div class="small muted">Has ${q.teacher_credits} cr${q.teacher_until && new Date(q.teacher_until) > Date.now() ? ', access until ' + esc(App.fmtDay(q.teacher_until)) : ''}</div></td>
-        <td>${q.kind === 'access' ? 'Free access' : '<b>' + q.credits + '</b> credits'}</td>
-        <td class="small">${q.reference ? '<b>Ref:</b> ' + esc(q.reference) + '<br>' : ''}${esc(q.message || '')}</td>
+        <td>${q.kind === 'access' ? 'Free access' : '<b>' + q.credits + '</b> credits'}${q.amount ? '<div class="small">' + esc(money(q.amount, q.currency)) + '</div>' : ''}${q.method ? '<div class="small muted">' + esc(methodName(q.method)) + '</div>' : ''}</td>
+        <td class="small">${q.reference ? '<b>Ref:</b> ' + esc(q.reference) + '<br>' : ''}${esc(q.message || '')}${q.proof_image_id ? '<div><a href="/api/admin/requests/' + q.id + '/proof" target="_blank" rel="noopener">View receipt picture</a></div>' : ''}</td>
         <td><span class="tag ${q.status === 'approved' ? 'ok' : q.status === 'rejected' ? 'bad' : 'warn'}">${esc(q.status)}</span></td>
         <td class="nowrap">${q.status === 'pending' ? `<button type="button" class="btn small primary" data-approve="${q.id}">Approve…</button> <button type="button" class="btn small danger" data-reject="${q.id}">Reject</button>` : ''}</td></tr>`).join('')
       : '<tr><td colspan="6"><div class="empty">No requests yet.</div></td></tr>'}</tbody></table></div></div>`;
@@ -191,13 +194,33 @@
         <div class="field"><label for="sTz">Time zone</label><input type="text" id="sTz" value="${esc(s.timeZone)}"><div class="hint">e.g. Asia/Manila</div></div></div>
       <label class="check"><input type="checkbox" id="sTeach"${s.teacherSignup ? ' checked' : ''}> Anyone can sign up as a teacher</label>
       <label class="check"><input type="checkbox" id="sStud"${s.studentSignup ? ' checked' : ''}> Anyone can sign up as a student</label>
-      <div class="field" style="margin-top:10px"><label for="sPack">Credit packages (shown to teachers)</label><textarea id="sPack" rows="4">${esc(s.creditPackages)}</textarea></div>
-      <div class="field"><label for="sPay">Payment instructions</label><textarea id="sPay" rows="4">${esc(s.paymentInstructions)}</textarea></div>
+      <h3 class="settings-h">Credit packages</h3>
+      <div class="grid2"><div class="field"><label for="sPack">Packages, one per line: <code>credits = price</code></label><textarea id="sPack" rows="4">${esc(s.creditPackages)}</textarea>
+        <div class="hint">e.g. <code>10 = 100</code> means 10 credits for 100. Teachers pick one of these.</div></div>
+        <div class="field"><label for="sCur">Currency</label><input type="text" id="sCur" value="${esc(s.currency)}" maxlength="3" style="text-transform:uppercase;max-width:120px"><div class="hint">PHP, USD …</div></div></div>
+      <h3 class="settings-h">Payment methods</h3>
+      <div class="paymethod"><label class="check"><input type="checkbox" id="sBankOn"${s.bankEnabled ? ' checked' : ''}> <b>Bank transfer</b></label>
+        <div class="field"><label for="sBank">Bank details shown to teachers</label><textarea id="sBank" rows="4">${esc(s.bankDetails)}</textarea><div class="hint">Bank name, account name, account number (and branch or SWIFT code if needed).</div></div></div>
+      <div class="paymethod"><label class="check"><input type="checkbox" id="sPpOn"${s.paypalEnabled ? ' checked' : ''}> <b>PayPal</b></label>
+        <div id="sPpStatus" class="note small"></div>
+        <div class="field"><label for="sPpLink">PayPal.me link or PayPal email <span class="muted">(used when automatic checkout is not set up)</span></label><input type="text" id="sPpLink" value="${esc(s.paypalLink)}" placeholder="https://paypal.me/yourname"></div></div>
+      <div class="paymethod"><label class="check"><input type="checkbox" id="sOtherOn"${s.otherEnabled ? ' checked' : ''}> <b>GCash / other</b></label>
+        <div class="field"><label for="sPay">Instructions shown to teachers</label><textarea id="sPay" rows="3">${esc(s.paymentInstructions)}</textarea></div></div>
+      <h3 class="settings-h">Support</h3>
       <div class="field"><label for="sSupport">Support contact <span class="muted">(optional)</span></label><input type="text" id="sSupport" value="${esc(s.supportContact)}" placeholder="e.g. Email support@abnjworks.com"></div>
       <button type="button" class="btn primary" id="sSave">Save settings</button></div></div>`;
+    api('/admin/payments').then((x) => {
+      const n = $('#sPpStatus'); if (!n) return;
+      n.className = 'note small ' + (x.paypalCheckout ? 'ok' : 'info');
+      n.innerHTML = x.paypalCheckout
+        ? '✓ <b>Automatic PayPal checkout is on</b>' + (x.paypalCheckout.sandbox ? ' in <b>test mode</b> (sandbox, no real money)' : '') + '. Teachers pay by PayPal or card and their credits are added at once.'
+        : 'Automatic checkout is off: teachers send money to the link below and you approve their request. To turn on automatic checkout, add <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> on the server (see the README).';
+    }).catch(() => {});
     $('#sSave').onclick = async () => {
       await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeach').checked, studentSignup: $('#sStud').checked,
-        creditPackages: $('#sPack').value, paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value });
+        creditPackages: $('#sPack').value, currency: $('#sCur').value, bankEnabled: $('#sBankOn').checked, bankDetails: $('#sBank').value,
+        paypalEnabled: $('#sPpOn').checked, paypalLink: $('#sPpLink').value, otherEnabled: $('#sOtherOn').checked,
+        paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value });
       toast('Settings saved');
     };
   }

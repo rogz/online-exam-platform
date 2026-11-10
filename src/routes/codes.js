@@ -30,13 +30,16 @@ async function redeemCode(userId, rawCode) {
 }
 
 /** Admin adds credits and/or days of access to a teacher. */
-async function grant(teacherId, { credits = 0, days = 0 }, reason) {
-  return db.tx(async (t) => {
-    if (credits) await t.query('UPDATE users SET credits = GREATEST(0, credits + $1) WHERE id = $2', [credits, teacherId]);
-    if (days > 0) await t.query(`UPDATE users SET teacher_until = GREATEST(COALESCE(teacher_until, now()), now()) + ($1 || ' days')::interval WHERE id = $2`, [String(days), teacherId]);
-    if (days < 0) await t.query(`UPDATE users SET teacher_until = teacher_until - ($1 || ' days')::interval WHERE id = $2`, [String(-days), teacherId]);
-    await t.query('INSERT INTO credit_ledger (teacher_id, credits, days, reason) VALUES ($1, $2, $3, $4)', [teacherId, credits, days, reason]);
-  });
+async function grant(teacherId, amounts, reason) {
+  return db.tx((t) => grantWith(t, teacherId, amounts, reason));
 }
 
-module.exports = { redeemCode, grant };
+/** Same as grant(), inside a transaction you already have. */
+async function grantWith(t, teacherId, { credits = 0, days = 0 }, reason) {
+  if (credits) await t.query('UPDATE users SET credits = GREATEST(0, credits + $1) WHERE id = $2', [credits, teacherId]);
+  if (days > 0) await t.query(`UPDATE users SET teacher_until = GREATEST(COALESCE(teacher_until, now()), now()) + ($1 || ' days')::interval WHERE id = $2`, [String(days), teacherId]);
+  if (days < 0) await t.query(`UPDATE users SET teacher_until = teacher_until - ($1 || ' days')::interval WHERE id = $2`, [String(-days), teacherId]);
+  await t.query('INSERT INTO credit_ledger (teacher_id, credits, days, reason) VALUES ($1, $2, $3, $4)', [teacherId, credits, days, reason]);
+}
+
+module.exports = { redeemCode, grant, grantWith };

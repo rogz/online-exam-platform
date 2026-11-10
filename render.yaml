@@ -21,3 +21,7 @@ services:
         value: Exam Wizard
       - key: TIME_ZONE
         value: Asia/Manila
+      - key: PAYPAL_CLIENT_ID      # optional: automatic PayPal checkout (from developer.paypal.com)
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET  # optional: keep it secret
+        sync: false

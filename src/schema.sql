@@ -217,3 +217,11 @@ CREATE TABLE IF NOT EXISTS avatars (
   data       bytea NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Payments: which method the teacher used, the amount, a receipt picture, and the PayPal order (paid automatically).
+ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS method text;
+ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS amount numeric(12,2);
+ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS currency text;
+ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS proof_image_id uuid REFERENCES images(id) ON DELETE SET NULL;
+ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS paypal_order_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS credit_requests_paypal_order ON credit_requests (paypal_order_id);

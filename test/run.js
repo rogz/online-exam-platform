@@ -269,7 +269,10 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(await toastSays(t2, 'access code or 1 credit'), 'publishing without credits is refused');
   await t2.waitForURL(/#account/);
   await t2.waitForSelector('#request');
-  await t2.fill('#rqCredits', '10'); await t2.fill('#rqRef', 'GCASH-123456'); await t2.click('#request');
+  ok(await t2.isVisible('.pack:has-text("₱100.00")'), 'credit packages are shown with prices');
+  await t2.click('#request');
+  ok(await toastSays(t2, 'reference number'), 'a payment request needs a reference or receipt');
+  await t2.fill('#rqRef', 'GCASH-123456'); await t2.click('#request');
   ok(await toastSays(t2, 'Request sent'), 'credit request sent');
   await shot(t2, '10-teacher-account');
   await admin.goto(BASE + '/admin#requests');
@@ -286,6 +289,79 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(await toastSays(t2, '1 credit used'), 'publishing uses 1 credit');
   const pedro = await dbOne(`SELECT credits FROM users WHERE email = 'pedro@school.edu'`);
   ok(pedro.credits === 9, 'teacher has 9 credits left');
+
+  // ── Payment methods: bank transfer with a receipt picture ──
+  await admin.goto(BASE + '/admin#settings');
+  await admin.waitForSelector('#sBankOn');
+  await admin.check('#sBankOn'); await admin.fill('#sBank', 'Bank: BDO\nAccount name: ABNJ Works\nAccount number: 0012 3456 7890');
+  await admin.check('#sPpOn'); await admin.fill('#sPpLink', 'https://paypal.me/abnjworks');
+  await admin.click('#sSave');
+  ok(await toastSays(admin, 'Settings saved'), 'admin turns on bank transfer and PayPal');
+  await shot(admin, '13-admin-payment-settings');
+  await t2.goto(BASE + '/teacher#account'); await t2.waitForSelector('.methods');
+  await t2.click('.pack:has-text("30 credits")'); await t2.click('.method:has-text("Bank transfer")');
+  ok(await t2.isVisible('.paydetails:has-text("0012 3456 7890")') && await t2.isVisible('.due:has-text("₱250.00")'), 'teacher sees the bank details and the amount');
+  await t2.click('.method:has-text("PayPal")');
+  ok((await t2.getAttribute('.paydetails a', 'href')) === 'https://paypal.me/abnjworks/250PHP', 'PayPal.me link includes the amount');
+  await t2.click('.method:has-text("Bank transfer")');
+  const receipt = await t2.evaluate(() => { const c = document.createElement('canvas'); c.width = 200; c.height = 100; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 200, 100); g.fillText('RECEIPT', 60, 50); return c.toDataURL('image/png'); });
+  await t2.setInputFiles('#rqProof', { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from(receipt.split(',')[1], 'base64') });
+  await t2.waitForSelector('#rqProofNote:has-text("attached")');
+  await t2.click('#request');
+  ok(await toastSays(t2, 'Request sent'), 'bank transfer sent with only a receipt picture');
+  await shot(t2, '12-teacher-buy-credits');
+  await admin.goto(BASE + '/admin#requests');
+  await admin.waitForSelector('a:has-text("View receipt picture")');
+  const proofHref = await admin.getAttribute('a:has-text("View receipt picture")', 'href');
+  const proofType = await admin.evaluate(async (u) => (await fetch(u)).headers.get('content-type'), proofHref);
+  ok(proofType === 'image/png' && await admin.isVisible('td:has-text("₱250.00")') && await admin.isVisible('td:has-text("Bank transfer")'), 'admin sees method, amount and the receipt');
+  const proofOther = await t2.evaluate(async (u) => (await fetch(u)).status, proofHref);
+  ok(proofOther === 403, 'teachers cannot open the admin receipt link');
+
+  // ── PayPal checkout (against a pretend PayPal server) ──
+  const http = require('http');
+  const orders = {};
+  const pp = http.createServer((rq, rs) => {
+    let body = ''; rq.on('data', (c) => { body += c; }); rq.on('end', () => {
+      const send = (code, j) => { rs.writeHead(code, { 'Content-Type': 'application/json' }); rs.end(JSON.stringify(j)); };
+      if (rq.url === '/v1/oauth2/token') return send(200, { access_token: 'tok', expires_in: 3600 });
+      if (rq.headers.authorization !== 'Bearer tok') return send(401, {});
+      if (rq.url === '/v2/checkout/orders' && rq.method === 'POST') {
+        const id = 'ORDER' + (Object.keys(orders).length + 1); const u = JSON.parse(body).purchase_units[0];
+        orders[id] = { custom_id: u.custom_id, amount: u.amount, captured: false };
+        return send(201, { id, status: 'CREATED' });
+      }
+      const m = rq.url.match(/^\/v2\/checkout\/orders\/([^/]+)(\/capture)?$/); const o = m && orders[m[1]];
+      if (!o) return send(404, { name: 'RESOURCE_NOT_FOUND' });
+      const out = () => ({ id: m[1], status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'CAP-' + m[1], status: 'COMPLETED', custom_id: o.custom_id, amount: o.paidAmount || o.amount }] } }] });
+      if (m[2]) { if (o.captured) return send(422, { details: [{ issue: 'ORDER_ALREADY_CAPTURED' }] }); o.captured = true; return send(201, out()); }
+      return send(200, out());
+    });
+  }).listen(0);
+  Object.assign(process.env, { PAYPAL_CLIENT_ID: 'test-client', PAYPAL_CLIENT_SECRET: 'test-secret', PAYPAL_ENV: 'sandbox', PAYPAL_API_BASE: 'http://localhost:' + pp.address().port });
+  await t2.goto(BASE + '/teacher#classes'); await t2.goto(BASE + '/teacher#account'); await t2.reload(); await t2.waitForSelector('.methods');
+  await t2.click('.method:has-text("PayPal")');
+  ok(await t2.isVisible('#ppButtons') && await t2.isVisible('text=Test mode'), 'PayPal checkout buttons area is shown (test mode)');
+  const tapi = (u, b) => t2.evaluate(async ([u, b]) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json(), [u, b]);
+  const ppBefore = (await dbOne(`SELECT credits FROM users WHERE email = 'pedro@school.edu'`)).credits;
+  const bad = await tapi('/api/teacher/paypal/order', { credits: 7 });
+  ok(!bad.ok, 'PayPal order for a non-package amount is refused');
+  const ord = await tapi('/api/teacher/paypal/order', { credits: 30 });
+  ok(ord.ok && orders[ord.id] && orders[ord.id].amount.value === '250.00' && orders[ord.id].amount.currency_code === 'PHP', 'PayPal order created for ₱250.00');
+  const cap = await tapi('/api/teacher/paypal/capture', { orderId: ord.id });
+  const ppAfter = (await dbOne(`SELECT credits FROM users WHERE email = 'pedro@school.edu'`)).credits;
+  ok(cap.ok && cap.credits === 30 && ppAfter === ppBefore + 30, 'PayPal payment adds 30 credits at once');
+  const cap2 = await tapi('/api/teacher/paypal/capture', { orderId: ord.id });
+  ok(cap2.ok && (await dbOne(`SELECT credits FROM users WHERE email = 'pedro@school.edu'`)).credits === ppAfter, 'capturing the same order twice adds nothing more');
+  const other = await teacher.evaluate(async (id) => (await (await fetch('/api/teacher/paypal/capture', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ orderId: id }) })).json()).ok, ord.id);
+  ok(other === false, "another teacher cannot claim someone else's PayPal payment");
+  const ord2 = await tapi('/api/teacher/paypal/order', { credits: 10 });
+  orders[ord2.id].paidAmount = { currency_code: 'PHP', value: '1.00' };
+  const cap3 = await tapi('/api/teacher/paypal/capture', { orderId: ord2.id });
+  const held = await dbOne(`SELECT status FROM credit_requests WHERE paypal_order_id = $1`, [ord2.id]);
+  ok(!cap3.ok && held && held.status === 'pending', 'a PayPal amount that does not match is held for the admin');
+  pp.close();
+  ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_ENV', 'PAYPAL_API_BASE'].forEach((k) => delete process.env[k]);
 
   // ── Security checks ──
   const r1 = await student.evaluate(async () => (await fetch('/api/teacher/questions')).status);

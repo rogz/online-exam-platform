@@ -142,3 +142,23 @@ table.list tr:hover td { background: #fafbfc; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; }
 .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
 .stat span { color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: .3px; }
+
+/* Buying credits */
+.packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.pack { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); cursor: pointer; }
+.pack input { position: absolute; opacity: 0; pointer-events: none; }
+.pack b { font-size: 15px; }
+.pack span { font-size: 17px; font-weight: 700; color: var(--bar); }
+.pack small { color: var(--muted); font-size: 12px; }
+.pack:has(input:checked) { border-color: var(--primary); background: var(--select); box-shadow: inset 0 0 0 1px var(--primary); }
+.pack:has(input:focus-visible), .method:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.methods { display: flex; flex-wrap: wrap; gap: 8px; }
+.method { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); cursor: pointer; font-weight: 600; }
+.method:has(input:checked) { border-color: var(--primary); background: var(--select); color: var(--bar); }
+.due { margin: 4px 0 10px; font-size: 15px; }
+.paydetails { white-space: pre-wrap; margin-bottom: 12px; font-size: 14px; }
+.pp-buttons { max-width: 380px; min-height: 48px; margin-bottom: 6px; }
+.settings-h { margin: 18px 0 8px; font-size: 15px; color: var(--bar); border-bottom: 1px solid var(--line-soft); padding-bottom: 4px; }
+.paymethod { border: 1px solid var(--line-soft); border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel-alt); }
+.paymethod .field { margin: 8px 0 0; }
+.paymethod .note { margin-top: 8px; }

@@ -39,8 +39,19 @@ function createApp() {
 
   // Pages
   const pub = path.join(__dirname, 'public');
-  const page = (file) => (req, res) => res.sendFile(path.join(pub, file));
-  app.get('/', page('index.html'));
+  // The site name goes into the page title here, so the tab never shows "{site}" while the page loads.
+  const fs = require('fs');
+  const { getSettings } = require('./src/settings');
+  const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const page = (file) => async (req, res, next) => {
+    try {
+      const html = await fs.promises.readFile(path.join(pub, file), 'utf8');
+      let name = 'Exam Wizard';
+      try { name = (await getSettings()).siteName || name; } catch (e) { /* database not ready: use the default */ }
+      res.set('Cache-Control', 'no-cache').type('html').send(html.replace(/\{site\}/g, escHtml(name)));
+    } catch (e) { next(e); }
+  };
+  app.get(['/', '/index.html'], page('index.html'));
   app.get('/student', page('student.html'));
   app.get('/teacher', page('teacher.html'));
   app.get('/admin', page('admin.html'));

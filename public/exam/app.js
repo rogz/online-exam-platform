@@ -177,6 +177,12 @@
     CAMERA_OFF: 'Your camera stopped. Turn it back on to continue.',
   };
 
+  function camRuleText() {
+    const n = camAllowed();
+    if (n === 0) return '<b>your exam is voided</b> right away.';
+    return 'you get <b>' + (n === 1 ? 'one warning' : n + ' warnings') + '</b>. The ' + ['', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh'][n] + ' time, <b>your exam is voided</b>.';
+  }
+
   function cameraCheckPasses() {
     if (!state.cam.required) return true;
     const st = window.ExamCamera.status();
@@ -226,7 +232,7 @@
     if (ageMs >= graceMs) cameraOffense(st, CAM_TEXT[st] + ' for ' + Math.round(ageMs / 1000) + ' s.');
   }
 
-  /** 1st offense: warning. 2nd offense: void. The server applies the same rule. */
+  /** Each camera problem is a warning until the exam's limit (default 1); the next one voids. The server applies the same rule. */
   /** Saves one small picture as proof (if the exam allows it). Failures are ignored. */
   function sendSnapshot(event) {
     if (!state.rules.cameraSnapshots || !state.attemptId) return;
@@ -239,15 +245,23 @@
     sendSnapshot(event);
     state.cam.offenseArmed = false;
     state.cam.warnings++;
-    if (state.cam.warnings >= 2) { voidExam(event, detail); return; }
+    if (state.cam.warnings > camAllowed()) { voidExam(event, detail); return; }
     showFaceWarning(event);
     api('violation', { attemptId: state.attemptId, event, detail }, 3)
       .then((r) => { if (r.status === 'VOIDED') { state.violations.push({ event, detail }); showVoid(event); } })
       .catch((e) => { if (e.code === 'VOIDED') showVoid(event); else beacon('violation', { attemptId: state.attemptId, event, detail }); });
   }
 
+  const camAllowed = () => { const n = Number(state.rules.cameraWarnings); return Number.isFinite(n) ? n : 1; };
+
   function showFaceWarning(event) {
     state.cam.warningOpen = true;
+    const n = camAllowed(), left = n - state.cam.warnings;
+    $('faceWarnTitle').textContent = n === 1 ? '⚠ Warning — this is your only warning'
+      : left === 0 ? '⚠ Warning ' + state.cam.warnings + ' of ' + n + ' — this is your last warning'
+        : '⚠ Warning ' + state.cam.warnings + ' of ' + n;
+    $('faceWarnNext').textContent = left === 0 ? 'If this happens again, your exam will be voided.'
+      : 'You have ' + left + ' warning' + (left === 1 ? '' : 's') + ' left. After that, your exam will be voided.';
     $('faceWarnReason').textContent = REASONS[event] || CAM_TEXT[event];
     window.ExamCamera.mirrorTo($('faceWarnVideo'));
     $('faceWarnOk').disabled = true;
@@ -324,11 +338,11 @@
     $('cameraPanel').hidden = !state.cam.required;
     if (state.cam.continuous) {
       $('ruleCamera').innerHTML = '📷 <b>Your camera will be monitored throughout the exam.</b> Keep your face clearly visible. ' +
-        'If your face is hidden, the camera is covered, another person appears, or a phone is seen, you get <b>one warning</b>. ' +
-        'The second time, <b>your exam is voided</b>.' +
+        'If your face is hidden, the camera is covered, another person appears, or a phone is seen, ' + camRuleText() +
         (state.rules.cameraSnapshots ? ' When the camera flags something, a small still picture is saved for your teacher as proof. No video is recorded.' : '');
+      const n = camAllowed();
       $('agreeText').textContent = 'I have read the rules. I understand that switching tabs or windows or using a second monitor will void my exam, ' +
-        'and that my camera is monitored: I get one warning, and a second camera problem will void my exam.';
+        'and that my camera is monitored: ' + (n === 0 ? 'any camera problem will void my exam.' : 'I get ' + (n === 1 ? 'one warning' : n + ' warnings') + ', and the next camera problem will void my exam.');
     } else if (state.cam.required) {
       $('ruleCamera').innerHTML = '📷 <b>Your face must be visible to the camera before you can start.</b> Sit facing the screen in a well-lit place, with only you in view.';
       $('camHelp').textContent = 'Turn on your camera so we can check that your face is visible. The camera turns off when the exam starts.';
@@ -400,6 +414,7 @@
 
   function beginExam(r) {
     state.attemptId = r.attemptId;
+    state.cam.warnings = r.cameraWarningsUsed || 0;
     state.student = { id: r.studentId, name: r.studentName };
     state.questions = r.questions;
     state.answers = {};

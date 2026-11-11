@@ -389,7 +389,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
     const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
     const q = (await (await fetch('/api/teacher/questions')).json()).questions.find((x) => x.type === 'TF');
-    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Camera quiz', questionIds: [q.id], faceMode: 'ALWAYS', timeLimitMinutes: 10,
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Camera quiz', questionIds: [q.id], faceMode: 'ALWAYS', options: { cameraWarnings: 2 }, timeLimitMinutes: 10,
       startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
     await post('/api/teacher/exams/' + x.id, { publish: true });
     return x.id;
@@ -416,6 +416,13 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(await teacher.evaluate(async () => { const i = document.querySelector('.snap img'); await i.decode(); return i.naturalWidth === 320; }), 'snapshot shows under "Camera snapshots"');
   await shot(teacher, '15-teacher-snapshot');
   await teacher.keyboard.press('Escape');
+  const strikes = await student.evaluate(async (aid) => {
+    const out = [];
+    for (let i = 0; i < 3; i++) out.push(await (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ action: 'violation', attemptId: aid, event: 'PHONE_DETECTED', detail: 'Phone detected for 3 s.' }) })).json());
+    return out.map((r) => r.status + (r.warned ? '/warned' : ''));
+  }, snap.attemptId);
+  ok(strikes.join(',') === 'IN_PROGRESS/warned,IN_PROGRESS/warned,VOIDED', 'with 2 camera warnings set, the 3rd phone detection voids (' + strikes.join(', ') + ')');
 
   // ── Security checks ──
   const r1 = await student.evaluate(async () => (await fetch('/api/teacher/questions')).status);

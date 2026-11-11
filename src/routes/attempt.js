@@ -197,7 +197,7 @@ const actions = {
           attemptId: attempt.id,
           studentId: req.user.student_no || req.user.email,
           studentName: req.user.name,
-          resumed, reconnects: attempt.reconnects || 0, isRetake: !!attempt.is_retake,
+          resumed, reconnects: attempt.reconnects || 0, isRetake: !!attempt.is_retake, cameraWarningsUsed: Number(attempt.warnings) || 0,
           deadlineMs: deadline ? deadline.getTime() : null,
           remainingMs: deadline ? Math.max(0, deadline.getTime() - now.getTime()) : null,
           questions: core.attemptQuestions(exam, pool, attempt.id).map((qq) => core.publicQuestion(qq, exam, attempt.id)),
@@ -242,12 +242,14 @@ const actions = {
       const event = VIOLATION_LABELS[req.body.event] ? req.body.event : 'TAB_SWITCH';
       const detail = str(req.body.detail, 300);
       if (a.status !== STATUS.IN_PROGRESS) { await logEvent(t.query, a.id, event, detail); return { status: a.status, reason: a.void_reason }; }
-      if (WARNABLE_EVENTS.includes(event) && !(a.warnings > 0)) {
-        await logEvent(t.query, a.id, event, 'WARNING (1st offense): ' + detail);
-        await t.query('UPDATE attempts SET warnings = 1 WHERE id = $1', [a.id]);
-        return { status: a.status, warned: true };
+      const allowed = WARNABLE_EVENTS.includes(event) ? (await examOfAttempt(t.query, a)).options.cameraWarnings : 0;
+      const used = Number(a.warnings) || 0;
+      if (WARNABLE_EVENTS.includes(event) && used < allowed) {
+        await logEvent(t.query, a.id, event, 'WARNING ' + (used + 1) + ' of ' + allowed + ': ' + detail);
+        await t.query('UPDATE attempts SET warnings = $1 WHERE id = $2', [used + 1, a.id]);
+        return { status: a.status, warned: true, warnings: used + 1 };
       }
-      await logEvent(t.query, a.id, event, (WARNABLE_EVENTS.includes(event) ? 'VOIDED (2nd offense): ' : 'VOIDED: ') + detail);
+      await logEvent(t.query, a.id, event, (WARNABLE_EVENTS.includes(event) ? 'VOIDED (camera problem ' + (used + 1) + ', ' + allowed + ' warning' + (allowed === 1 ? '' : 's') + ' allowed): ' : 'VOIDED: ') + detail);
       await voidAttempt(t.query, a, event);
       return { status: a.status, reason: a.void_reason };
     });

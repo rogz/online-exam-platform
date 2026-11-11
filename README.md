@@ -6,7 +6,7 @@ A website where **teachers** build and publish exams and **students** take them 
 - **Teachers** sign up, then publish exams using an **access code** (free days of access) or **credits** (1 credit = publish 1 exam).
 - **You (the admin)** create access codes, approve credit purchases, and manage teachers, students and site settings.
 
-The exam screen brings over everything from the Google Sheets version: tab-switch, Alt+Tab and second-monitor detection, camera face checks (one warning, then void), time limits and windows, a countdown before opening, warnings, reconnecting after a lost connection, one-at-a-time mode with no going back, random question sets (also per topic), pictures, and allowed devices. It adds **exam passwords**.
+The exam screen brings over everything from the Google Sheets version: tab-switch, Alt+Tab and second-monitor detection, camera face and phone checks (1 warning by default, then void; the teacher sets the number), time limits and windows, a countdown before opening, warnings, reconnecting after a lost connection, one-at-a-time mode with no going back, random question sets (also per topic), pictures, and allowed devices. It adds **exam passwords**.
 
 ---
 

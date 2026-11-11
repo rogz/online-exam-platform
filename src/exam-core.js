@@ -16,7 +16,7 @@ const VIOLATION_LABELS = {
   CONNECTION_LOST: 'Was disconnected for longer than allowed',
   TOO_MANY_RECONNECTS: 'Reconnected more times than allowed',
 };
-/** Camera events give one warning first; the next one voids the exam. */
+/** Camera events give warnings first (cameraWarnings, default 1); the next one voids the exam. */
 const WARNABLE_EVENTS = ['NO_FACE', 'CAMERA_BLOCKED', 'MULTIPLE_FACES', 'PHONE_DETECTED', 'CAMERA_OFF'];
 const PING_SLACK_MS = 30000;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -28,6 +28,7 @@ const DEFAULT_OPTIONS = {
   blockCopyPaste: true,
   submitGraceSeconds: 60,
   faceGraceSeconds: 3,
+  cameraWarnings: 1,       // camera problems allowed (each shows a warning) before the next one voids the exam
   phoneDetection: true,
   cameraSnapshots: true,   // save a small still picture when the camera flags something
   openCountdown: true,
@@ -45,6 +46,7 @@ function examOptions(raw) {
     blockCopyPaste: o.blockCopyPaste !== false,
     submitGraceSeconds: num(o.submitGraceSeconds, 60, 0),
     faceGraceSeconds: num(o.faceGraceSeconds, 3, 1),
+    cameraWarnings: Math.min(10, Math.round(num(o.cameraWarnings, 1, 0))),
     phoneDetection: o.phoneDetection !== false,
     cameraSnapshots: o.cameraSnapshots !== false,
     openCountdown: o.openCountdown !== false,

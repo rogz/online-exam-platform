@@ -419,6 +419,7 @@
               <div class="field"><label for="oMaxRe">Max reconnects</label><input type="number" id="oMaxRe" min="0" value="${o.maxReconnects}"></div>
               <div class="field"><label for="oWarn">Time warnings (min)</label><input type="text" id="oWarn" value="${esc((o.timeWarnings || []).join(', '))}"><div class="hint">e.g. 10, 5, 1; empty = none</div></div>
               <div class="field"><label for="oFace">Camera grace (s)</label><input type="number" id="oFace" min="1" value="${o.faceGraceSeconds}"></div>
+              <div class="field"><label for="oCamWarn">Camera warnings</label><input type="number" id="oCamWarn" min="0" max="10" value="${o.cameraWarnings === undefined ? 1 : o.cameraWarnings}"><div class="hint">Warnings before a camera problem (e.g. a phone) voids the exam. 0 = void at once</div></div>
               <div class="field"><label for="oSubmit">Late submit grace (s)</label><input type="number" id="oSubmit" min="0" value="${o.submitGraceSeconds}"></div></div>
             <label class="check"><input type="checkbox" id="oMon"${o.requireMonitorCheck ? ' checked' : ''}> Computers must use a browser that can detect a second monitor</label>
             <label class="check"><input type="checkbox" id="oCopy"${o.blockCopyPaste ? ' checked' : ''}> Block copy, paste and right-click</label>
@@ -497,7 +498,7 @@
       displayMode: $('#eMode').value, allowBack: $('#eBack').checked, questionSeconds: $('#eQsec').value,
       allowedDevices: $('#eDev').value, faceMode: $('#eFace').value, cameraPreview: $('#ePrev').checked,
       options: { blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
-        faceGraceSeconds: $('#oFace').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
+        faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
         phoneDetection: $('#oPhone').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
     });
     async function save() {

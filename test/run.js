@@ -151,7 +151,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
 
   // ── Teacher previews the exam (nothing is saved) ──
   const quiz1 = await dbOne(`SELECT id FROM exams WHERE title = 'EEE 150 Quiz 1'`);
-  ok(await teacher.isVisible('#previewBtn'), 'exam editor has a Preview button');
+  ok(await teacher.waitForSelector('#previewBtn', { timeout: 10000 }).then(() => true, () => false), 'exam editor has a Preview button');
   const pv = await teacher.context().newPage(); pv.on('pageerror', (e) => errors.push(e.message));
   await pv.goto(BASE + '/preview?id=' + quiz1.id);
   await pv.waitForSelector('#questions .question');

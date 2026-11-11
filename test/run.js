@@ -430,6 +430,11 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const examInfo = await student.evaluate(async (id) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'getExam', examId: id }) })).json(), randExam.id);
   ok(factQ === '3' && examInfo.exam.poolSize === undefined && !JSON.stringify(examInfo).includes('random'), 'random set: student sees "' + factQ + '" questions, not the bank size (' + randExam.pool + ')');
 
+  await teacher.goto(BASE + '/teacher#results/' + randExam.id);
+  await teacher.waitForSelector('table.notstarted');
+  ok(await teacher.isVisible('table.notstarted tr:has-text("Juan Dela Cruz"):has-text("2024-0001")'), '"Not started" is a list with name and student number');
+  await shot(teacher, '16-not-started');
+
   // ── Camera snapshot as proof ──
   const camExam = await teacher.evaluate(async () => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();

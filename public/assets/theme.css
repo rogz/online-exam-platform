@@ -172,3 +172,4 @@ table.list tr:hover td { background: #fafbfc; }
 .snap { display: block; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; color: var(--text); background: var(--panel-alt); }
 .snap img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
 .snap span { display: block; padding: 6px 8px; font-size: 12px; }
+table.notstarted td { vertical-align: middle; }

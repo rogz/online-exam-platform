@@ -554,8 +554,10 @@ router.get('/exams/:id/results', async (req, res) => {
        FROM attempts a JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at`, [x.id]);
   attempts.forEach((a) => { a.avatarUrl = auth.avatarUrl(a.student_id, a.avatar_updated); });
   const notStarted = await db.many(
-    `SELECT u.id, u.name, u.email, u.student_no FROM enrollments e JOIN users u ON u.id = e.student_id
-      WHERE e.class_id = $1 AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.exam_id = $2 AND a.student_id = u.id) ORDER BY u.name`, [x.class_id, x.id]);
+    `SELECT u.id, u.name, u.email, u.student_no, (SELECT updated_at FROM avatars av WHERE av.user_id = u.id) AS avatar_updated
+       FROM enrollments e JOIN users u ON u.id = e.student_id
+      WHERE e.class_id = $1 AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.exam_id = $2 AND a.student_id = u.id) ORDER BY lower(u.name)`, [x.class_id, x.id]);
+  notStarted.forEach((s) => { s.avatarUrl = auth.avatarUrl(s.id, s.avatar_updated); });
   res.json({ ok: true, exam: { id: x.id, title: x.title, published: x.published, showScore: x.show_score }, attempts, notStarted });
 });
 

@@ -568,7 +568,9 @@
         <td class="nowrap"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
           ${a.status !== 'IN_PROGRESS' ? `<label class="check small" style="margin:6px 0 0"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`).join('')
       : '<tr><td colspan="7"><div class="empty">Nobody has started this exam yet.</div></td></tr>'}</tbody></table></div></div>
-      ${r.notStarted.length ? `<div class="panel" style="margin-top:16px"><div class="hd"><h3>Not started (${r.notStarted.length})</h3></div><div class="bd small">${r.notStarted.map((s) => esc(s.name) + (s.student_no ? ' (' + esc(s.student_no) + ')' : '')).join(', ')}</div></div>` : ''}`;
+      ${r.notStarted.length ? `<div class="panel" style="margin-top:16px"><div class="hd"><h3>Not started (${r.notStarted.length})</h3></div><div class="tablewrap"><table class="list notstarted"><thead><tr><th class="num">#</th><th>Student</th><th>Student no.</th><th>Email</th></tr></thead><tbody>
+        ${r.notStarted.map((s, i) => `<tr><td class="num muted">${i + 1}</td><td><span class="person">${App.avatarHtml(s, 32)}${esc(s.name)}</span></td><td class="nowrap">${esc(s.student_no || '—')}</td><td class="small">${esc(s.email)}</td></tr>`).join('')}
+        </tbody></table></div></div>` : ''}`;
     $$('[data-retake]').forEach((c) => c.onchange = async () => {
       await api('/teacher/exams/' + id + '/attempts/' + c.dataset.retake, { allowRetake: c.checked });
       toast(c.checked ? 'Retake allowed: the student can open the exam again.' : 'Retake turned off');

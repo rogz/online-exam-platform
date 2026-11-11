@@ -95,7 +95,8 @@ const actions = {
       exam: {
         id: exam.id, title: exam.title, instructions: exam.instructions,
         className: x.class_name + (x.class_section ? ' — ' + x.class_section : ''),
-        questionCount: sum.count, poolSize: sum.poolSize, totalPoints: sum.totalPoints, typeCounts: sum.typeCounts, topicBreakdown: sum.topicBreakdown,
+        // Students are not told the bank size or that questions are picked at random.
+        questionCount: sum.count, totalPoints: sum.totalPoints, typeCounts: sum.typeCounts,
         timeLimitMinutes: exam.limitMin,
         startMs: exam.start ? exam.start.getTime() : null, endMs: exam.end ? exam.end.getTime() : null,
         startText: fmtDate(exam.start, s.timeZone), endText: fmtDate(exam.end, s.timeZone), timeZone: s.timeZone,

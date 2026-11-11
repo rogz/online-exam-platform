@@ -414,6 +414,22 @@ fs.mkdirSync(SHOTS, { recursive: true });
   pp.close();
   ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_ENV', 'PAYPAL_API_BASE'].forEach((k) => delete process.env[k]);
 
+  // ── Random sets: students don't see the bank size ──
+  const randExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.type !== 'ESSAY').map((q) => q.id);
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Random quiz', questionIds: ids, pickCount: 3, timeLimitMinutes: 10,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return { id: x.id, pool: ids.length };
+  });
+  await student.goto(BASE + '/exam?id=' + randExam.id);
+  await student.waitForSelector('#screen-rules:not([hidden])');
+  const factQ = (await student.textContent('#factQuestions')).trim();
+  const examInfo = await student.evaluate(async (id) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'getExam', examId: id }) })).json(), randExam.id);
+  ok(factQ === '3' && examInfo.exam.poolSize === undefined && !JSON.stringify(examInfo).includes('random'), 'random set: student sees "' + factQ + '" questions, not the bank size (' + randExam.pool + ')');
+
   // ── Camera snapshot as proof ──
   const camExam = await teacher.evaluate(async () => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();

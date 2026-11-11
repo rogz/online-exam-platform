@@ -227,7 +227,16 @@
   }
 
   /** 1st offense: warning. 2nd offense: void. The server applies the same rule. */
+  /** Saves one small picture as proof (if the exam allows it). Failures are ignored. */
+  function sendSnapshot(event) {
+    if (!state.rules.cameraSnapshots || !state.attemptId) return;
+    let dataUrl = null;
+    try { dataUrl = window.ExamCamera.snapshot(CAM_TEXT[event] || event); } catch (e) { dataUrl = null; }
+    if (dataUrl) api('snapshot', { attemptId: state.attemptId, event, dataUrl }, 2).catch(() => {});
+  }
+
   function cameraOffense(event, detail) {
+    sendSnapshot(event);
     state.cam.offenseArmed = false;
     state.cam.warnings++;
     if (state.cam.warnings >= 2) { voidExam(event, detail); return; }
@@ -315,7 +324,8 @@
     if (state.cam.continuous) {
       $('ruleCamera').innerHTML = '📷 <b>Your camera will be monitored throughout the exam.</b> Keep your face clearly visible. ' +
         'If your face is hidden, the camera is covered, another person appears, or a phone is seen, you get <b>one warning</b>. ' +
-        'The second time, <b>your exam is voided</b>.';
+        'The second time, <b>your exam is voided</b>.' +
+        (state.rules.cameraSnapshots ? ' When the camera flags something, a small still picture is saved for your teacher as proof. No video is recorded.' : '');
       $('agreeText').textContent = 'I have read the rules. I understand that switching tabs or windows or using a second monitor will void my exam, ' +
         'and that my camera is monitored: I get one warning, and a second camera problem will void my exam.';
     } else if (state.cam.required) {

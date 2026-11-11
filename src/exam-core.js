@@ -29,6 +29,7 @@ const DEFAULT_OPTIONS = {
   submitGraceSeconds: 60,
   faceGraceSeconds: 3,
   phoneDetection: true,
+  cameraSnapshots: true,   // save a small still picture when the camera flags something
   openCountdown: true,
   timeWarnings: [5, 1],
   reconnectSeconds: 60,
@@ -45,6 +46,7 @@ function examOptions(raw) {
     submitGraceSeconds: num(o.submitGraceSeconds, 60, 0),
     faceGraceSeconds: num(o.faceGraceSeconds, 3, 1),
     phoneDetection: o.phoneDetection !== false,
+    cameraSnapshots: o.cameraSnapshots !== false,
     openCountdown: o.openCountdown !== false,
     timeWarnings: (Array.isArray(o.timeWarnings) ? o.timeWarnings : String(o.timeWarnings || '').split(/[,;\s]+/))
       .map(Number).filter((n) => n > 0).sort((a, b) => b - a),

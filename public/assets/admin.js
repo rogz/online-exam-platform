@@ -68,7 +68,7 @@
       const q = r.requests.find((x) => x.id === b.dataset.approve);
       dialog('Approve request', `<p style="margin-top:0">${esc(q.teacher_name)} asked for ${q.kind === 'access' ? 'free access' : q.credits + ' credits'}. Give:</p>
         <div class="grid2"><div class="field"><label for="apCred">Credits</label><input type="number" id="apCred" min="0" value="${q.kind === 'credits' ? q.credits : 0}"></div>
-        <div class="field"><label for="apDays">Days of full access</label><input type="number" id="apDays" min="0" value="${q.kind === 'access' ? 30 : 0}"></div></div>`, {
+        <div class="field"><label for="apDays">Days of full access</label><input type="number" id="apDays" min="0" value="${q.kind === 'access' ? (Number((String(q.message || '').match(/^Requested (\d+) days/) || [])[1]) || 30) : 0}"></div></div>`, {
         buttons: [{ label: 'Cancel' }, { label: 'Approve', primary: true, onClick: async (ov) => {
           await api('/admin/requests/' + q.id, { action: 'approve', credits: $('#apCred', ov).value, days: $('#apDays', ov).value }); toast('Approved'); route(); badge();
         } }],
@@ -205,6 +205,8 @@
         <div class="hint">e.g. <code>10 = 100</code> means 10 credits for 100. Teachers pick one of these.</div></div>
         <div class="field"><label for="sCur">Currency</label><input type="text" id="sCur" value="${esc(s.currency)}" maxlength="3" style="text-transform:uppercase;max-width:120px"><div class="hint">PHP, USD …</div></div></div>
       <h3 class="settings-h">Payment methods</h3>
+      <label class="check" style="margin-bottom:8px"><input type="checkbox" id="sPayOn"${s.paymentsEnabled ? ' checked' : ''}> <b>Show payment options to teachers</b> (Buy credits)</label>
+      <div class="hint" style="margin:-4px 0 10px">When off, teachers see <b>Request an access code</b> instead, and you approve their requests in Credit requests.</div>
       <div class="paymethod"><label class="check"><input type="checkbox" id="sBankOn"${s.bankEnabled ? ' checked' : ''}> <b>Bank transfer</b></label>
         <div class="field"><label for="sBank">Bank details shown to teachers</label><textarea id="sBank" rows="4">${esc(s.bankDetails)}</textarea><div class="hint">Bank name, account name, account number. <b>To hide your account number</b>, leave this blank and upload a QR code instead.</div></div>
         ${qrField('bank', s.bankQr)}</div>
@@ -235,7 +237,7 @@
     }).catch(() => {});
     $('#sSave').onclick = async () => {
       await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeach').checked, studentSignup: $('#sStud').checked,
-        creditPackages: $('#sPack').value, currency: $('#sCur').value, bankEnabled: $('#sBankOn').checked, bankDetails: $('#sBank').value,
+        paymentsEnabled: $('#sPayOn').checked, creditPackages: $('#sPack').value, currency: $('#sCur').value, bankEnabled: $('#sBankOn').checked, bankDetails: $('#sBank').value,
         paypalEnabled: $('#sPpOn').checked, paypalLink: $('#sPpLink').value, otherEnabled: $('#sOtherOn').checked,
         paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value });
       toast('Settings saved');

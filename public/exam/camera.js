@@ -1,5 +1,6 @@
 /* Camera monitoring for the exam page.
- * Runs entirely in the student's browser: nothing is recorded or uploaded.
+ * Runs in the student's browser. No video is recorded or uploaded; when the camera flags something,
+ * the exam page may save one small still picture (snapshot()) as proof for the teacher.
  * Uses Google MediaPipe to detect faces and (optionally) mobile phones.
  *
  * Status values reported to the page:
@@ -115,6 +116,19 @@ window.ExamCamera = (function () {
   }
 
   /** Shows the same camera picture in another <video> (e.g. inside the warning box). */
+  /** A small, heavily compressed JPEG of the current camera frame with a label and the time burned in. */
+  function snapshot(label) {
+    if (!video || !video.videoWidth) return null;
+    const c = document.createElement('canvas');
+    c.width = 320; c.height = Math.round(320 * video.videoHeight / video.videoWidth) || 240;
+    const g = c.getContext('2d');
+    g.drawImage(video, 0, 0, c.width, c.height);
+    g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(0, c.height - 18, c.width, 18);
+    g.fillStyle = '#fff'; g.font = '11px sans-serif';
+    g.fillText(String(label || '').slice(0, 30) + '  ' + new Date().toLocaleString(), 5, c.height - 5);
+    return c.toDataURL('image/jpeg', 0.4);
+  }
+
   function mirrorTo(otherVideo) {
     if (!stream) return;
     otherVideo.srcObject = stream;
@@ -175,7 +189,7 @@ window.ExamCamera = (function () {
   }
 
   return {
-    start, restart, stop, mirrorTo, resume,
+    start, restart, stop, mirrorTo, resume, snapshot,
     status: () => status,
     statusAge: () => Date.now() - since,
   };

@@ -7,6 +7,7 @@ const DEFAULTS = {
   teacherSignup: true,                 // anyone may register as a teacher (then needs a code or credits to publish)
   studentSignup: true,
   // Credit packages, one per line: "credits = price" (e.g. "10 = 100"). Lines like "10 credits — ₱100" also work.
+  paymentsEnabled: false,              // show "Buy credits" to teachers; when off they see "Request an access code"
   creditPackages: '10 = 100\n30 = 250\n100 = 750',
   currency: 'PHP',
   // Payment methods teachers can choose. Each one shows its own details.

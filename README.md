@@ -106,7 +106,7 @@ In your Sheet, open the **Questions** tab and click **File → Download → Comm
 - Passwords are stored hashed with bcrypt. Sign-in uses secure, HTTP-only cookies and is throttled after repeated failures.
 - Every change must come from the site's own pages (CSRF protection).
 - Answer keys never reach students' browsers. Grading, time limits, reconnect limits and locked answers are checked on the server.
-- Camera checks run in the student's browser; no video is recorded or uploaded.
+- Camera checks run in the student's browser; no video is recorded or uploaded. When the camera flags something (e.g. a phone), one small low-quality picture (about 10 KB) is saved as proof for the teacher, at most 10 per attempt. Students are told this on the rules screen, and teachers can turn it off per exam (Advanced settings).
 - Under the Philippine Data Privacy Act you are the **personal information controller** for the names, emails and results stored here. Before opening it to other schools, add a short privacy notice (Site settings is a good place to link it), keep regular database backups (Neon keeps 1 day on the free plan), and only give admin access to people who need it.
 
 ## Project layout

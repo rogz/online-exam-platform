@@ -253,6 +253,27 @@ const actions = {
     });
   },
 
+  /** A small JPEG from the camera at the moment it flagged something. Kept as proof for the teacher. */
+  async snapshot(req) {
+    const b = req.body;
+    if (!isUuid(b.attemptId)) throw fail(404, 'NO_ATTEMPT', 'This exam session was not found.');
+    const a = await db.one('SELECT * FROM attempts WHERE id = $1 AND student_id = $2', [b.attemptId, req.user.id]);
+    if (!a) throw fail(404, 'NO_ATTEMPT', 'This exam session was not found.');
+    const exam = await examOfAttempt((sql, p) => db.query(sql, p), a);
+    if (exam.faceMode !== 'ALWAYS' || !exam.options.cameraSnapshots) return { saved: false };
+    const recentlyVoided = a.status === STATUS.VOIDED && a.voided_at && Date.now() - new Date(a.voided_at).getTime() < 5 * 60000;
+    if (a.status !== STATUS.IN_PROGRESS && !recentlyVoided) return { saved: false };
+    const m = String(b.dataUrl || '').match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) throw fail(400, 'BAD_INPUT', 'Bad picture.');
+    const bytes = Buffer.from(m[1], 'base64');
+    if (bytes.length > 100 * 1024) throw fail(413, 'TOO_LARGE', 'Picture too large.');
+    const n = await db.one('SELECT count(*)::int AS n FROM attempt_snapshots WHERE attempt_id = $1', [a.id]);
+    if (n.n >= 10) return { saved: false };
+    const event = VIOLATION_LABELS[b.event] ? b.event : 'CAMERA';
+    await db.query('INSERT INTO attempt_snapshots (attempt_id, event, mime, bytes, data) VALUES ($1, $2, $3, $4, $5)', [a.id, event, 'image/jpeg', bytes.length, bytes]);
+    return { saved: true };
+  },
+
   async lockAnswer(req) {
     return db.tx(async (t) => {
       const a = await lockAttempt(t.query, req.body.attemptId, req.user.id);

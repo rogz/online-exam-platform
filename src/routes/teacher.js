@@ -27,6 +27,7 @@ function shownText(text) {
 
 /** The payment methods the admin turned on, with what teachers need to see for each. */
 function paymentMethods(s) {
+  if (!s.paymentsEnabled) return [];
   const pp = paypal.config();
   const m = [];
   if (s.bankEnabled) m.push({ id: 'bank', label: 'Bank transfer', details: shownText(s.bankDetails), qr: s.bankQr || null });
@@ -45,6 +46,7 @@ router.get('/account', async (req, res) => {
     ledger: await db.many('SELECT * FROM credit_ledger WHERE teacher_id = $1 ORDER BY at DESC LIMIT 50', [req.user.id]),
     requests: await db.many(`SELECT id, kind, credits, reference, message, status, method, amount, currency, proof_image_id, created_at, handled_at
       FROM credit_requests WHERE teacher_id = $1 ORDER BY created_at DESC LIMIT 50`, [req.user.id]),
+    paymentsEnabled: !!s.paymentsEnabled,
     packages: parsePackages(s.creditPackages),
     currency: s.currency,
     methods: paymentMethods(s),
@@ -62,7 +64,8 @@ router.post('/requests', async (req, res) => {
   const s = await getSettings();
   const kind = b.kind === 'access' ? 'access' : 'credits';
   const credits = kind === 'credits' ? int(b.credits, 0, 1, 10000) : 0;
-  if (kind === 'credits' && !credits) throw fail(400, 'BAD_INPUT', 'Choose how many credits you are buying.');
+  if (kind === 'credits' && !credits) throw fail(400, 'BAD_INPUT', 'Enter how many credits you need.');
+  const days = kind === 'access' ? int(b.days, 0, 0, 3650) : 0;
   let method = null, amount = null;
   if (kind === 'credits') {
     const methods = paymentMethods(s).map((x) => x.id);
@@ -72,14 +75,14 @@ router.post('/requests', async (req, res) => {
     amount = pack ? pack.price : null;
   }
   const reference = str(b.reference, 120) || null;
-  if (kind === 'credits' && !reference && !isUuid(b.proofImageId)) throw fail(400, 'BAD_INPUT', 'Enter the payment reference number, or attach a picture of your receipt.');
+  if (kind === 'credits' && s.paymentsEnabled && !reference && !isUuid(b.proofImageId)) throw fail(400, 'BAD_INPUT', 'Enter the payment reference number, or attach a picture of your receipt.');
   let proof = null;
   if (isUuid(b.proofImageId)) proof = (await mine('images', b.proofImageId, req.user.id, 'Receipt picture')).id;
   const pending = await db.one(`SELECT count(*)::int AS n FROM credit_requests WHERE teacher_id = $1 AND status = 'pending'`, [req.user.id]);
   if (pending.n >= 5) throw fail(429, 'TOO_MANY', 'You already have 5 requests waiting. Please wait for the administrator.');
   await db.query(`INSERT INTO credit_requests (teacher_id, kind, credits, reference, message, method, amount, currency, proof_image_id)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-  [req.user.id, kind, credits, reference, str(b.message, 1000) || null, method, amount, amount === null ? null : s.currency, proof]);
+  [req.user.id, kind, credits, reference, ((days ? 'Requested ' + days + ' days. ' : '') + str(b.message, 1000)).trim() || null, method, amount, amount === null ? null : s.currency, proof]);
   res.json({ ok: true });
 });
 
@@ -95,7 +98,7 @@ router.get('/payment-qr/:method', async (req, res) => {
 // PayPal checkout: the teacher pays in a PayPal window and the credits are added at once.
 async function paypalPackage(credits) {
   const s = await getSettings();
-  if (!s.paypalEnabled || !paypal.config()) throw fail(400, 'PAYPAL_OFF', 'PayPal checkout is not available on this site.');
+  if (!s.paymentsEnabled || !s.paypalEnabled || !paypal.config()) throw fail(400, 'PAYPAL_OFF', 'PayPal checkout is not available on this site.');
   const pack = parsePackages(s.creditPackages).find((p) => p.credits === Number(credits));
   if (!pack) throw fail(400, 'BAD_INPUT', 'Choose one of the credit packages.');
   return { s, pack };
@@ -521,7 +524,7 @@ router.post('/exams/:id', async (req, res) => {
       const a = auth.teacherAccess(u);
       let charge = false;
       if (!ex.credit_spent && !a.isAdmin && !a.timeOk) {
-        if (a.credits < 1) throw fail(402, 'NO_CREDITS', 'You need an access code or 1 credit to publish this exam. Go to My Account to redeem a code or request credits.');
+        if (a.credits < 1) throw fail(402, 'NO_CREDITS', 'You need an access code or 1 credit to publish this exam. Go to My account to redeem an access code or request one.');
         await t.query('UPDATE users SET credits = credits - 1 WHERE id = $1', [u.id]);
         await t.query('INSERT INTO credit_ledger (teacher_id, credits, reason) VALUES ($1, -1, $2)', [u.id, 'Published "' + x.title + '"']);
         charge = true;
@@ -566,7 +569,17 @@ router.get('/exams/:id/attempts/:aid', async (req, res) => {
     ok: true, attempt: a,
     responses: await db.many('SELECT * FROM responses WHERE attempt_id = $1 ORDER BY position', [a.id]),
     events: await db.many('SELECT * FROM violations WHERE attempt_id = $1 ORDER BY at', [a.id]),
+    snapshots: await db.many('SELECT id, event, bytes, at FROM attempt_snapshots WHERE attempt_id = $1 ORDER BY at', [a.id]),
   });
+});
+
+router.get('/exams/:id/attempts/:aid/snapshots/:sid', async (req, res) => {
+  const x = await mine('exams', req.params.id, req.user.id, 'Exam');
+  if (!isUuid(req.params.aid) || !isUuid(req.params.sid)) throw fail(404, 'NOT_FOUND', 'Picture not found.');
+  const img = await db.one(`SELECT s.mime, s.data FROM attempt_snapshots s JOIN attempts a ON a.id = s.attempt_id
+                             WHERE s.id = $1 AND a.id = $2 AND a.exam_id = $3`, [req.params.sid, req.params.aid, x.id]);
+  if (!img) throw fail(404, 'NOT_FOUND', 'Picture not found.');
+  res.set('Content-Type', img.mime).set('Cache-Control', 'private, max-age=86400').send(Buffer.from(img.data));
 });
 
 router.post('/exams/:id/attempts/:aid', async (req, res) => {

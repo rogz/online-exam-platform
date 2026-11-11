@@ -268,12 +268,11 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await t2.click('#pubBtn');
   ok(await toastSays(t2, 'access code or 1 credit'), 'publishing without credits is refused');
   await t2.waitForURL(/#account/);
-  await t2.waitForSelector('#request');
-  ok(await t2.isVisible('.pack:has-text("₱100.00")'), 'credit packages are shown with prices');
-  await t2.click('#request');
-  ok(await toastSays(t2, 'reference number'), 'a payment request needs a reference or receipt');
-  await t2.fill('#rqRef', 'GCASH-123456'); await t2.click('#request');
-  ok(await toastSays(t2, 'Request sent'), 'credit request sent');
+  await t2.waitForSelector('#askSend');
+  ok(await t2.isVisible('#askPanel') && await t2.isHidden('#buyPanel'), 'payments hidden: teacher sees "Request an access code"');
+  await t2.check('input[name=askKind][value=credits]'); await t2.fill('#askAmount', '10'); await t2.fill('#askMsg', 'Physics, 2 classes');
+  await t2.click('#askSend');
+  ok(await toastSays(t2, 'Request sent'), 'access request sent');
   await shot(t2, '10-teacher-account');
   await admin.goto(BASE + '/admin#requests');
   await admin.waitForSelector('[data-approve]');
@@ -293,10 +292,10 @@ fs.mkdirSync(SHOTS, { recursive: true });
   // ── Payment methods: bank transfer with a receipt picture ──
   await admin.goto(BASE + '/admin#settings');
   await admin.waitForSelector('#sBankOn');
-  await admin.check('#sBankOn'); await admin.fill('#sBank', 'Bank: BDO\nAccount name: ABNJ Works\nAccount number: 0012 3456 7890');
+  await admin.check('#sPayOn'); await admin.check('#sBankOn'); await admin.fill('#sBank', 'Bank: BDO\nAccount name: ABNJ Works\nAccount number: 0012 3456 7890');
   await admin.check('#sPpOn'); await admin.fill('#sPpLink', 'https://paypal.me/abnjworks');
   await admin.click('#sSave');
-  ok(await toastSays(admin, 'Settings saved'), 'admin turns on bank transfer and PayPal');
+  ok(await toastSays(admin, 'Settings saved'), 'admin turns on payments: bank transfer and PayPal');
   await shot(admin, '13-admin-payment-settings');
   await t2.goto(BASE + '/teacher#account'); await t2.waitForSelector('.methods');
   await t2.click('.pack:has-text("30 credits")'); await t2.click('.method:has-text("Bank transfer")');
@@ -304,6 +303,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await t2.click('.method:has-text("PayPal")');
   ok((await t2.getAttribute('.paydetails a', 'href')) === 'https://paypal.me/abnjworks/250PHP', 'PayPal.me link includes the amount');
   await t2.click('.method:has-text("Bank transfer")');
+  await t2.click('#request');
+  ok(await toastSays(t2, 'reference number'), 'a payment needs a reference number or a receipt');
   const receipt = await t2.evaluate(() => { const c = document.createElement('canvas'); c.width = 200; c.height = 100; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 200, 100); g.fillText('RECEIPT', 60, 50); return c.toDataURL('image/png'); });
   await t2.setInputFiles('#rqProof', { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from(receipt.split(',')[1], 'base64') });
   await t2.waitForSelector('#rqProofNote:has-text("attached")');
@@ -378,6 +379,39 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(!cap3.ok && held && held.status === 'pending', 'a PayPal amount that does not match is held for the admin');
   pp.close();
   ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_ENV', 'PAYPAL_API_BASE'].forEach((k) => delete process.env[k]);
+
+  // ── Camera snapshot as proof ──
+  const camExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const q = (await (await fetch('/api/teacher/questions')).json()).questions.find((x) => x.type === 'TF');
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Camera quiz', questionIds: [q.id], faceMode: 'ALWAYS', timeLimitMinutes: 10,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  });
+  const snap = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId, env: { monitorCheck: 'supported', camera: 'ok', userAgent: navigator.userAgent } });
+    const c = document.createElement('canvas'); c.width = 320; c.height = 240; const g = c.getContext('2d'); g.fillStyle = '#556'; g.fillRect(0, 0, 320, 240); g.fillStyle = '#fff'; g.fillText('Phone detected', 10, 230);
+    const dataUrl = c.toDataURL('image/jpeg', 0.4);
+    const r = await post({ action: 'snapshot', attemptId: st.attemptId, event: 'PHONE_DETECTED', dataUrl });
+    return { saved: r.saved, attemptId: st.attemptId, kb: Math.round(dataUrl.length * 3 / 4 / 1024) };
+  }, camExam);
+  ok(snap.saved === true && snap.kb <= 15, 'student\'s browser saves a small camera snapshot (' + snap.kb + ' KB)');
+  const seen = await teacher.evaluate(async ([examId, aid]) => {
+    const r = await (await fetch('/api/teacher/exams/' + examId + '/attempts/' + aid)).json();
+    const sn = r.snapshots[0];
+    const img = sn && await fetch('/api/teacher/exams/' + examId + '/attempts/' + aid + '/snapshots/' + sn.id);
+    return { n: r.snapshots.length, event: sn && sn.event, type: img && img.headers.get('content-type') };
+  }, [camExam, snap.attemptId]);
+  ok(seen.n === 1 && seen.event === 'PHONE_DETECTED' && seen.type === 'image/jpeg', 'teacher sees the snapshot in the attempt details');
+  await teacher.goto(BASE + '/teacher#results/' + camExam); await teacher.waitForSelector('[data-answers]');
+  await teacher.click('[data-answers]');
+  await teacher.waitForSelector('.snap img');
+  ok(await teacher.evaluate(async () => { const i = document.querySelector('.snap img'); await i.decode(); return i.naturalWidth === 320; }), 'snapshot shows under "Camera snapshots"');
+  await shot(teacher, '15-teacher-snapshot');
+  await teacher.keyboard.press('Escape');
 
   // ── Security checks ──
   const r1 = await student.evaluate(async () => (await fetch('/api/teacher/questions')).status);
@@ -470,10 +504,11 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await admin.waitForSelector('tr:has-text("juan@student.edu") [data-delete]');
   await admin.click('tr:has-text("juan@student.edu") [data-delete]');
   await admin.waitForSelector('.dialog #delEmail');
-  ok((await admin.textContent('.dialog .note.bad')).includes('2 exam attempts'), 'student delete lists their attempts');
+  ok((await admin.textContent('.dialog .note.bad')).includes('3 exam attempts'), 'student delete lists their attempts');
   await admin.fill('#delEmail', 'JUAN@student.edu');
   await admin.click('.dialog .btn.danger');
   ok(await toastSays(admin, 'was deleted'), 'student deleted');
+  for (let i = 0; i < 50 && (await dbOne(`SELECT count(*)::int AS n FROM users WHERE email = 'juan@student.edu'`)).n; i++) await sleep(100);
   ok((await dbOne(`SELECT count(*)::int AS n FROM attempts`)).n === 0, "student's attempts removed");
   const selfDel = await admin.evaluate(async () => {
     const me = (await (await fetch('/api/auth/me')).json()).user;

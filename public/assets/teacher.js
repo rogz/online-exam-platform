@@ -423,6 +423,7 @@
             <label class="check"><input type="checkbox" id="oMon"${o.requireMonitorCheck ? ' checked' : ''}> Computers must use a browser that can detect a second monitor</label>
             <label class="check"><input type="checkbox" id="oCopy"${o.blockCopyPaste ? ' checked' : ''}> Block copy, paste and right-click</label>
             <label class="check"><input type="checkbox" id="oPhone"${o.phoneDetection ? ' checked' : ''}> Camera exams: watch for a phone</label>
+            <label class="check"><input type="checkbox" id="oSnap"${o.cameraSnapshots !== false ? ' checked' : ''}> Camera exams: save a small snapshot as proof when the camera flags something</label>
             <label class="check"><input type="checkbox" id="oCount"${o.openCountdown ? ' checked' : ''}> Show a countdown before the exam opens</label></details></fieldset>
         <div class="row"><button type="button" class="btn" id="saveBtn">Save</button>
           ${x && x.published ? '<button type="button" class="btn" id="unpubBtn">Unpublish</button>' : '<button type="button" class="btn primary" id="pubBtn">Save &amp; publish</button>'}</div>
@@ -497,7 +498,7 @@
       allowedDevices: $('#eDev').value, faceMode: $('#eFace').value, cameraPreview: $('#ePrev').checked,
       options: { blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
         faceGraceSeconds: $('#oFace').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
-        phoneDetection: $('#oPhone').checked, openCountdown: $('#oCount').checked },
+        phoneDetection: $('#oPhone').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
     });
     async function save() {
       const r = await api(x ? '/teacher/exams/' + x.id : '/teacher/exams', body());
@@ -574,7 +575,11 @@
         <div class="row" style="margin-top:8px"><label for="pts${i}" style="margin:0">Points</label><input type="number" id="pts${i}" data-pts="${x.question_id}" min="0" max="${x.max_points}" step="0.5"
           value="${x.points_earned === null ? '' : x.points_earned}" style="width:90px"${x.type === 'ESSAY' && x.points_earned === null ? ' placeholder="grade"' : ''}> <span class="muted">/ ${x.max_points}</span></div></div>`).join('')
         : '<div class="empty">No answers recorded (the exam was not submitted).</div>'}
-      <h3 style="margin-top:14px">Events</h3>${r.events.length ? '<table class="list"><tbody>' + r.events.map((e) => `<tr><td class="nowrap small">${esc(App.fmtDate(e.at))}</td><td><b>${esc(e.event)}</b><div class="small muted">${esc(e.detail)}</div></td></tr>`).join('') + '</tbody></table>' : '<p class="muted small">No events.</p>'}`, {
+      <h3 style="margin-top:14px">Events</h3>${r.events.length ? '<table class="list"><tbody>' + r.events.map((e) => `<tr><td class="nowrap small">${esc(App.fmtDate(e.at))}</td><td><b>${esc(e.event)}</b><div class="small muted">${esc(e.detail)}</div></td></tr>`).join('') + '</tbody></table>' : '<p class="muted small">No events.</p>'}
+      ${(r.snapshots || []).length ? '<h3 style="margin-top:14px">Camera snapshots</h3><div class="snaps">' + r.snapshots.map((sn) => {
+        const u = '/api/teacher/exams/' + examId + '/attempts/' + attemptId + '/snapshots/' + sn.id;
+        return `<a href="${u}" target="_blank" rel="noopener" class="snap"><img src="${u}" alt="Camera snapshot" loading="lazy"><span><b>${esc(sn.event)}</b><br>${esc(App.fmtDate(sn.at))}</span></a>`;
+      }).join('') + '</div>' : ''}`, {
       wide: true,
       buttons: r.responses.length ? [{ label: 'Close' }, { label: 'Save points', primary: true, onClick: async (ov) => {
         const grade = {};
@@ -617,7 +622,15 @@
         <div class="panel"><div class="hd"><h3>Redeem an access code</h3></div><div class="bd">
           <div class="field"><label for="code">Access code</label><input type="text" id="code" autocomplete="off" placeholder="e.g. TABC-DEFG" style="text-transform:uppercase"></div>
           <button type="button" class="btn primary" id="redeem">Redeem</button><div class="hint">Access codes are given by the site administrator. They add days of full access or credits.</div></div></div>
-        <div class="panel" id="buyPanel"><div class="hd"><h3>Buy credits</h3></div><div class="bd">
+        ${!r.paymentsEnabled ? `<div class="panel" id="askPanel"><div class="hd"><h3>Request an access code</h3></div><div class="bd">
+          <div class="field"><label>I need</label><div class="methods">
+            <label class="method"><input type="radio" name="askKind" value="access" checked>Days of full access</label>
+            <label class="method"><input type="radio" name="askKind" value="credits">Credits <span class="muted small">(1 credit = 1 exam)</span></label></div></div>
+          <div class="field"><label for="askAmount" id="askAmountLabel">How many days?</label><input type="number" id="askAmount" min="1" value="30" style="max-width:140px"></div>
+          <div class="field"><label for="askMsg">Message to the administrator</label><textarea id="askMsg" rows="3" placeholder="e.g. school, subject, number of classes and students"></textarea></div>
+          <button type="button" class="btn primary" id="askSend">Send request</button>
+          <div class="hint">When the administrator approves it, the access is added to your account automatically. You don't need to type a code.${r.supportContact ? ' Questions? ' + esc(r.supportContact) : ''}</div></div></div></div>` : ''}
+        <div class="panel" id="buyPanel"${r.paymentsEnabled ? '' : ' hidden'}><div class="hd"><h3>Buy credits</h3></div><div class="bd">
           <div class="field"><label>1. Choose a package</label>${r.packages.length ? `<div class="packs">${r.packages.map((p, i) => `<label class="pack"><input type="radio" name="pack" value="${p.credits}"${i === 0 ? ' checked' : ''}>
             <b>${p.credits} credit${p.credits === 1 ? '' : 's'}</b><span>${esc(money(p.price, r.currency))}</span><small>${esc(money(p.price / p.credits, r.currency))} per exam</small></label>`).join('')}</div>`
             : '<input type="number" id="rqCredits" min="1" value="10">'}<div class="hint">1 credit = publish 1 exam. Editing and re-publishing it later is free.</div></div>
@@ -698,7 +711,21 @@
       };
     };
     $$('input[name=pack], input[name=method]').forEach((i) => { i.onchange = paintPay; });
-    paintPay();
+    if (r.paymentsEnabled) paintPay();
+    if ($('#askSend')) {
+      $$('input[name=askKind]').forEach((i) => { i.onchange = () => {
+        const days = $('input[name=askKind]:checked').value === 'access';
+        $('#askAmountLabel').textContent = days ? 'How many days?' : 'How many credits?';
+        $('#askAmount').value = days ? 30 : 10;
+      }; });
+      $('#askSend').onclick = async () => {
+        const kind = $('input[name=askKind]:checked').value, n = $('#askAmount').value;
+        try {
+          await api('/teacher/requests', kind === 'access' ? { kind, days: n, message: $('#askMsg').value } : { kind, credits: n, message: $('#askMsg').value });
+          toast('Request sent to the administrator'); viewAccount();
+        } catch (e) { toast(e.message, true); }
+      };
+    }
     $('#askAccess').onclick = (ev) => {
       ev.preventDefault();
       dialog('Request free access', `<p style="margin-top:0">Tell the administrator about your school and classes. If approved, you get days of full access.</p>

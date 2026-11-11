@@ -225,3 +225,15 @@ ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS currency text;
 ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS proof_image_id uuid REFERENCES images(id) ON DELETE SET NULL;
 ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS paypal_order_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS credit_requests_paypal_order ON credit_requests (paypal_order_id);
+
+-- Small still pictures taken when the camera flags something (proof for the teacher). No video is kept.
+CREATE TABLE IF NOT EXISTS attempt_snapshots (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  attempt_id uuid NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+  event      text NOT NULL,
+  mime       text NOT NULL,
+  bytes      integer NOT NULL,
+  data       bytea NOT NULL,
+  at         timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS attempt_snapshots_attempt ON attempt_snapshots (attempt_id, at);

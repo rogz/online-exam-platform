@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Preview — {site}</title>
+  <link rel="stylesheet" href="/exam/styles.css">
+  <style>
+    .pv-banner { display: flex; gap: 10px; align-items: flex-start; }
+    .pv-banner b { white-space: nowrap; }
+    .pv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+    .pv-chips li { border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 14px; }
+    .pv-modes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+    .pv-modes .btn.on { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); font-weight: 700; }
+    .pv-id { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+    .pv-edit { font-size: 13px; margin-left: 8px; }
+    .pv-problem { margin: 0 0 12px; }
+    .pv-result { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 15px; }
+    .pv-result.ok { background: var(--ok-bg); color: var(--ok); }
+    .pv-result.bad { background: var(--danger-bg); color: var(--danger); }
+    .pv-result.pending { background: var(--warn-bg); color: var(--warn-text); }
+    .pv-result span { display: block; color: var(--text); margin-top: 4px; }
+    .question.pv-right { border-color: var(--ok); }
+    .question.pv-wrong { border-color: var(--danger); }
+    .pv-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+    .pv-score { font-size: 18px; font-weight: 700; }
+    .topbar a.btn { text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Preview</div>
+    <div class="topbar-right"><a class="btn" id="backBtn" href="/teacher#exams">Close preview</a></div>
+  </header>
+  <main>
+    <section id="pvLoading" class="card center"><div class="spinner" aria-hidden="true"></div><p>Loading preview…</p></section>
+    <section id="pvError" class="card" hidden><h1>Can't open the preview</h1><p id="pvErrorText"></p><a class="btn" href="/teacher#exams">← Back to Exams</a></section>
+    <div id="pvMain" hidden>
+      <div class="notice pv-banner" role="note"><b>👁 Preview</b><span>Only you can see this. Nothing is saved, and tab switching, the camera and the time limit are not enforced. Try answering, then click <b>Check answers</b>.</span></div>
+      <section class="card exam-head">
+        <h1 id="pvTitle"></h1>
+        <p class="muted" id="pvClass"></p>
+        <p class="instructions" id="pvInstructions"></p>
+        <ul class="pv-chips" id="pvChips"></ul>
+        <div class="pv-modes" role="group" aria-label="What to show">
+          <button type="button" class="btn on" id="modeAll">All questions</button>
+          <button type="button" class="btn" id="modeStudent">As a student sees it</button>
+          <button type="button" class="btn" id="newSet" hidden>↻ Another student's set</button>
+        </div>
+        <p class="muted" id="modeHint" style="margin:8px 0 0;font-size:14px"></p>
+      </section>
+      <div id="pvSummary" class="notice" hidden></div>
+      <ol id="questions" class="questions"></ol>
+      <section class="card pv-actions">
+        <span class="pv-score" id="pvScore"></span>
+        <span><button type="button" class="btn" id="clearBtn">Clear answers</button> <button type="button" class="btn primary" id="checkBtn">Check answers</button></span>
+      </section>
+    </div>
+  </main>
+  <script src="/exam/preview.js"></script>
+</body>
+</html>

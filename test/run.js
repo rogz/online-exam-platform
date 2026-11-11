@@ -149,6 +149,36 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.click('#pubBtn');
   ok(await toastSays(teacher, 'Published'), 'exam published');
 
+  // ── Teacher previews the exam (nothing is saved) ──
+  const quiz1 = await dbOne(`SELECT id FROM exams WHERE title = 'EEE 150 Quiz 1'`);
+  ok(await teacher.isVisible('#previewBtn'), 'exam editor has a Preview button');
+  const pv = await teacher.context().newPage(); pv.on('pageerror', (e) => errors.push(e.message));
+  await pv.goto(BASE + '/preview?id=' + quiz1.id);
+  await pv.waitForSelector('#questions .question');
+  ok((await pv.$$('#questions .question')).length === 6, 'preview shows all 6 questions');
+  ok(await pv.evaluate(async () => { const i = document.querySelector('.q-image img'); if (!i) return false; await i.decode(); return i.naturalWidth > 0; }), 'preview shows the question picture');
+  await pv.click('.question:has-text("unit of electrical resistance") .choice:has-text("Ohm")');
+  await pv.click('.question:has-text("measured in amperes") .choice:has-text("False")');
+  await pv.fill('.question:has-text("V = I") input.blank', 'r');
+  await pv.click('#checkBtn');
+  await pv.waitForSelector('.pv-result');
+  ok(await pv.isVisible('.question:has-text("unit of electrical resistance") .pv-result.ok'), 'preview: right answer is marked correct');
+  ok(await pv.isVisible('.question:has-text("measured in amperes") .pv-result.bad:has-text("Answer key: True")'), 'preview: wrong answer shows the answer key');
+  ok(await pv.isVisible('.question:has-text("V = I") .pv-result.ok'), 'preview: fill-in-the-blank accepts "r" for R');
+  const pvScore = await pv.textContent('#pvScore');
+  ok(pvScore.startsWith('Score: 2 / 10') && pvScore.includes('1 essay'), 'preview score: ' + pvScore);
+  await shot(pv, '06-teacher-preview');
+  await pv.click('#modeStudent'); await pv.waitForSelector('#newSet:not([hidden])');
+  ok((await pv.$$('#questions .question')).length === 6, 'preview "as a student sees it" mode works');
+  const editHref = await pv.getAttribute('.question .pv-edit', 'href');
+  await pv.goto(BASE + editHref);
+  await pv.waitForSelector('.dialog #qeText');
+  ok((await pv.inputValue('.dialog #qeText')).length > 0, 'preview "Edit" link opens the question editor');
+  await pv.close();
+  ok((await dbOne('SELECT count(*)::int AS n FROM attempts WHERE exam_id = $1', [quiz1.id])).n === 0, 'preview saves no attempt');
+  const anonPreview = (await fetch(BASE + '/api/teacher/exams/' + quiz1.id + '/preview')).status;
+  ok(anonPreview === 401 || anonPreview === 403, 'preview needs the teacher to be signed in');
+
   // ── Student signs up, joins, takes the exam ──
   const student = await newUser();
   await student.goto(BASE + '/#signup');

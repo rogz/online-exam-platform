@@ -26,12 +26,19 @@
 
   // ───────── router ─────────
   async function route() {
-    const [name, id] = (location.hash.replace(/^#/, '') || 'classes').split('/');
+    const [name, id, extra] = (location.hash.replace(/^#/, '') || 'classes').split('/');
     $$('.sidenav a[data-view]').forEach((a) => a.classList.toggle('on', a.dataset.view === name || (name === 'exam' || name === 'results') && a.dataset.view === 'exams'));
     view.innerHTML = '<div class="empty">Loading…</div>';
     try {
       if (name === 'classes') await viewClasses();
-      else if (name === 'questions') await viewQuestions();
+      else if (name === 'questions') {
+        await viewQuestions();
+        if (id === 'edit' && extra) {
+          const q = (await getQuestions()).find((qq) => qq.id === extra);
+          history.replaceState(null, '', '#questions');
+          if (q) questionDialog(q); else toast('That question was not found.', true);
+        }
+      }
       else if (name === 'exams') await viewExams();
       else if (name === 'exam') await viewExamEditor(id);
       else if (name === 'results') await viewResults(id);
@@ -363,7 +370,7 @@
         <td>${esc(x.class_name)}${x.class_section ? '<div class="small muted">' + esc(x.class_section) + '</div>' : ''}</td>
         <td class="nowrap small">${esc(App.fmtDate(x.start_at)) || 'Now'}</td><td class="nowrap small">${esc(App.fmtDate(x.end_at)) || '—'}</td>
         <td>${examStatus(x)}</td><td class="num">${x.submitted_count}${x.attempt_count > x.submitted_count ? ' <span class="muted small">(+' + (x.attempt_count - x.submitted_count) + ')</span>' : ''}</td>
-        <td class="nowrap"><a class="btn small" href="#exam/${x.id}">Edit</a> <a class="btn small" href="#results/${x.id}">Results</a></td></tr>`).join('')
+        <td class="nowrap"><a class="btn small" href="#exam/${x.id}">Edit</a> <a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a> <a class="btn small" href="#results/${x.id}">Results</a></td></tr>`).join('')
       : '<tr><td colspan="7"><div class="empty">No exams yet. Add questions to your bank, then create an exam.</div></td></tr>'}</tbody></table></div></div>`;
   }
 
@@ -385,7 +392,7 @@
     const opt = (val, cur, label) => `<option value="${val}"${val === cur ? ' selected' : ''}>${label}</option>`;
 
     view.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><h1 style="margin:0">${x ? 'Edit exam' : 'New exam'}</h1>
-      <div class="row">${x ? `<a class="btn" href="#results/${x.id}">Results</a><button type="button" class="btn" id="dupBtn">Duplicate</button><button type="button" class="btn danger" id="delBtn">Delete</button>` : ''}</div></div>
+      <div class="row">${x ? `<button type="button" class="btn primary" id="previewBtn" title="Save, then try the exam as a student would">👁 Preview</button><a class="btn" href="#results/${x.id}">Results</a><button type="button" class="btn" id="dupBtn">Duplicate</button><button type="button" class="btn danger" id="delBtn">Delete</button>` : ''}</div></div>
       ${x ? `<div class="note ${x.published ? 'ok' : 'info'}" style="margin-bottom:12px">${x.published ? 'Published: students in the class can see this exam.' : 'Draft: students cannot see this exam until you publish it.'}</div>` : ''}
       <div class="editor"><div class="panel"><div class="bd">
         <div class="field"><label for="eClass">Class</label><select id="eClass">${classes.filter((c) => !c.archived || (x && x.class_id === c.id)).map((c) => opt(c.id, v('class_id', ''), esc(c.name + (c.section ? ' — ' + c.section : '')))).join('')}</select></div>
@@ -505,6 +512,13 @@
       const r = await api(x ? '/teacher/exams/' + x.id : '/teacher/exams', body());
       return r.exam;
     }
+    if ($('#previewBtn')) $('#previewBtn').onclick = async () => {
+      const w = window.open('about:blank', '_blank');
+      try {
+        await save();
+        if (w) w.location.href = '/preview?id=' + encodeURIComponent(x.id); else location.href = '/preview?id=' + encodeURIComponent(x.id);
+      } catch (err) { if (w) w.close(); toast(err.message, true); }
+    };
     $('#saveBtn').onclick = async () => {
       try { const e = await save(); toast('Saved'); if (!x) location.hash = '#exam/' + e.id; else route(); } catch (err) { toast(err.message, true); }
     };

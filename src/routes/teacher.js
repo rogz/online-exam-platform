@@ -559,6 +559,52 @@ router.get('/exams/:id/results', async (req, res) => {
   res.json({ ok: true, exam: { id: x.id, title: x.title, published: x.published, showScore: x.show_score }, attempts, notStarted });
 });
 
+// ───────── Preview: the teacher tries the exam as a student would. Nothing is saved. ─────────
+
+async function previewPool(req) {
+  const x = await mine('exams', req.params.id, req.user.id, 'Exam');
+  const exam = core.examConfig(x);
+  const rows = exam.questionIds.length ? await db.many('SELECT * FROM questions WHERE teacher_id = $1 AND id = ANY($2::uuid[])', [req.user.id, exam.questionIds]) : [];
+  const byId = new Map(rows.map((r) => [r.id, core.questionFromRow(r)]));
+  return { x, exam, pool: exam.questionIds.map((id) => byId.get(id)).filter(Boolean) };
+}
+
+router.get('/exams/:id/preview', async (req, res) => {
+  const { x, exam, pool } = await previewPool(req);
+  const asStudent = req.query.mode === 'student';
+  const seed = 'preview:' + str(req.query.seed, 40);
+  const qs = asStudent ? core.attemptQuestions(exam, pool, seed) : pool;
+  const cls = await db.one('SELECT name, section FROM classes WHERE id = $1', [x.class_id]);
+  res.json({
+    ok: true,
+    exam: {
+      id: x.id, title: exam.title, instructions: exam.instructions, published: x.published,
+      className: cls ? cls.name + (cls.section ? ' — ' + cls.section : '') : '',
+      timeLimitMinutes: exam.limitMin, displayMode: exam.displayMode, allowBack: exam.allowBack, faceMode: exam.faceMode,
+      hasPassword: !!exam.password, poolSize: pool.length, summary: core.setSummary(exam, pool),
+    },
+    questions: qs.map((q) => {
+      const p = core.publicQuestion(q, asStudent ? exam : Object.assign({}, exam, { shuffleChoices: false }), seed);
+      if (q.imageId) p.image = { src: '/api/teacher/images/' + q.imageId };
+      return Object.assign(p, { code: q.code, topic: q.topic, problems: core.validateQuestion(q) });
+    }),
+  });
+});
+
+router.post('/exams/:id/preview/check', async (req, res) => {
+  const { pool } = await previewPool(req);
+  const answers = (req.body && typeof req.body.answers === 'object' && req.body.answers) || {};
+  const ids = Array.isArray(req.body && req.body.questionIds) ? req.body.questionIds.map(String) : pool.map((q) => q.id);
+  const results = {};
+  let score = 0, max = 0, pending = 0;
+  pool.filter((q) => ids.includes(q.id)).forEach((q) => {
+    const g = core.gradeQuestion(q, answers[q.id]);
+    results[q.id] = { correct: g.correct, pending: g.pending, points: g.points, max: q.points, yourAnswer: g.studentText, correctAnswer: g.correctText };
+    score += g.points; max += q.points; if (g.pending) pending++;
+  });
+  res.json({ ok: true, results, score, max, pending });
+});
+
 router.get('/exams/:id/attempts/:aid', async (req, res) => {
   const x = await mine('exams', req.params.id, req.user.id, 'Exam');
   if (!isUuid(req.params.aid)) throw fail(404, 'NOT_FOUND', 'Attempt not found.');

@@ -173,7 +173,7 @@
     NO_FACE: 'Make sure your whole face is visible and well lit, facing the screen.',
     CAMERA_BLOCKED: 'Uncover the camera and make sure the room is bright enough.',
     MULTIPLE_FACES: 'Only you may be in front of the camera.',
-    PHONE_DETECTED: 'Put your phone away, out of the camera\'s view.',
+    PHONE_DETECTED: 'Put your phone away, out of the camera\'s view. Using a calculator? Keep it flat on your desk, below the camera.',
     CAMERA_OFF: 'Your camera stopped. Turn it back on to continue.',
   };
 
@@ -319,6 +319,7 @@
     state.cam.required = exam.faceMode === 'START' || exam.faceMode === 'ALWAYS';
     state.cam.continuous = exam.faceMode === 'ALWAYS';
     $('ruleCamera').hidden = !state.cam.required;
+    $('ruleCalc').hidden = !(state.cam.required && state.rules.phoneDetection);
     $('checkCamera').hidden = !state.cam.required;
     $('cameraPanel').hidden = !state.cam.required;
     if (state.cam.continuous) {
@@ -911,7 +912,7 @@
     NO_FACE: 'Your face was not visible to the camera.',
     CAMERA_BLOCKED: 'Your camera was covered or blocked.',
     MULTIPLE_FACES: 'More than one person was in front of the camera.',
-    PHONE_DETECTED: 'A mobile phone was seen on camera.',
+    PHONE_DETECTED: 'A mobile phone was seen on camera. If it was your calculator, keep it flat on your desk, below the camera.',
     CAMERA_OFF: 'Your camera was turned off or disconnected.',
     CONNECTION_LOST: 'Your internet connection was lost for longer than allowed.',
   };

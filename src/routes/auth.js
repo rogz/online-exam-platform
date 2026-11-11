@@ -4,13 +4,13 @@ const db = require('../db');
 const auth = require('../auth');
 const { getSettings } = require('../settings');
 const { fail, str, emailOk, isUuid } = require('../util');
-const { redeemCode } = require('./codes');
+const { redeemCode, grant } = require('./codes');
 
 const router = express.Router();
 
 router.get('/me', async (req, res) => {
   const s = await getSettings();
-  res.json({ ok: true, user: auth.publicUser(req.user), site: { name: s.siteName, teacherSignup: s.teacherSignup, studentSignup: s.studentSignup } });
+  res.json({ ok: true, user: auth.publicUser(req.user), site: { name: s.siteName, teacherSignup: s.teacherSignup, studentSignup: s.studentSignup, signupCredits: Number(s.signupCredits) || 0 } });
 });
 
 router.post('/register', async (req, res) => {
@@ -30,8 +30,14 @@ router.post('/register', async (req, res) => {
     `INSERT INTO users (email, password_hash, name, role, student_no, school) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
     [email, hash, name, role, role === 'student' ? str(b.studentNo, 60) || null : null, str(b.school, 160) || null]);
   let codeMessage = null;
+  const welcome = role === 'teacher' ? Math.max(0, Math.round(Number(s.signupCredits) || 0)) : 0;
+  if (welcome) {
+    await grant(user.id, { credits: welcome }, 'Welcome credits for new teachers');
+    codeMessage = 'Welcome! You have ' + welcome + ' free credit' + (welcome === 1 ? '' : 's') + ': publish up to ' + welcome + ' exam' + (welcome === 1 ? '' : 's') + ' for free.';
+  }
   if (role === 'teacher' && str(b.accessCode)) {
-    try { codeMessage = await redeemCode(user.id, b.accessCode); } catch (e) { codeMessage = 'Your account was created, but the access code was not applied: ' + e.message; }
+    const welcomeText = codeMessage ? ' ' + codeMessage : '';
+    try { codeMessage = (await redeemCode(user.id, b.accessCode)) + welcomeText; } catch (e) { codeMessage = 'Your account was created, but the access code was not applied: ' + e.message + welcomeText; }
   }
   await auth.startSession(res, user.id, req.secure);
   const fresh = await auth.userById(user.id);

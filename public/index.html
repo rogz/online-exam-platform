@@ -115,7 +115,7 @@
           <div class="field" id="studentNoWrap"><label for="upStudentNo">Student number <span class="muted">(optional)</span></label><input type="text" id="upStudentNo" autocomplete="off"></div>
           <div class="field"><label for="upSchool">School name <span class="muted">(optional)</span></label><input type="text" id="upSchool" autocomplete="organization" placeholder="e.g. MSU-IIT"></div>
           <div class="field" id="codeWrap" hidden><label for="upCode">Access code <span class="muted">(optional)</span></label><input type="text" id="upCode" autocomplete="off">
-            <div class="hint">Teachers need an access code or credits to publish exams. You can also add one later under My account.</div></div>
+            <div class="hint" id="codeHint">Teachers need an access code or credits to publish exams. You can also add one later under My account.</div></div>
           <p class="hint">By creating an account you agree that your name, email and exam results are stored on this site so your teachers can see them.</p>
           <div id="upMsg" class="note bad" hidden></div>
           <div class="row" style="margin-top:12px"><button class="btn primary big" type="submit">Create account</button></div>
@@ -145,7 +145,7 @@
           <li><div><b>Join your class</b><span>Type the 6-character class code your teacher gives you.</span></div></li>
           <li><div><b>Take your exams</b><span>They appear on your dashboard automatically, and open on time.</span></div></li>
         </ol></div>
-      <div class="card"><h3>For teachers</h3><p class="who">Start with an access code or credits</p>
+      <div class="card"><h3>For teachers</h3><p class="who" id="teacherStart">Start with an access code or credits</p>
         <ol class="steps">
           <li><div><b>Create a class</b><span>Each class gets its own join code to share with students.</span></div></li>
           <li><div><b>Build your question bank</b><span>Multiple choice, true/false, fill in the blank and essays, with pictures and topics. Import from a spreadsheet.</span></div></li>
@@ -221,6 +221,11 @@
     setTimeout(() => $('#upName').focus({ preventScroll: true }), 400);
   }));
   if (location.hash === '#signup') tab(true);
+  if (me.site.signupCredits > 0) {
+    const n = me.site.signupCredits, cr = n + ' free credit' + (n === 1 ? '' : 's');
+    $('#teacherStart').textContent = 'Start free: ' + cr + ' when you sign up';
+    $('#codeHint').textContent = 'New teachers get ' + cr + ' (publish ' + n + ' exam' + (n === 1 ? '' : 's') + '). Have an access code? Enter it for more. You can also add one later under My account.';
+  }
   if (!me.site.teacherSignup) document.querySelectorAll('input[value=teacher], [data-signup=teacher]').forEach((el) => { (el.closest('label') || el).hidden = true; });
 
   $('#signIn').onsubmit = async (e) => {

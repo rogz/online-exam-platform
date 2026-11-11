@@ -57,6 +57,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.click('#signUp button[type=submit]');
   await teacher.waitForURL(/\/teacher/);
   ok(await toastSays(teacher, '30 days'), 'teacher gets 30 days from the code');
+  const maria = await dbOne(`SELECT credits FROM users WHERE email = 'maria@school.edu'`);
+  ok(maria.credits === 5 && await toastSays(teacher, '5 free credits'), 'new teacher also gets 5 free credits');
   ok(await teacher.isHidden('#accessBanner'), 'no "need access" banner with access');
 
   // class
@@ -252,6 +254,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(true, 'dashboard shows Voided');
 
   // ── Credits: a teacher without access must request credits ──
+  // (no free credits for this teacher, to test buying/requesting them)
+  ok((await admin.evaluate(async () => (await (await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ signupCredits: 0 }) })).json()).settings.signupCredits)) === 0, 'admin sets free credits for new teachers to 0');
   const t2 = await newUser();
   await t2.goto(BASE + '/#signup');
   await t2.check('input[value=teacher]');

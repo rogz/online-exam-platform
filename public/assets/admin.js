@@ -199,6 +199,7 @@
       <div class="grid2"><div class="field"><label for="sName">Site name</label><input type="text" id="sName" value="${esc(s.siteName)}"></div>
         <div class="field"><label for="sTz">Time zone</label><input type="text" id="sTz" value="${esc(s.timeZone)}"><div class="hint">e.g. Asia/Manila</div></div></div>
       <label class="check"><input type="checkbox" id="sTeach"${s.teacherSignup ? ' checked' : ''}> Anyone can sign up as a teacher</label>
+      <div class="field" style="margin:6px 0 4px"><label for="sWelcome">Free credits for each new teacher</label><input type="number" id="sWelcome" min="0" max="1000" value="${esc(s.signupCredits)}" style="max-width:120px"><div class="hint">Given once, when a teacher signs up. 0 = none.</div></div>
       <label class="check"><input type="checkbox" id="sStud"${s.studentSignup ? ' checked' : ''}> Anyone can sign up as a student</label>
       <h3 class="settings-h">Credit packages</h3>
       <div class="grid2"><div class="field"><label for="sPack">Packages, one per line: <code>credits = price</code></label><textarea id="sPack" rows="4">${esc(s.creditPackages)}</textarea>
@@ -236,7 +237,7 @@
         : 'Automatic checkout is off: teachers send money to the link below and you approve their request. To turn on automatic checkout, add <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> on the server (see the README).';
     }).catch(() => {});
     $('#sSave').onclick = async () => {
-      await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeach').checked, studentSignup: $('#sStud').checked,
+      await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeach').checked, studentSignup: $('#sStud').checked, signupCredits: $('#sWelcome').value,
         paymentsEnabled: $('#sPayOn').checked, creditPackages: $('#sPack').value, currency: $('#sCur').value, bankEnabled: $('#sBankOn').checked, bankDetails: $('#sBank').value,
         paypalEnabled: $('#sPpOn').checked, paypalLink: $('#sPpLink').value, otherEnabled: $('#sOtherOn').checked,
         paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value });

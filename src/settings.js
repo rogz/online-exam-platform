@@ -4,7 +4,8 @@ const db = require('./db');
 const DEFAULTS = {
   siteName: process.env.SITE_NAME || 'Exam Wizard',
   timeZone: process.env.TIME_ZONE || 'Asia/Manila',
-  teacherSignup: true,                 // anyone may register as a teacher (then needs a code or credits to publish)
+  teacherSignup: true,
+  signupCredits: 5,                    // free credits for each new teacher account (0 = none)                 // anyone may register as a teacher (then needs a code or credits to publish)
   studentSignup: true,
   // Credit packages, one per line: "credits = price" (e.g. "10 = 100"). Lines like "10 credits — ₱100" also work.
   paymentsEnabled: false,              // show "Buy credits" to teachers; when off they see "Request an access code"
@@ -40,6 +41,7 @@ async function saveSettings(patch) {
     if (patch[key] === undefined) continue;
     let v = patch[key];
     if (typeof DEFAULTS[key] === 'boolean') v = v === true || v === 'true';
+    else if (typeof DEFAULTS[key] === 'number') { v = Math.round(Number(v)); if (!Number.isFinite(v) || v < 0 || v > 1000) { const { fail } = require('./util'); throw fail(400, 'BAD_INPUT', 'Enter a number from 0 to 1000.'); } }
     else v = String(v).slice(0, 4000);
     if ((key === 'bankQr' || key === 'otherQr') && v && !/^[0-9a-f-]{36}$/i.test(v)) continue;
     if (key === 'currency') {

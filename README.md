@@ -19,6 +19,7 @@ The exam screen brings over everything from the Google Sheets version: tab-switc
 | **Admin** | Add other admins (promote a teacher, or create a new admin account) · create access codes (days or credits, single or shared, with expiry) · approve or reject credit requests · give access directly · reset passwords · disable accounts · site name, time zone, sign-up switches, payment instructions |
 
 **Credits:**
+- New teachers get **5 free credits** when they sign up (change or turn off in Site settings → Free credits for each new teacher).
 - Publishing an exam the first time costs 1 credit, unless the teacher has days of full access.
 - Editing, unpublishing and re-publishing that exam later is free.
 - Teachers pick a package (e.g. 10 credits for ₱100) and a payment method: **bank transfer**, **PayPal** or **GCash / other**.

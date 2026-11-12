@@ -104,10 +104,13 @@
     const touch = navigator.maxTouchPoints || 0;
     // Hardware first: "Desktop site" mode changes what the browser says about itself, but not the screen.
     // A touch screen with no mouse or trackpad is a phone or tablet; the screen's short side tells which.
+    // Checked on a real phone in Brave's desktop mode: the browser name, "mobile" flag and device type change,
+    // but the main pointer stays a touch screen that can't hover, and the screen size stays phone-sized.
+    // (Phones with stylus support also report a "fine" pointer, so that is not used.)
     const mq = (q) => !!(window.matchMedia && window.matchMedia(q).matches);
-    const touchOnly = touch > 0 && mq('(pointer: coarse)') && !mq('(any-pointer: fine)');
+    const touchFirst = touch > 0 && mq('(pointer: coarse)') && mq('(hover: none)');
     const shortSide = Math.min(screen.width || 0, screen.height || 0);
-    if (touchOnly) return shortSide > 0 && shortSide < 520 ? 'phone' : 'tablet'; // phones are up to ~480 wide, small tablets 530+
+    if (touchFirst) return shortSide > 0 && shortSide < 520 ? 'phone' : 'tablet'; // phones are up to ~480 wide, small tablets 530+
     if (/iPhone|iPod|Windows Phone/i.test(ua) || (/Android/i.test(ua) && /Mobile/i.test(ua))) return 'phone';
     if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && touch > 1) || /Android/i.test(ua) || /Tablet/i.test(ua)) return 'tablet';
     if (navigator.userAgentData && navigator.userAgentData.mobile) return 'phone';

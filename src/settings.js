@@ -4,8 +4,8 @@ const db = require('./db');
 const DEFAULTS = {
   siteName: process.env.SITE_NAME || 'Exam Wizard',
   timeZone: process.env.TIME_ZONE || 'Asia/Manila',
-  teacherSignup: true,
-  signupCredits: 5,                    // free credits for each new teacher account (0 = none)                 // anyone may register as a teacher (then needs a code or credits to publish)
+  teacherSignup: true,                 // anyone may register as a teacher (then needs a code or credits to publish)
+  signupCredits: 5,                    // free credits for each new teacher account (0 = none)
   studentSignup: true,
   // Credit packages, one per line: "credits = price" (e.g. "10 = 100"). Lines like "10 credits — ₱100" also work.
   paymentsEnabled: false,              // show "Buy credits" to teachers; when off they see "Request an access code"
@@ -23,12 +23,23 @@ const DEFAULTS = {
   supportContact: '',
 };
 
+// Settings are kept in memory for a few minutes, so visitors who only look at pages (and search engine
+// bots) don't wake the database. Saving settings clears the copy at once.
+const CACHE_MS = 10 * 60 * 1000;
+let cache = null, cacheAt = 0;
+
 async function getSettings() {
-  const rows = await db.many('SELECT key, value FROM settings');
-  const s = Object.assign({}, DEFAULTS);
-  rows.forEach((r) => { if (r.key in DEFAULTS) s[r.key] = r.value; });
-  return s;
+  if (!cache || Date.now() - cacheAt > CACHE_MS) {
+    const rows = await db.many('SELECT key, value FROM settings');
+    const s = Object.assign({}, DEFAULTS);
+    rows.forEach((r) => { if (r.key in DEFAULTS) s[r.key] = r.value; });
+    cache = s; cacheAt = Date.now();
+  }
+  return Object.assign({}, cache);
 }
+
+/** Forget the in-memory copy (after a change, or when switching databases in tests). */
+function clearSettingsCache() { cache = null; }
 
 async function saveSettings(patch) {
   if (patch.timeZone !== undefined) {
@@ -37,6 +48,7 @@ async function saveSettings(patch) {
       throw fail(400, 'BAD_INPUT', 'Unknown time zone "' + patch.timeZone + '". Use a name like Asia/Manila.');
     }
   }
+  cache = null;
   for (const key of Object.keys(DEFAULTS)) {
     if (patch[key] === undefined) continue;
     let v = patch[key];
@@ -53,6 +65,7 @@ async function saveSettings(patch) {
     }
     await db.query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, JSON.stringify(v)]);
   }
+  cache = null; // read back fresh, including anything saved at the same moment
   return getSettings();
 }
 
@@ -74,4 +87,4 @@ function fmtDate(d, tz) {
   return new Intl.DateTimeFormat('en-US', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(d)) + ' (' + tz + ')';
 }
 
-module.exports = { getSettings, saveSettings, fmtDate, parsePackages, DEFAULTS };
+module.exports = { getSettings, saveSettings, clearSettingsCache, fmtDate, parsePackages, DEFAULTS };

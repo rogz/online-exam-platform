@@ -1,0 +1,63 @@
+# Tests every push to main, then copies the site to your server and restarts it.
+# Needs three repository secrets (Settings → Secrets and variables → Actions):
+#   SSH_HOST  the server's IP address, e.g. 13.229.161.163
+#   SSH_USER  the login name, e.g. ubuntu (Ubuntu) or ec2-user (Amazon Linux)
+#   SSH_KEY   the whole contents of the .pem file
+# Without SSH_HOST the deploy step is skipped (tests still run).
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm install --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
+      - run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check the server settings
+        id: cfg
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          if [ -z "$SSH_HOST" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No SSH_HOST secret yet, so nothing was deployed."
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ok == 'true'
+      - name: Copy the site to the server and restart it
+        if: steps.cfg.outputs.ok == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/server.pem
+          chmod 400 ~/.ssh/server.pem
+          ssh-keyscan -T 20 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          SSH="ssh -i $HOME/.ssh/server.pem -o IdentitiesOnly=yes -o ServerAliveInterval=30"
+          tar czf /tmp/app.tgz --exclude=.git --exclude=node_modules --exclude=data --exclude=.env .
+          scp -i ~/.ssh/server.pem -o IdentitiesOnly=yes /tmp/app.tgz "$SSH_USER@$SSH_HOST:/tmp/exam-wizard-app.tgz"
+          $SSH "$SSH_USER@$SSH_HOST" 'bash -s' < deploy/remote-deploy.sh

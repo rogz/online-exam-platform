@@ -1,8 +1,8 @@
 # Everything on one server (e.g. an AWS Lightsail or EC2 instance):
 #   the website, a PostgreSQL database, and Caddy for free automatic HTTPS.
-# 1. Point your domain (e.g. quiz.abnjworks.com) to the server's static IP (DNS "A" record).
-# 2. Copy .env.example to .env and fill it in.
-# 3. Run: docker compose up -d
+# Easiest: let GitHub deploy it (see "Your own server" in the README and deploy/setup.sh).
+# By hand: copy .env.example to .env, fill it in, point your domain to the server, run: docker compose up -d
+name: exam-wizard
 services:
   app:
     build: .
@@ -13,7 +13,7 @@ services:
     depends_on: [db]
 
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: exam

@@ -64,16 +64,23 @@ You need free accounts on **GitHub**, **Neon** (database) and **Render** (web ho
 
 ---
 
-## Move to your own server later (e.g. AWS)
+## Your own server (deploys on every git push)
 
-The same code runs anywhere with Node.js and PostgreSQL. On one server (AWS Lightsail or EC2, Ubuntu):
+The site can run on your own server (e.g. AWS EC2 or Lightsail, Ubuntu), with PostgreSQL and **Caddy** (free automatic HTTPS) in Docker. GitHub tests every push to `main` and then copies the site to the server and restarts it (`.github/workflows/deploy.yml`).
 
-1. Give the server a fixed IP (**Lightsail: Static IP**, **EC2: Elastic IP**) and point your domain to it with a DNS **A** record.
-2. Install Docker, then clone this repository on the server.
-3. `cp .env.example .env` and fill in the domain, passwords and admin email.
-4. `docker compose up -d`. This starts the website, PostgreSQL, and **Caddy**, which gets a free HTTPS certificate automatically.
+**One-time set-up**
+1. **Open the ports:** in AWS, the server's security group must allow **22** (SSH), **80** and **443** (web) from anywhere.
+2. **Add three GitHub secrets:** repository **Settings → Secrets and variables → Actions → New repository secret**:
+   - `SSH_HOST`: the server's IP address
+   - `SSH_USER`: `ubuntu`
+   - `SSH_KEY`: the whole contents of your `.pem` file, from `-----BEGIN` to the last `-----` line
 
-**To move your data from Neon:** run `pg_dump` on the Neon database and `psql` into the new one. Ask me for the exact commands when you get there.
+   Secrets are encrypted and never shown, even in a public repository. Never commit the `.pem` file itself.
+3. **First deploy:** **Actions → Test and deploy → Run workflow**. It runs the tests, then copies the files to `~/exam-wizard/app` on the server.
+4. **Set up the server once:** log in with `ssh -i your-key.pem ubuntu@SERVER_IP` and run `bash ~/exam-wizard/app/deploy/setup.sh`. It installs Docker, asks for the web address and your admin email, offers to copy your data from Neon (paste the Neon connection string when asked; it is not saved), starts the site and turns on daily backups.
+5. **Point your web address to the server:** a DNS **A** record (e.g. `quiz` → the server IP). HTTPS starts on its own once it works.
+
+After that, every push to `main` goes live in a few minutes. Settings live in `~/exam-wizard/.env` on the server. Backups are saved in `~/exam-wizard/backups` every night (14 days); copy one to your computer now and then, e.g. `scp -i your-key.pem ubuntu@SERVER_IP:exam-wizard/backups/FILE .`.
 
 ---
 
@@ -122,4 +129,6 @@ public/exam/         the exam screen
 test/run.js          end-to-end browser test
 render.yaml          free hosting on Render
 Dockerfile, docker-compose.yml, .env.example   your own server (AWS etc.)
+deploy/              server set-up, Neon import, backups, deploy step
+.github/workflows/   test and deploy on every push to main
 ```

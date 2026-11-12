@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Device check</title>
+<style>
+  body { font: 15px/1.45 system-ui, sans-serif; margin: 0; padding: 16px; background: #f4f6fa; color: #1d2330; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p { margin: 0 0 12px; color: #5d6677; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #dde2ea; border-radius: 6px; font-size: 13px; }
+  td { padding: 6px 8px; border-bottom: 1px solid #eef1f5; vertical-align: top; word-break: break-word; }
+  td:first-child { color: #5d6677; width: 42%; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #1f5fd6; background: #1f5fd6; color: #fff; margin: 12px 0; }
+</style>
+</head>
+<body>
+<h1>Device check</h1>
+<p>Shows what this browser reports about the device. Nothing is sent anywhere. Wait 3 seconds while holding the device as usual, then take a screenshot or tap Copy.</p>
+<table id="t"><tbody></tbody></table>
+<button type="button" id="copy">Copy</button>
+<script>
+(function () {
+  const rows = [];
+  const mq = (q) => (window.matchMedia ? window.matchMedia(q).matches : 'n/a');
+  const add = (k, v) => rows.push([k, v === undefined ? 'undefined' : String(v)]);
+  function render() {
+    const tb = document.querySelector('#t tbody'); tb.textContent = '';
+    rows.forEach(([k, v]) => { const tr = document.createElement('tr'); tr.innerHTML = '<td></td><td></td>'; tr.children[0].textContent = k; tr.children[1].textContent = v; tb.appendChild(tr); });
+  }
+  add('userAgent', navigator.userAgent);
+  add('platform', navigator.platform);
+  add('maxTouchPoints', navigator.maxTouchPoints);
+  add('ontouchstart in window', 'ontouchstart' in window);
+  add('pointer: coarse / fine', mq('(pointer: coarse)') + ' / ' + mq('(pointer: fine)'));
+  add('any-pointer: coarse / fine', mq('(any-pointer: coarse)') + ' / ' + mq('(any-pointer: fine)'));
+  add('hover / any-hover', mq('(hover: hover)') + ' / ' + mq('(any-hover: hover)'));
+  add('screen', screen.width + ' x ' + screen.height + ' (avail ' + screen.availWidth + ' x ' + screen.availHeight + ')');
+  add('window inner / outer', innerWidth + ' x ' + innerHeight + ' / ' + outerWidth + ' x ' + outerHeight);
+  add('devicePixelRatio', window.devicePixelRatio);
+  add('orientation', (screen.orientation && screen.orientation.type) || window.orientation);
+  add('screen.isExtended', 'isExtended' in screen ? screen.isExtended : 'n/a');
+  add('hardwareConcurrency / deviceMemory', navigator.hardwareConcurrency + ' / ' + navigator.deviceMemory);
+  if (navigator.userAgentData) {
+    add('uaData mobile / platform', navigator.userAgentData.mobile + ' / ' + navigator.userAgentData.platform);
+    navigator.userAgentData.getHighEntropyValues(['model', 'platformVersion', 'formFactors', 'architecture']).then((h) => {
+      add('uaData model', h.model); add('uaData formFactors', JSON.stringify(h.formFactors)); add('uaData architecture', h.architecture); render();
+    }).catch((e) => { add('uaData high entropy', 'error: ' + e.message); render(); });
+  } else add('userAgentData', 'not available');
+  add('TouchEvent / PointerEvent', (typeof TouchEvent) + ' / ' + (typeof PointerEvent));
+  // Motion sensor: phones and tablets report gravity (about 9.8); most laptops report nothing.
+  let motion = 'no events yet';
+  window.addEventListener('devicemotion', (e) => {
+    const g = e.accelerationIncludingGravity || {};
+    motion = g.x === null || g.x === undefined ? 'events, but no values' : 'x ' + g.x.toFixed(1) + ', y ' + g.y.toFixed(1) + ', z ' + g.z.toFixed(1);
+  });
+  let touched = 'not yet (tap the page once)';
+  window.addEventListener('touchstart', () => { touched = 'yes, a touch was felt'; }, { passive: true });
+  window.addEventListener('pointerdown', (e) => { touched += ' · pointer type: ' + e.pointerType; });
+  render();
+  setInterval(() => {
+    const i = rows.findIndex((r) => r[0] === 'motion sensor'); if (i >= 0) rows.splice(i, 1);
+    const j = rows.findIndex((r) => r[0] === 'touch felt'); if (j >= 0) rows.splice(j, 1);
+    add('motion sensor', motion); add('touch felt', touched); render();
+  }, 1000);
+  document.getElementById('copy').onclick = () => {
+    const text = rows.map(([k, v]) => k + ': ' + v).join('\n');
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => alert('Copied'), () => alert(text));
+  };
+})();
+</script>
+</body>
+</html>

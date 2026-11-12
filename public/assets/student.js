@@ -174,7 +174,15 @@
       if (left <= 0) load();
     }
   }, 1000);
-  setInterval(load, 60000);
+  // Refresh the list every minute, but only while the tab is visible and the student was active in the
+  // last 15 minutes. Background or forgotten tabs then don't keep the database awake.
+  let lastActive = Date.now();
+  ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach((ev) => window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
+  const inUse = () => document.visibilityState === 'visible' && Date.now() - lastActive < 15 * 60000;
+  setInterval(() => { if (inUse()) load(); }, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { lastActive = Date.now(); load(); }
+  });
 
   function joinClass() {
     dialog('Join a class', `<div class="field"><label for="joinCode">Class code</label><input type="text" id="joinCode" autocomplete="off" placeholder="e.g. 7KQ2PA" style="text-transform:uppercase;font-size:18px;letter-spacing:2px"></div>

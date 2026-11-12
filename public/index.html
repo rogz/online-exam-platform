@@ -201,33 +201,8 @@
   const { $, api } = App;
   const next = new URLSearchParams(location.search).get('next');
   const go = (u) => { location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : App.homeFor(u); };
-  const me = await api('/auth/me', undefined, { allowSignedOut: true });
-  if (me.user) return go(me.user);
-  App.renderTopbar(null, me.site, []);
-  $('#footName').textContent = '© ' + new Date().getFullYear() + ' ' + me.site.name;
-
-  const tab = (up) => { $('#signIn').hidden = up; $('#signUp').hidden = !up; $('#tabIn').classList.toggle('on', !up); $('#tabUp').classList.toggle('on', up); };
+  // Forms work right away (Enter included), even while the page checks whether you're signed in.
   const role = () => document.querySelector('input[name=role]:checked').value;
-  const syncRole = () => { $('#studentNoWrap').hidden = role() !== 'student'; $('#codeWrap').hidden = role() !== 'teacher'; };
-  $('#tabIn').onclick = () => tab(false);
-  $('#tabUp').onclick = () => tab(true);
-  document.querySelectorAll('input[name=role]').forEach((r) => r.addEventListener('change', syncRole));
-  document.querySelectorAll('[data-signup]').forEach((b) => b.addEventListener('click', () => {
-    tab(true);
-    const r = document.querySelector('input[name=role][value=' + b.dataset.signup + ']');
-    if (r && !r.closest('label').hidden) r.checked = true;
-    syncRole();
-    $('#auth').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => $('#upName').focus({ preventScroll: true }), 400);
-  }));
-  if (location.hash === '#signup') tab(true);
-  if (me.site.signupCredits > 0) {
-    const n = me.site.signupCredits, cr = n + ' free credit' + (n === 1 ? '' : 's');
-    $('#teacherStart').textContent = 'Start free: ' + cr + ' when you sign up';
-    $('#codeHint').textContent = 'New teachers get ' + cr + ' (publish ' + n + ' exam' + (n === 1 ? '' : 's') + '). Have an access code? Enter it for more. You can also add one later under My account.';
-  }
-  if (!me.site.teacherSignup) document.querySelectorAll('input[value=teacher], [data-signup=teacher]').forEach((el) => { (el.closest('label') || el).hidden = true; });
-
   $('#signIn').onsubmit = async (e) => {
     e.preventDefault(); $('#inMsg').hidden = true;
     try { const r = await api('/auth/login', { email: $('#inEmail').value, password: $('#inPass').value }); go(r.user); }
@@ -248,6 +223,32 @@
       go(r.user);
     } catch (err) { $('#upMsg').textContent = err.message; $('#upMsg').hidden = false; }
   };
+  const me = await api('/auth/me', undefined, { allowSignedOut: true });
+  if (me.user) return go(me.user);
+  App.renderTopbar(null, me.site, []);
+  $('#footName').textContent = '© ' + new Date().getFullYear() + ' ' + me.site.name;
+
+  const tab = (up) => { $('#signIn').hidden = up; $('#signUp').hidden = !up; $('#tabIn').classList.toggle('on', !up); $('#tabUp').classList.toggle('on', up); };
+  const syncRole = () => { $('#studentNoWrap').hidden = role() !== 'student'; $('#codeWrap').hidden = role() !== 'teacher'; };
+  $('#tabIn').onclick = () => tab(false);
+  $('#tabUp').onclick = () => tab(true);
+  document.querySelectorAll('input[name=role]').forEach((r) => r.addEventListener('change', syncRole));
+  document.querySelectorAll('[data-signup]').forEach((b) => b.addEventListener('click', () => {
+    tab(true);
+    const r = document.querySelector('input[name=role][value=' + b.dataset.signup + ']');
+    if (r && !r.closest('label').hidden) r.checked = true;
+    syncRole();
+    $('#auth').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => $('#upName').focus({ preventScroll: true }), 400);
+  }));
+  if (location.hash === '#signup') tab(true);
+  if (me.site.signupCredits > 0) {
+    const n = me.site.signupCredits, cr = n + ' free credit' + (n === 1 ? '' : 's');
+    $('#teacherStart').textContent = 'Start free: ' + cr + ' when you sign up';
+    $('#codeHint').textContent = 'New teachers get ' + cr + ' (publish ' + n + ' exam' + (n === 1 ? '' : 's') + '). Have an access code? Enter it for more. You can also add one later under My account.';
+  }
+  if (!me.site.teacherSignup) document.querySelectorAll('input[value=teacher], [data-signup=teacher]').forEach((el) => { (el.closest('label') || el).hidden = true; });
+
 })();
 </script>
 </body>

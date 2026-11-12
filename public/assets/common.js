@@ -86,7 +86,7 @@
     // Two-tone name: "Exam Wizard" → "Exam" + gold "Wizard"
     const words = String(site.name || '').trim().split(/\s+/);
     const name = words.length > 1 ? esc(words.slice(0, -1).join(' ')) + ' <span class="accent">' + esc(words[words.length - 1]) + '</span>' : esc(site.name);
-    bar.innerHTML = `<a class="brand" href="/"><img class="logo" src="/assets/logo.svg" alt="" width="30" height="30"><span class="name">${name}</span></a>
+    bar.innerHTML = `<a class="brand" href="${me ? homeFor(me) : '/'}"><img class="logo" src="/assets/logo.svg" alt="" width="30" height="30"><span class="name">${name}</span></a>
       <div class="who">${me ? `<button type="button" class="me-btn" id="profileBtn" title="My profile">${avatarHtml(me, 30)}<span class="me-text">${esc(me.name)}${me.studentNo ? ' — ' + esc(me.studentNo) : ''}${me.school ? ' — ' + esc(me.school) : ''}</span></button>` : ''}</div>
       <nav>${(links || []).map((l) => `<a href="${esc(l.href)}"${l.on ? ' class="on"' : ''}>${esc(l.label)}</a>`).join('')}
       ${me ? '<button type="button" class="menu-btn" id="signOut">Sign out</button>' : ''}</nav>`;

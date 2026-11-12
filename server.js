@@ -52,7 +52,14 @@ function createApp() {
       res.set('Cache-Control', 'no-cache').type('html').send(html.replace(/\{site\}/g, escHtml(name)));
     } catch (e) { next(e); }
   };
-  app.get(['/', '/index.html'], page('index.html'));
+  // Signed in? Go straight to your own page instead of flashing the sign-in page.
+  // (The database is only asked when a sign-in cookie is present.)
+  const home = (u) => (u.role === 'student' ? '/student' : u.role === 'admin' ? '/admin' : '/teacher');
+  app.get(['/', '/index.html'], auth.loadUser, (req, res, next) => {
+    if (!req.user) return next();
+    const nx = String(req.query.next || '');
+    res.redirect(302, nx.startsWith('/') && !nx.startsWith('//') ? nx : home(req.user));
+  }, page('index.html'));
   app.get('/student', page('student.html'));
   app.get('/teacher', page('teacher.html'));
   app.get('/admin', page('admin.html'));

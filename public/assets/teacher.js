@@ -145,6 +145,7 @@
     view.innerHTML = `<div class="panel"><div class="hd"><h2>Question bank <span class="muted small">(${qs.length})</span></h2>
         <div class="toolbar"><button type="button" class="btn" id="importBtn">Import CSV</button><a class="btn" href="/api/teacher/questions/export.csv">Export CSV</a>
         <button type="button" class="btn primary" id="addQ">+ Add question</button></div></div>
+      <details class="csvdetails bankhelp" id="csvHelp"><summary>📄 Adding many questions at once? See the CSV format for <b>Import CSV</b> · <a href="/assets/sample-questions.csv" download="sample-questions.csv">download a sample</a></summary>${CSV_HELP}</details>
       <div class="bank"><nav class="folders" aria-label="Folders"><div class="folders-hd"><b>Folders</b><button type="button" class="btn small" id="newFolder">+ New</button></div>
           <div id="folderList"></div><div class="folder-actions" id="folderActions"></div></nav>
         <div class="bank-main"><div class="toolbar" style="margin-bottom:10px">
@@ -334,12 +335,29 @@
     return q.choices.findIndex((c) => c.trim().toLowerCase() === a.toLowerCase());
   }
 
+  /** How to write a CSV for Import (shown on the Question bank page and in the Import window). */
+  const CSV_HELP = `<div class="csvhelp">
+      <p>Make the questions in <b>Excel</b> or <b>Google Sheets</b>, one question per row, with these column names in the <b>first row</b>.
+        Then save as CSV: Excel <b>File → Save As → CSV UTF-8</b>; Google Sheets <b>File → Download → Comma-separated values</b>.
+        Easiest: <a href="/assets/sample-questions.csv" download="sample-questions.csv">download the sample</a> and replace its rows.</p>
+      <div class="tablewrap"><table class="list"><thead><tr><th>Column</th><th>What to put</th><th>Example</th></tr></thead><tbody>
+        <tr><td><b>Type</b> *</td><td><b>MC</b> multiple choice, <b>TF</b> true/false, <b>FIB</b> fill in the blank, <b>ESSAY</b></td><td>MC</td></tr>
+        <tr><td><b>Question</b> *</td><td>The question text. For FIB, type <b>____</b> (4 underscores) where the blank goes.</td><td>V = I × ____</td></tr>
+        <tr><td><b>Choices</b></td><td>MC only: the choices separated by <b>|</b> (the key above Enter, with Shift)</td><td>Volt | Ohm | Ampere | Watt</td></tr>
+        <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter)<br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>(optional)</td></tr>
+        <tr><td><b>Points</b></td><td>Points for the question. Empty = 1</td><td>2</td></tr>
+        <tr><td><b>Topic</b></td><td>Optional. Used for filtering and for picking random questions per topic</td><td>Circuits</td></tr>
+        <tr><td><b>Folder</b></td><td>Optional. Folder path; folders are created if they don't exist</td><td>EEE 150/Midterm</td></tr>
+        <tr><td><b>Image</b></td><td>Optional. A picture link starting with https:// (Google Drive links must be shared publicly). Or add pictures later in the question editor.</td><td>https://…</td></tr>
+        <tr><td><b>QuestionID</b></td><td>Optional. Your own code. Importing a row with an ID you already have <b>updates</b> that question instead of adding a copy.</td><td>Q-001</td></tr>
+      </tbody></table></div>
+      <p class="small muted" style="margin:8px 0 0">* required. Column order doesn't matter. Commas inside a question are fine: Excel and Google Sheets handle them when saving as CSV.
+        Rows with a problem are listed after importing, and the other rows are still added.</p></div>`;
+
   function importDialog() {
-    dialog('Import questions from CSV', `<p style="margin-top:0">Use the same columns as the Google Sheets version:
-      <b>QuestionID, Type, Question, Choices, Answer, Points, Topic, Image</b>. In Google Sheets: open the Questions tab, then <b>File → Download → CSV</b>.</p>
-      <ul class="small"><li><b>Type</b>: MC, TF, FIB or ESSAY</li><li><b>Choices</b> (MC): separated by |</li><li><b>Answer</b>: MC letter (A, B…), TRUE/FALSE, accepted blanks separated by |</li>
-      <li>Rows with an existing QuestionID update that question.</li>
-      <li>Optional <b>Folder</b> column, e.g. <i>EEE 150/Midterm</i>: folders are created as needed.</li></ul>
+    dialog('Import questions from CSV', `<p style="margin-top:0">Choose a CSV file with columns <b>Type, Question, Choices, Answer</b> (and optionally Points, Topic, Folder, Image, QuestionID).
+      <a href="/assets/sample-questions.csv" download="sample-questions.csv">Download a sample CSV</a></p>
+      <details class="csvdetails"><summary>Show the CSV format</summary>${CSV_HELP}</details>
       <div class="field"><label for="csvFolder">Put imported questions in</label><select id="csvFolder">${folderOptions(cache.folders || [], currentFolder !== 'all' && currentFolder !== 'none' ? currentFolder : null, '<option value="">Not in a folder</option>')}</select></div>
       <input type="file" id="csvFile" accept=".csv,text/csv" aria-label="CSV file"><div id="csvOut" style="margin-top:12px"></div>`, {
       buttons: [{ label: 'Close' }, { label: 'Import', primary: true, onClick: async (ov) => {

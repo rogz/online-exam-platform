@@ -1,0 +1,6 @@
+QuestionID,Type,Question,Choices,Answer,Points,Topic,Image,Folder
+Q-001,MC,What is the unit of electrical resistance?,Volt | Ohm | Ampere | Watt,B,1,Units,,EEE 150/Quiz 1
+Q-002,TF,Current is measured in amperes.,,TRUE,1,Units,,EEE 150/Quiz 1
+Q-003,FIB,"Ohm's law: V = I × ____",,R | resistance,1,Circuits,,EEE 150/Quiz 1
+Q-004,MC,"A 10 Ω resistor carries 2 A. What is the voltage across it?",5 V | 12 V | 20 V | 40 V,C,2,Circuits,,EEE 150/Quiz 1
+Q-005,ESSAY,Explain in 3 to 5 sentences why household circuits are wired in parallel.,,"Each appliance gets the full voltage and can be switched on and off by itself.",5,Circuits,,EEE 150/Quiz 1

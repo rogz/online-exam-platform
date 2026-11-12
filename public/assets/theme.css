@@ -194,3 +194,13 @@ table.results th.sortable:hover { color: var(--text); }
 table.results th.sortable::after { content: ' ↕'; opacity: .45; }
 table.results th.sortable.on { color: var(--bar); }
 table.results th.sortable.on::after { content: ' ●'; font-size: 8px; vertical-align: middle; opacity: .8; }
+
+/* CSV format help */
+.csvdetails > summary { cursor: pointer; color: var(--link); }
+.bankhelp { margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--line-soft); background: var(--panel-alt); font-size: 13.5px; }
+.bankhelp[open] { background: var(--panel); }
+.csvdetails[open] > summary { margin-bottom: 10px; }
+.csvhelp p { margin: 0 0 10px; }
+.csvhelp table.list td { font-size: 13px; }
+.csvhelp table.list td:last-child { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; white-space: nowrap; color: var(--muted); }
+@media (max-width: 700px) { .csvhelp table.list td:last-child { white-space: normal; } }

@@ -560,15 +560,27 @@
         <div class="stat"><b>${r.attempts.filter((a) => a.status === 'VOIDED').length}</b><span>Voided</span></div>
         <div class="stat"><b>${r.notStarted.length}</b><span>Not started</span></div>
         <div class="stat"><b>${sub.reduce((s, a) => s + (a.pending_essays || 0), 0)}</b><span>Essays to grade</span></div></div>
-      <div class="panel"><div class="hd"><h3>Attempts</h3></div><div class="tablewrap"><table class="list"><thead><tr><th>Student</th><th>Status</th><th>Score</th><th>Started</th><th>Submitted</th><th>Notes</th><th></th></tr></thead><tbody>
-      ${r.attempts.length ? r.attempts.map((a) => `<tr><td><span class="person">${App.avatarHtml({ name: a.student_name, avatarUrl: a.avatarUrl }, 36)}<span><b>${esc(a.student_name)}</b><div class="small muted">${esc(a.student_no || a.student_email)}</div></span></span></td>
-        <td>${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}</td>
-        <td class="num">${a.score !== null ? a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span>' : '—'}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}</td>
-        <td class="nowrap small">${esc(App.fmtDate(a.started_at))}</td><td class="nowrap small">${esc(App.fmtDate(a.submitted_at))}${a.late ? ' <span class="tag warn">Late</span>' : ''}</td>
-        <td class="small">${a.void_reason ? '<div style="color:var(--bad)">' + esc(a.void_reason) + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect(s)</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
-        <td class="nowrap"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
-          ${a.status !== 'IN_PROGRESS' ? `<label class="check small" style="margin:6px 0 0"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`).join('')
-      : '<tr><td colspan="7"><div class="empty">Nobody has started this exam yet.</div></td></tr>'}</tbody></table></div></div>
+      <div class="panel"><div class="hd"><h3>Attempts <span class="muted small">(${r.attempts.length})</span></h3>
+        ${r.attempts.length > 5 ? `<div class="toolbar"><input type="search" id="aFind" placeholder="Find a student…" aria-label="Find a student" style="width:200px">
+          <select id="aStatus" aria-label="Show"><option value="">All</option><option value="SUBMITTED">Submitted</option><option value="VOIDED">Voided</option><option value="IN_PROGRESS">In progress</option><option value="EXPIRED">Not submitted</option></select></div>` : ''}</div>
+      <div class="tablewrap"><table class="list results"><thead><tr><th>Student</th><th>Result</th><th>Time</th><th>Notes</th><th></th></tr></thead><tbody id="aRows">
+      ${r.attempts.length ? r.attempts.map((a) => {
+        const reason = String(a.void_reason || '');
+        const shortReason = reason.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+        const mins = a.submitted_at ? Math.max(1, Math.round((new Date(a.submitted_at) - new Date(a.started_at)) / 60000)) : null;
+        const sameDay = a.submitted_at && new Date(a.submitted_at).toDateString() === new Date(a.started_at).toDateString();
+        const endText = a.submitted_at ? (sameDay ? new Date(a.submitted_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : App.fmtDate(a.submitted_at)) : '';
+        return `<tr data-status="${esc(a.status)}" data-find="${esc((a.student_name + ' ' + (a.student_no || '') + ' ' + (a.student_email || '')).toLowerCase())}">
+        <td data-label="Student"><span class="person">${App.avatarHtml({ name: a.student_name, avatarUrl: a.avatarUrl }, 32)}<span><b>${esc(a.student_name)}</b><div class="small muted">${esc(a.student_no || a.student_email)}</div></span></span></td>
+        <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
+          ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}</td>
+        <td data-label="Time" class="small"><div class="nowrap">${esc(App.fmtDate(a.started_at))}</div>${a.submitted_at ? '<div class="muted nowrap">→ ' + esc(endText) + ' · ' + mins + ' min</div>' : ''}</td>
+        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
+        <td class="actions"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
+          ${a.status !== 'IN_PROGRESS' ? `<label class="check small" title="Let this student take the exam again"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`;
+      }).join('')
+      : '<tr><td colspan="5"><div class="empty">Nobody has started this exam yet.</div></td></tr>'}
+      <tr id="aNone" hidden><td colspan="5"><div class="empty">No students match.</div></td></tr></tbody></table></div></div>
       ${r.notStarted.length ? `<div class="panel" style="margin-top:16px"><div class="hd"><h3>Not started (${r.notStarted.length})</h3></div><div class="tablewrap"><table class="list notstarted"><thead><tr><th class="num">#</th><th>Student</th><th>Student no.</th><th>Email</th></tr></thead><tbody>
         ${r.notStarted.map((s, i) => `<tr><td class="num muted">${i + 1}</td><td><span class="person">${App.avatarHtml(s, 32)}${esc(s.name)}</span></td><td class="nowrap">${esc(s.student_no || '—')}</td><td class="small">${esc(s.email)}</td></tr>`).join('')}
         </tbody></table></div></div>` : ''}`;
@@ -577,6 +589,13 @@
       toast(c.checked ? 'Retake allowed: the student can open the exam again.' : 'Retake turned off');
     });
     $$('[data-answers]').forEach((b) => b.onclick = () => attemptDialog(id, b.dataset.answers));
+    const filterRows = () => {
+      const q = ($('#aFind').value || '').trim().toLowerCase(), st = $('#aStatus').value;
+      let shown = 0;
+      $$('#aRows tr[data-status]').forEach((tr) => { const ok = (!q || tr.dataset.find.includes(q)) && (!st || tr.dataset.status === st); tr.hidden = !ok; if (ok) shown++; });
+      $('#aNone').hidden = shown > 0;
+    };
+    if ($('#aFind')) { $('#aFind').oninput = filterRows; $('#aStatus').onchange = filterRows; }
   }
 
   async function attemptDialog(examId, attemptId) {

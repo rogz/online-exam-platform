@@ -173,3 +173,19 @@ table.list tr:hover td { background: #fafbfc; }
 .snap img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
 .snap span { display: block; padding: 6px 8px; font-size: 12px; }
 table.notstarted td { vertical-align: middle; }
+
+/* Results table: fits the panel; on narrow screens each attempt becomes a card */
+table.results td { vertical-align: middle; }
+table.results .score { margin-top: 4px; font-weight: 600; white-space: nowrap; }
+table.results .bad-text { color: var(--bad); }
+table.results td.actions { white-space: nowrap; text-align: right; }
+table.results td.actions .check { display: block; margin: 6px 0 0; }
+@media (max-width: 760px) {
+  table.results thead { display: none; }
+  table.results, table.results tbody, table.results tr, table.results td { display: block; width: 100%; }
+  table.results tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  table.results td { border: 0; padding: 4px 12px; }
+  table.results td[data-label]:not([data-label="Student"])::before { content: attr(data-label); display: inline-block; min-width: 64px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+  table.results td.actions { text-align: left; }
+  table.results td.actions .check { display: inline-flex; margin: 0 0 0 10px; }
+}

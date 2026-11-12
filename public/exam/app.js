@@ -203,7 +203,7 @@
     $('camBtn').disabled = true;
     $('camError').hidden = true;
     try {
-      await window.ExamCamera.start($('camVideo'), { phoneDetection: state.rules.phoneDetection, onStatus: onCamStatus });
+      await window.ExamCamera.start($('camVideo'), { phoneDetection: state.rules.phoneDetection, headDetection: state.rules.headDetection !== false, onStatus: onCamStatus });
       $('camBtn').hidden = true;
     } catch (e) {
       $('camError').textContent = e.message;
@@ -335,7 +335,8 @@
     $('checkCamera').hidden = !state.cam.required;
     $('cameraPanel').hidden = !state.cam.required;
     if (state.cam.continuous) {
-      $('ruleCamera').innerHTML = '📷 <b>Your camera will be monitored throughout the exam.</b> Keep your face clearly visible. ' +
+      $('ruleCamera').innerHTML = '📷 <b>Your camera will be monitored throughout the exam.</b> Keep your face clearly visible' +
+        (state.rules.headDetection !== false ? ' (looking down at your paper is fine, as long as your head stays in view)' : '') + '. ' +
         'If your face is hidden, the camera is covered, another person appears, or a phone is seen, ' + camRuleText() +
         (state.rules.cameraSnapshots ? ' When the camera flags something, a small still picture is saved for your teacher as proof. No video is recorded.' : '');
       const n = camAllowed();
@@ -437,6 +438,7 @@
     if (state.oneAtATime) setupPager();
     if (state.rules.blockCopyPaste) document.body.classList.add('locked');
     state.active = true;
+    if (window.ExamCamera && window.ExamCamera.allowHead) window.ExamCamera.allowHead(state.rules.headDetection !== false);
     if (state.cam.required && !state.cam.continuous) {
       window.ExamCamera.stop(); // face was checked at the start only
     } else if (state.cam.continuous) {

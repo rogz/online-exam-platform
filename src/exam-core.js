@@ -30,6 +30,7 @@ const DEFAULT_OPTIONS = {
   faceGraceSeconds: 3,
   cameraWarnings: 1,       // camera problems allowed (each shows a warning) before the next one voids the exam
   phoneDetection: true,
+  headDetection: true,     // a lowered head (writing, solving) counts as present, not 'no face'
   cameraSnapshots: true,   // save a small still picture when the camera flags something
   openCountdown: true,
   timeWarnings: [5, 1],
@@ -48,6 +49,7 @@ function examOptions(raw) {
     faceGraceSeconds: num(o.faceGraceSeconds, 3, 1),
     cameraWarnings: Math.min(10, Math.round(num(o.cameraWarnings, 1, 0))),
     phoneDetection: o.phoneDetection !== false,
+    headDetection: o.headDetection !== false,
     cameraSnapshots: o.cameraSnapshots !== false,
     openCountdown: o.openCountdown !== false,
     timeWarnings: (Array.isArray(o.timeWarnings) ? o.timeWarnings : String(o.timeWarnings || '').split(/[,;\s]+/))

@@ -431,6 +431,7 @@
             <label class="check"><input type="checkbox" id="oMon"${o.requireMonitorCheck ? ' checked' : ''}> Computers must use a browser that can detect a second monitor</label>
             <label class="check"><input type="checkbox" id="oCopy"${o.blockCopyPaste ? ' checked' : ''}> Block copy, paste and right-click</label>
             <label class="check"><input type="checkbox" id="oPhone"${o.phoneDetection ? ' checked' : ''}> Camera exams: watch for a phone</label>
+            <label class="check"><input type="checkbox" id="oHead"${o.headDetection !== false ? ' checked' : ''}> Camera exams: accept the head when the student looks down (writing or solving), not only the face</label>
             <label class="check"><input type="checkbox" id="oSnap"${o.cameraSnapshots !== false ? ' checked' : ''}> Camera exams: save a small snapshot as proof when the camera flags something</label>
             <label class="check"><input type="checkbox" id="oCount"${o.openCountdown ? ' checked' : ''}> Show a countdown before the exam opens</label></details></fieldset>
         <div class="row"><button type="button" class="btn" id="saveBtn">Save</button>
@@ -506,7 +507,7 @@
       allowedDevices: $('#eDev').value, faceMode: $('#eFace').value, cameraPreview: $('#ePrev').checked,
       options: { blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
-        phoneDetection: $('#oPhone').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
+        phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
     });
     async function save() {
       const r = await api(x ? '/teacher/exams/' + x.id : '/teacher/exams', body());

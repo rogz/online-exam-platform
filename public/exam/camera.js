@@ -20,7 +20,8 @@ window.ExamCamera = (function () {
   const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
   const PHONE_MODEL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite';
   const CHECK_MS = 500;        // face check interval
-  const PHONE_CHECK_MS = 1500; // phone check interval (heavier model)
+  const PHONE_CHECK_MS = 1500; // phone/person check interval (heavier model)
+  const HEAD_FRESH_MS = 2500;   // how long a "person seen" result counts when the face is not visible
 
   let stream = null;
   let video = null;
@@ -31,6 +32,9 @@ window.ExamCamera = (function () {
   let status = 'OFF';
   let since = 0;
   let phoneSeen = false;
+  let personSeen = 0;          // time a person (head and shoulders) was last seen
+  let headOk = false;          // during the exam: a visible head counts as present (e.g. looking down to write)
+  let watchPhones = false;
   let lastPhoneCheck = 0;
   let lastTs = 0;
   const probe = document.createElement('canvas');
@@ -77,13 +81,14 @@ window.ExamCamera = (function () {
           runningMode: 'VIDEO',
           minDetectionConfidence: 0.6,
         });
-        if (options.phoneDetection) {
+        watchPhones = !!options.phoneDetection;
+        if (options.phoneDetection || options.headDetection) {
           phoneDetector = await vision.ObjectDetector.createFromOptions(files, {
             baseOptions: { modelAssetPath: PHONE_MODEL, delegate: 'CPU' },
             runningMode: 'VIDEO',
-            scoreThreshold: 0.45,
-            categoryAllowlist: ['cell phone'],
-            maxResults: 1,
+            scoreThreshold: 0.4,
+            categoryAllowlist: ['cell phone', 'person'],
+            maxResults: 4,
           });
         }
       }
@@ -171,11 +176,15 @@ window.ExamCamera = (function () {
         next = 'CAMERA_BLOCKED';
       } else {
         const faces = faceDetector.detectForVideo(video, ts).detections.length;
-        if (phoneDetector && ts - lastPhoneCheck >= PHONE_CHECK_MS) {
+        // Objects every 1.5 s; sooner when the face is gone, to check for a lowered head.
+        if (phoneDetector && (ts - lastPhoneCheck >= PHONE_CHECK_MS || (faces === 0 && headOk && ts - lastPhoneCheck >= CHECK_MS))) {
           lastPhoneCheck = ts;
-          phoneSeen = phoneDetector.detectForVideo(video, ts).detections.length > 0;
+          const found = phoneDetector.detectForVideo(video, ts).detections.map((d) => d.categories[0] || {});
+          phoneSeen = watchPhones && found.some((c) => c.categoryName === 'cell phone' && c.score >= 0.45);
+          if (found.some((c) => c.categoryName === 'person' && c.score >= 0.5)) personSeen = Date.now();
         }
-        next = faces === 0 ? 'NO_FACE' : faces > 1 ? 'MULTIPLE_FACES' : phoneSeen ? 'PHONE_DETECTED' : 'OK';
+        const headVisible = headOk && Date.now() - personSeen < HEAD_FRESH_MS;
+        next = faces > 1 ? 'MULTIPLE_FACES' : faces === 0 && !headVisible ? 'NO_FACE' : phoneSeen ? 'PHONE_DETECTED' : 'OK';
       }
       setStatus(next);
     } catch (e) {
@@ -190,6 +199,8 @@ window.ExamCamera = (function () {
 
   return {
     start, restart, stop, mirrorTo, resume, snapshot,
+    /** During the exam, accept a visible head (looking down) as present. Before starting, a face is required. */
+    allowHead(on) { headOk = !!on; },
     status: () => status,
     statusAge: () => Date.now() - since,
   };

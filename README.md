@@ -66,14 +66,27 @@ You need free accounts on **GitHub**, **Neon** (database) and **Render** (web ho
 
 ## Your own server (deploys on every git push)
 
-The site can run on your own server (e.g. AWS EC2 or Lightsail, Ubuntu), with PostgreSQL and **Caddy** (free automatic HTTPS) in Docker. GitHub tests every push to `main` and then copies the site to the server and restarts it (`.github/workflows/deploy.yml`).
+The site can run on your own server (e.g. AWS EC2, Ubuntu). GitHub tests every push to `main`, then copies the site to the server and restarts it (`.github/workflows/deploy.yml`). If a new version fails to start, the previous one is put back automatically.
+
+There are two set-ups:
+- **`deploy/setup-shared.sh`: a server that already runs other websites with nginx.** Exam Wizard runs as a background service on a free local port with its own copy of Node.js; the database stays on **Neon**; nginx gets one new file for your web address; HTTPS comes from Let's Encrypt (certbot). Other sites are not touched. It can also add swap space on small servers.
+- **`deploy/setup.sh`: a server only for Exam Wizard.** Docker with PostgreSQL on the server and Caddy for HTTPS, an optional data copy from Neon, and daily backups.
 
 **One-time set-up**
-1. **Open the ports:** in AWS, the server's security group must allow **22** (SSH), **80** and **443** (web) from anywhere.
+1. **Open the ports:** the server's security group must allow **22** (SSH), **80** and **443** (web).
 2. **Add three GitHub secrets:** repository **Settings → Secrets and variables → Actions → New repository secret**:
    - `SSH_HOST`: the server's IP address
    - `SSH_USER`: `ubuntu`
    - `SSH_KEY`: the whole contents of your `.pem` file, from `-----BEGIN` to the last `-----` line
+
+   Secrets are encrypted and never shown, even in a public repository. Never commit the `.pem` file itself.
+3. **First deploy:** **Actions → Test and deploy → Run workflow**. It copies the files to `~/exam-wizard/app` on the server.
+4. **Set up the server once:** log in (`ssh -i your-key.pem ubuntu@SERVER_IP`) and run `bash ~/exam-wizard/app/deploy/setup-shared.sh` (or `setup.sh`). It asks for the web address, your admin email and, for the shared set-up, the Neon connection string (not shown on screen; saved only in `~/exam-wizard/.env`, readable by you).
+5. **Point your web address to the server** with a DNS **A** record (e.g. `quiz` → the server IP). For the shared set-up, run `setup-shared.sh` again afterwards to turn on HTTPS.
+
+After that, every push to `main` goes live in a few minutes. Useful commands on a shared server: `sudo systemctl status exam-wizard` (is it running?), `sudo journalctl -u exam-wizard -n 50` (recent messages), `sudo systemctl restart exam-wizard`.
+
+-----BEGIN` to the last `-----` line
 
    Secrets are encrypted and never shown, even in a public repository. Never commit the `.pem` file itself.
 3. **First deploy:** **Actions → Test and deploy → Run workflow**. It runs the tests, then copies the files to `~/exam-wizard/app` on the server.
@@ -129,6 +142,6 @@ public/exam/         the exam screen
 test/run.js          end-to-end browser test
 render.yaml          free hosting on Render
 Dockerfile, docker-compose.yml, .env.example   your own server (AWS etc.)
-deploy/              server set-up, Neon import, backups, deploy step
+deploy/              server set-up (shared nginx server or Docker), Neon import, backups, deploy step
 .github/workflows/   test and deploy on every push to main
 ```

@@ -3,6 +3,7 @@
 //   DATABASE_URL   PostgreSQL connection (leave empty to use the built-in database in ./data)
 //   ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME   the site owner's account (created on first start)
 //   PORT           web port (default 3000)
+//   HOST           address to listen on (default: all; 127.0.0.1 when behind nginx)
 const path = require('path');
 const express = require('express');
 const db = require('./src/db');
@@ -92,7 +93,8 @@ async function main() {
   await ensureAdmin();
   await db.query('DELETE FROM sessions WHERE expires_at < now()');
   const port = Number(process.env.PORT || 3000);
-  createApp().listen(port, () => console.log(`Online Exam running on http://localhost:${port} (database: ${db.kind})`));
+  const host = process.env.HOST || undefined; // e.g. 127.0.0.1 behind nginx: not reachable from outside
+  createApp().listen(port, host, () => console.log(`Online Exam running on http://${host || 'localhost'}:${port} (database: ${db.kind})`));
 }
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });

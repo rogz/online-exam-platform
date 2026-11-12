@@ -4,6 +4,7 @@
 #   SSH_USER  the login name, e.g. ubuntu (Ubuntu) or ec2-user (Amazon Linux)
 #   SSH_KEY   the whole contents of the .pem file
 # Without SSH_HOST the deploy step is skipped (tests still run).
+# On the server, run deploy/setup-shared.sh (shared nginx server) or deploy/setup.sh (Docker) once first.
 name: Test and deploy
 
 on:

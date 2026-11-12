@@ -430,6 +430,19 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const examInfo = await student.evaluate(async (id) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'getExam', examId: id }) })).json(), randExam.id);
   ok(factQ === '3' && examInfo.exam.poolSize === undefined && !JSON.stringify(examInfo).includes('random'), 'random set: student sees "' + factQ + '" questions, not the bank size (' + randExam.pool + ')');
 
+  // A phone in "desktop site" mode is still a phone (touch-only, small screen)
+  const deskPhoneCtx = await browser.newContext({ viewport: { width: 980, height: 1800 }, screen: { width: 412, height: 915 }, hasTouch: true, isMobile: true,
+    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36' });
+  await deskPhoneCtx.addCookies((await student.context().cookies()).filter((c) => c.name === 'sid'));
+  const deskPhone = await deskPhoneCtx.newPage();
+  await deskPhone.goto(BASE + '/exam?id=' + randExam.id);
+  await deskPhone.waitForSelector('#screen-rules:not([hidden])');
+  const devText = await deskPhone.textContent('#checkDevice');
+  const deskStart = await deskPhone.evaluate(async (id) => (await (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+    body: JSON.stringify({ action: 'start', examId: id, env: { userAgent: navigator.userAgent, device: 'phone', monitorCheck: 'supported' } }) })).json()).code, randExam.id);
+  ok(/Phone/.test(devText) && deskStart === 'DEVICE_NOT_ALLOWED', 'a phone in "desktop site" mode is detected as a phone and refused (' + devText.trim().slice(0, 40) + ')');
+  await deskPhoneCtx.close();
+
   await teacher.goto(BASE + '/teacher#results/' + randExam.id);
   await teacher.waitForSelector('table.notstarted');
   ok(await teacher.isVisible('table.notstarted tr:has-text("Juan Dela Cruz"):has-text("2024-0001")'), '"Not started" is a list with name and student number');

@@ -189,3 +189,8 @@ table.results td.actions .check { display: block; margin: 6px 0 0; }
   table.results td.actions { text-align: left; }
   table.results td.actions .check { display: inline-flex; margin: 0 0 0 10px; }
 }
+table.results th.sortable { cursor: pointer; user-select: none; }
+table.results th.sortable:hover { color: var(--text); }
+table.results th.sortable::after { content: ' ↕'; opacity: .45; }
+table.results th.sortable.on { color: var(--bar); }
+table.results th.sortable.on::after { content: ' ●'; font-size: 8px; vertical-align: middle; opacity: .8; }

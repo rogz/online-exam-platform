@@ -561,16 +561,20 @@
         <div class="stat"><b>${r.notStarted.length}</b><span>Not started</span></div>
         <div class="stat"><b>${sub.reduce((s, a) => s + (a.pending_essays || 0), 0)}</b><span>Essays to grade</span></div></div>
       <div class="panel"><div class="hd"><h3>Attempts <span class="muted small">(${r.attempts.length})</span></h3>
-        ${r.attempts.length > 5 ? `<div class="toolbar"><input type="search" id="aFind" placeholder="Find a student…" aria-label="Find a student" style="width:200px">
-          <select id="aStatus" aria-label="Show"><option value="">All</option><option value="SUBMITTED">Submitted</option><option value="VOIDED">Voided</option><option value="IN_PROGRESS">In progress</option><option value="EXPIRED">Not submitted</option></select></div>` : ''}</div>
-      <div class="tablewrap"><table class="list results"><thead><tr><th>Student</th><th>Result</th><th>Time</th><th>Notes</th><th></th></tr></thead><tbody id="aRows">
+        ${r.attempts.length > 1 ? `<div class="toolbar">${r.attempts.length > 5 ? `<input type="search" id="aFind" placeholder="Find a student…" aria-label="Find a student" style="width:200px">
+          <select id="aStatus" aria-label="Show"><option value="">All</option><option value="SUBMITTED">Submitted</option><option value="VOIDED">Voided</option><option value="IN_PROGRESS">In progress</option><option value="EXPIRED">Not submitted</option></select>` : ''}
+          <select id="aSort" aria-label="Sort by"><option value="name">Sort: Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="start">Started: earliest first</option><option value="start-desc">Started: latest first</option>
+            <option value="end">Finished: earliest first</option><option value="end-desc">Finished: latest first</option><option value="dur">Time taken: shortest first</option><option value="dur-desc">Time taken: longest first</option>
+            <option value="score-desc">Score: highest first</option><option value="score">Score: lowest first</option></select></div>` : ''}</div>
+      <div class="tablewrap"><table class="list results"><thead><tr><th class="sortable" data-sort="name" title="Sort by name">Student</th><th class="sortable" data-sort="score-desc" title="Sort by score">Result</th><th class="sortable" data-sort="start" title="Sort by start time (click again: finish time)">Time</th><th>Notes</th><th></th></tr></thead><tbody id="aRows">
       ${r.attempts.length ? r.attempts.map((a) => {
         const reason = String(a.void_reason || '');
         const shortReason = reason.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
         const mins = a.submitted_at ? Math.max(1, Math.round((new Date(a.submitted_at) - new Date(a.started_at)) / 60000)) : null;
         const sameDay = a.submitted_at && new Date(a.submitted_at).toDateString() === new Date(a.started_at).toDateString();
         const endText = a.submitted_at ? (sameDay ? new Date(a.submitted_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : App.fmtDate(a.submitted_at)) : '';
-        return `<tr data-status="${esc(a.status)}" data-find="${esc((a.student_name + ' ' + (a.student_no || '') + ' ' + (a.student_email || '')).toLowerCase())}">
+        const startMs = new Date(a.started_at).getTime(), endMs = a.submitted_at ? new Date(a.submitted_at).getTime() : '';
+        return `<tr data-status="${esc(a.status)}" data-name="${esc(a.student_name.toLowerCase())}" data-start="${startMs}" data-end="${endMs}" data-dur="${endMs ? endMs - startMs : ''}" data-score="${a.percent === null || a.percent === undefined ? '' : a.percent}" data-find="${esc((a.student_name + ' ' + (a.student_no || '') + ' ' + (a.student_email || '')).toLowerCase())}">
         <td data-label="Student"><span class="person">${App.avatarHtml({ name: a.student_name, avatarUrl: a.avatarUrl }, 32)}<span><b>${esc(a.student_name)}</b><div class="small muted">${esc(a.student_no || a.student_email)}</div></span></span></td>
         <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
           ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}</td>
@@ -596,6 +600,32 @@
       $('#aNone').hidden = shown > 0;
     };
     if ($('#aFind')) { $('#aFind').oninput = filterRows; $('#aStatus').onchange = filterRows; }
+    // Sorting: the menu, or click a column title. Rows without a value (e.g. not finished) go last.
+    const sortRows = (how) => {
+      const desc = how.endsWith('-desc'), key = how.replace('-desc', '');
+      const rows = $$('#aRows tr[data-status]');
+      const val = (tr) => key === 'name' ? tr.dataset.name : (tr.dataset[key] === '' ? null : Number(tr.dataset[key]));
+      rows.sort((x, y) => {
+        const a = val(x), b = val(y);
+        if (a === null && b === null) return x.dataset.name.localeCompare(y.dataset.name);
+        if (a === null) return 1;
+        if (b === null) return -1;
+        const c = key === 'name' ? a.localeCompare(b) : a - b;
+        return (desc ? -c : c) || x.dataset.name.localeCompare(y.dataset.name);
+      });
+      const tbody = $('#aRows'), none = $('#aNone');
+      rows.forEach((tr) => tbody.insertBefore(tr, none));
+      $$('th.sortable').forEach((th) => th.classList.toggle('on', th.dataset.sort.replace('-desc', '') === key || (th.dataset.sort === 'start' && key === 'end')));
+      if ($('#aSort')) $('#aSort').value = how;
+    };
+    if ($('#aSort')) $('#aSort').onchange = () => sortRows($('#aSort').value);
+    const nextSort = { name: 'name', 'score-desc': 'score', score: 'score-desc', start: 'start-desc', 'start-desc': 'end', end: 'end-desc', 'end-desc': 'start' };
+    $$('th.sortable').forEach((th) => { th.onclick = () => {
+      const cur = $('#aSort') ? $('#aSort').value : 'name';
+      const group = th.dataset.sort.replace('-desc', '');
+      const inGroup = group === 'start' ? ['start', 'start-desc', 'end', 'end-desc'].includes(cur) : cur.replace('-desc', '') === group;
+      sortRows(inGroup ? (group === 'name' ? (cur === 'name' ? 'name-desc' : 'name') : nextSort[cur]) : th.dataset.sort);
+    }; });
   }
 
   async function attemptDialog(examId, attemptId) {

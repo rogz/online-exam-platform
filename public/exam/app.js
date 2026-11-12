@@ -102,6 +102,12 @@
   function deviceType() {
     const ua = navigator.userAgent || '';
     const touch = navigator.maxTouchPoints || 0;
+    // Hardware first: "Desktop site" mode changes what the browser says about itself, but not the screen.
+    // A touch screen with no mouse or trackpad is a phone or tablet; the screen's short side tells which.
+    const mq = (q) => !!(window.matchMedia && window.matchMedia(q).matches);
+    const touchOnly = touch > 0 && mq('(pointer: coarse)') && !mq('(any-pointer: fine)');
+    const shortSide = Math.min(screen.width || 0, screen.height || 0);
+    if (touchOnly) return shortSide > 0 && shortSide < 520 ? 'phone' : 'tablet'; // phones are up to ~480 wide, small tablets 530+
     if (/iPhone|iPod|Windows Phone/i.test(ua) || (/Android/i.test(ua) && /Mobile/i.test(ua))) return 'phone';
     if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && touch > 1) || /Android/i.test(ua) || /Tablet/i.test(ua)) return 'tablet';
     if (navigator.userAgentData && navigator.userAgentData.mobile) return 'phone';
@@ -388,6 +394,8 @@
         env: {
           userAgent: navigator.userAgent,
           device: deviceType(),
+          touchPoints: navigator.maxTouchPoints || 0,
+          screenSize: (screen.width || 0) + 'x' + (screen.height || 0),
           isExtended: m === 'multiple',
           monitorCheck: m === 'unsupported' ? 'unsupported' : 'supported',
           camera: state.cam.required && window.ExamCamera.status() === 'OK' ? 'ok' : 'none',

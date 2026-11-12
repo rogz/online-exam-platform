@@ -291,9 +291,11 @@ function externalImageUrl(v) {
 
 function deviceOf(env) {
   const ua = String((env && env.userAgent) || '');
-  if (/iPhone|iPod|Windows Phone/i.test(ua) || (/Android/i.test(ua) && /Mobile/i.test(ua))) return 'phone';
   const d = String((env && env.device) || '');
-  if (d === 'phone' || d === 'tablet') return d;
+  // The exam page checks the hardware (touch-only screen and its size), which "desktop site" mode can't hide.
+  if (d === 'phone') return 'phone';
+  if (/iPhone|iPod|Windows Phone/i.test(ua) || (/Android/i.test(ua) && /Mobile/i.test(ua))) return 'phone';
+  if (d === 'tablet') return d;
   if (/iPad|Tablet/i.test(ua) || /Android/i.test(ua)) return 'tablet';
   return 'computer';
 }

@@ -434,6 +434,49 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const examInfo = await student.evaluate(async (id) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'getExam', examId: id }) })).json(), randExam.id);
   ok(factQ === '3' && examInfo.exam.poolSize === undefined && !JSON.stringify(examInfo).includes('random'), 'random set: student sees "' + factQ + '" questions, not the bank size (' + randExam.pool + ')');
 
+  // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
+  const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const q = (await (await fetch('/api/teacher/questions')).json()).questions.find((x) => x.type === 'TF');
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title, questionIds: [q.id], timeLimitMinutes: 10, options,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  }, [title, options]);
+  const focusExam = await mkExam('Focus quiz', { focusWarnings: 2 });
+  await student.goto(BASE + '/exam?id=' + focusExam);
+  await student.waitForSelector('#screen-rules:not([hidden])');
+  ok((await student.textContent('#ruleFocus')).includes('2 warnings'), 'rules screen tells students they get 2 tab warnings');
+  await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  const leave = async () => { await student.evaluate(() => window.dispatchEvent(new Event('blur'))); await student.waitForTimeout(900); };
+  await leave();
+  await student.waitForSelector('#focusWarnModal:not([hidden])');
+  const w1 = await student.textContent('#focusWarnTitle');
+  await student.click('#focusWarnOk'); await student.waitForTimeout(1200);
+  await leave();
+  await student.waitForSelector('#focusWarnModal:not([hidden])');
+  const w2 = (await student.textContent('#focusWarnTitle')) + ' / ' + (await student.textContent('#focusWarnNext'));
+  await student.click('#focusWarnOk'); await student.waitForTimeout(1200);
+  const mid = (await dbOne('SELECT status, focus_warnings FROM attempts WHERE exam_id = $1', [focusExam]));
+  await leave();
+  await student.waitForSelector('#voidModal:not([hidden])');
+  const fin = await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [focusExam]);
+  ok(w1.includes('warning 1 of 2') && w2.includes('warning 2 of 2') && w2.includes('last warning') && mid.status === 'IN_PROGRESS' && mid.focus_warnings === 2 && fin.status === 'VOIDED',
+    'tab warnings: 1 of 2, 2 of 2 (last), then the 3rd time away voids');
+  await shot(student, '17-focus-warning-void');
+  const awayExam = await mkExam('Away quiz', { focusWarnings: 3 });
+  await student.goto(BASE + '/exam?id=' + awayExam);
+  await student.waitForSelector('#screen-rules:not([hidden])'); await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  await student.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+  await student.waitForSelector('#focusWarnModal:not([hidden])');
+  await student.evaluate(() => { const real = Date.now; Date.now = () => real() + 61000; });
+  await student.waitForSelector('#voidModal:not([hidden])', { timeout: 5000 }).catch(() => {});
+  const away = await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [awayExam]);
+  ok(away.status === 'VOIDED', 'staying away from the exam for more than 1 minute voids it, even with warnings left');
+
   // A phone in "desktop site" mode is still a phone (touch-only, small screen)
   const deskPhoneCtx = await browser.newContext({ viewport: { width: 980, height: 1800 }, screen: { width: 412, height: 915 }, hasTouch: true, isMobile: true,
     userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36' });
@@ -583,7 +626,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await admin.waitForSelector('tr:has-text("juan@student.edu") [data-delete]');
   await admin.click('tr:has-text("juan@student.edu") [data-delete]');
   await admin.waitForSelector('.dialog #delEmail');
-  ok((await admin.textContent('.dialog .note.bad')).includes('3 exam attempts'), 'student delete lists their attempts');
+  ok((await admin.textContent('.dialog .note.bad')).includes('5 exam attempts'), 'student delete lists their attempts');
   await admin.fill('#delEmail', 'JUAN@student.edu');
   await admin.click('.dialog .btn.danger');
   ok(await toastSays(admin, 'was deleted'), 'student deleted');

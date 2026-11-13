@@ -55,7 +55,7 @@ router.get('/dashboard', async (req, res) => {
       timeLimitMinutes: exam.limitMin, questionCount: questionCount(x),
       displayMode: exam.displayMode, allowBack: exam.allowBack, questionSeconds: exam.questionSeconds,
       faceMode: exam.faceMode, allowedDevices: exam.allowedDevices, requiresPassword: !!exam.password,
-      blockCopyPaste: exam.options.blockCopyPaste, reconnectSeconds: exam.options.reconnectSeconds, showScore: exam.showScore,
+      blockCopyPaste: exam.options.blockCopyPaste, reconnectSeconds: exam.options.reconnectSeconds, focusWarnings: exam.options.focusWarnings, showScore: exam.showScore,
       attempt,
     };
   });

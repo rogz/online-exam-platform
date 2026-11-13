@@ -198,7 +198,7 @@ const actions = {
           attemptId: attempt.id,
           studentId: req.user.student_no || req.user.email,
           studentName: req.user.name,
-          resumed, reconnects: attempt.reconnects || 0, isRetake: !!attempt.is_retake, cameraWarningsUsed: Number(attempt.warnings) || 0,
+          resumed, reconnects: attempt.reconnects || 0, isRetake: !!attempt.is_retake, cameraWarningsUsed: Number(attempt.warnings) || 0, focusWarningsUsed: Number(attempt.focus_warnings) || 0,
           deadlineMs: deadline ? deadline.getTime() : null,
           remainingMs: deadline ? Math.max(0, deadline.getTime() - now.getTime()) : null,
           questions: core.attemptQuestions(exam, pool, attempt.id).map((qq) => core.publicQuestion(qq, exam, attempt.id)),
@@ -243,6 +243,16 @@ const actions = {
       const event = VIOLATION_LABELS[req.body.event] ? req.body.event : 'TAB_SWITCH';
       const detail = str(req.body.detail, 300);
       if (a.status !== STATUS.IN_PROGRESS) { await logEvent(t.query, a.id, event, detail); return { status: a.status, reason: a.void_reason }; }
+      // Leaving the exam (tab switch, another window): warnings first, if the exam allows them.
+      if (['TAB_SWITCH', 'LEFT_WINDOW'].includes(event) && req.body.final !== true) {
+        const allowedF = (await examOfAttempt(t.query, a)).options.focusWarnings;
+        const usedF = Number(a.focus_warnings) || 0;
+        if (usedF < allowedF) {
+          await logEvent(t.query, a.id, event, 'WARNING ' + (usedF + 1) + ' of ' + allowedF + ': ' + detail);
+          await t.query('UPDATE attempts SET focus_warnings = $1 WHERE id = $2', [usedF + 1, a.id]);
+          return { status: a.status, warned: true, focusWarnings: usedF + 1 };
+        }
+      }
       const allowed = WARNABLE_EVENTS.includes(event) ? (await examOfAttempt(t.query, a)).options.cameraWarnings : 0;
       const used = Number(a.warnings) || 0;
       if (WARNABLE_EVENTS.includes(event) && used < allowed) {

@@ -339,6 +339,12 @@
     }
     state.cam.required = exam.faceMode === 'START' || exam.faceMode === 'ALWAYS';
     state.cam.continuous = exam.faceMode === 'ALWAYS';
+    const fw = focusAllowed();
+    if (fw > 0) {
+      $('ruleFocus').innerHTML = '<b>Stay on the exam page.</b> Opening another tab, minimizing the browser, Alt+Tab / Cmd+Tab or clicking another app counts as leaving. ' +
+        'You get <b>' + (fw === 1 ? 'one warning' : fw + ' warnings') + '</b>; the next time, <b>your exam is voided</b>. Staying away for more than 1 minute voids it at once.';
+      $('agreeText').textContent = 'I have read the rules. I understand that leaving the exam page (after my warnings) or using a second monitor will void my exam.';
+    }
     $('ruleCamera').hidden = !state.cam.required;
     $('ruleCalc').hidden = !(state.cam.required && state.rules.phoneDetection);
     $('checkCamera').hidden = !state.cam.required;
@@ -349,7 +355,7 @@
         'If your face is hidden, the camera is covered, another person appears, or a phone is seen, ' + camRuleText() +
         (state.rules.cameraSnapshots ? ' When the camera flags something, a small still picture is saved for your teacher as proof. No video is recorded.' : '');
       const n = camAllowed();
-      $('agreeText').textContent = 'I have read the rules. I understand that switching tabs or windows or using a second monitor will void my exam, ' +
+      $('agreeText').textContent = 'I have read the rules. I understand that ' + (focusAllowed() ? 'leaving the exam page (after my warnings) ' : 'switching tabs or windows ') + 'or using a second monitor will void my exam, ' +
         'and that my camera is monitored: ' + (n === 0 ? 'any camera problem will void my exam.' : 'I get ' + (n === 1 ? 'one warning' : n + ' warnings') + ', and the next camera problem will void my exam.');
     } else if (state.cam.required) {
       $('ruleCamera').innerHTML = '📷 <b>Your face must be visible to the camera before you can start.</b> Sit facing the screen in a well-lit place, with only you in view.';
@@ -425,6 +431,7 @@
   function beginExam(r) {
     state.attemptId = r.attemptId;
     state.cam.warnings = r.cameraWarningsUsed || 0;
+    state.focusWarnings = r.focusWarningsUsed || 0;
     state.student = { id: r.studentId, name: r.studentName };
     state.questions = r.questions;
     state.answers = {};
@@ -949,7 +956,7 @@
     state.active = false;
     clearInterval(state.timerId);
     state.violations.push({ event, detail, at: new Date().toISOString() });
-    const payload = { attemptId: state.attemptId, event, detail };
+    const payload = { attemptId: state.attemptId, event, detail, final: true };
 
     if (document.visibilityState === 'hidden') {
       // The page may be closing: a beacon is delivered even if the tab is gone.
@@ -996,7 +1003,7 @@
 
   function onHidden() {
     if (!state.active || document.visibilityState !== 'hidden') return;
-    const go = () => voidExam('TAB_SWITCH', 'Page became hidden (tab switch, minimize, or another window covered it).');
+    const go = () => leftExam('TAB_SWITCH', 'Page became hidden (tab switch, minimize, or another window covered it).');
     if (!reconnectOn()) { go(); return; }
     // A reload or closing the page also hides it; wait a moment to tell them apart.
     if (!state.hiddenTimer) state.hiddenTimer = setTimeout(() => { state.hiddenTimer = null; go(); }, 500);
@@ -1018,19 +1025,52 @@
     if (!state.active) return;
     const grace = state.rules.blurGraceSeconds * 1000;
     if (grace <= 0) {
-      if (!reconnectOn()) { voidExam('LEFT_WINDOW', 'Exam window lost focus.'); return; }
+      if (!reconnectOn()) { leftExam('LEFT_WINDOW', 'Exam window lost focus.'); return; }
       // Wait a moment so a reload (reconnect allowed) is not counted; coming back quickly still counts.
       clearTimeout(state.blurVoidTimer);
-      state.blurVoidTimer = setTimeout(() => voidExam('LEFT_WINDOW', 'Exam window lost focus.'), 500);
+      state.blurVoidTimer = setTimeout(() => leftExam('LEFT_WINDOW', 'Exam window lost focus.'), 500);
       return;
     }
     clearTimeout(blurTimer);
     blurTimer = setTimeout(() => {
-      if (state.active && !document.hasFocus()) voidExam('LEFT_WINDOW', 'Exam window lost focus for more than ' + state.rules.blurGraceSeconds + ' s.');
+      if (state.active && !document.hasFocus()) leftExam('LEFT_WINDOW', 'Exam window lost focus for more than ' + state.rules.blurGraceSeconds + ' s.');
     }, grace);
   }
 
-  function onFocus() { clearTimeout(blurTimer); unfocusedSince = null; }
+  function onFocus() { clearTimeout(blurTimer); unfocusedSince = null; backInExam(); }
+
+  // ── Tab/window warnings (the exam's "Tab/window warnings" setting; 0 = leaving voids at once) ──
+  const AWAY_LIMIT_MS = 60000; // with warnings on, staying away longer than this voids the exam
+  const focusAllowed = () => { const n = Number(state.rules.focusWarnings); return Number.isFinite(n) && n > 0 ? n : 0; };
+
+  /** The student left the exam (tab switch, another window). One warning per time away, then void. */
+  function leftExam(event, detail) {
+    if (!state.active || state.voided || state.unloading) return;
+    if (state.awaySince) return; // already counted this time away
+    if ((state.focusWarnings || 0) >= focusAllowed()) { voidExam(event, detail); return; }
+    state.focusWarnings = (state.focusWarnings || 0) + 1;
+    state.awaySince = Date.now();
+    const payload = { attemptId: state.attemptId, event, detail };
+    api('violation', payload, 3)
+      .then((r) => { if (r.status === 'VOIDED') { state.violations.push({ event, detail }); showVoid(event); } })
+      .catch((e) => { if (e.code === 'VOIDED') showVoid(event); else if (!beacon('violation', payload)) sendReliably('violation', payload); });
+    showFocusWarning(event);
+  }
+
+  /** Back on the exam page: the next time away counts as a new warning. */
+  function backInExam() {
+    if (!state.awaySince) return;
+    setTimeout(() => { if (document.visibilityState === 'visible' && document.hasFocus()) state.awaySince = null; }, 800);
+  }
+
+  function showFocusWarning(event) {
+    const n = focusAllowed(), used = state.focusWarnings, left = n - used;
+    $('focusWarnTitle').textContent = '⚠ You left the exam — warning ' + used + ' of ' + n;
+    $('focusWarnReason').textContent = event === 'TAB_SWITCH' ? 'The exam page was hidden (another tab, or the browser was minimized).' : 'Another window or app was in front of the exam.';
+    $('focusWarnNext').textContent = left === 0 ? 'This was your last warning: if you leave the exam again, it will be voided.'
+      : 'You have ' + left + ' warning' + (left === 1 ? '' : 's') + ' left. After that, leaving the exam voids it.';
+    $('focusWarnModal').hidden = false;
+  }
 
   function checkMonitorDuringExam() {
     if (state.active && deviceType() === 'computer' && monitorStatus() === 'multiple') {
@@ -1043,11 +1083,12 @@
     if (state.active) {
       checkMonitorDuringExam();
       if (!state.active) return;
+      if (state.awaySince && Date.now() - state.awaySince > AWAY_LIMIT_MS) { voidExam('LEFT_WINDOW', 'Away from the exam for more than ' + AWAY_LIMIT_MS / 1000 + ' s.'); return; }
       if (document.visibilityState === 'hidden') { onHidden(); return; }
       if (!document.hasFocus() && !state.unloading) {
         if (unfocusedSince === null) unfocusedSince = Date.now();
         const limit = Math.max(1000, state.rules.blurGraceSeconds * 1000);
-        if (Date.now() - unfocusedSince >= limit) voidExam('LEFT_WINDOW', 'Exam window did not have focus.');
+        if (Date.now() - unfocusedSince >= limit) leftExam('LEFT_WINDOW', 'Exam window did not have focus.');
       } else {
         unfocusedSince = null;
       }
@@ -1094,6 +1135,8 @@
     $('nextBtn').addEventListener('click', goNext);
     $('camBtn').addEventListener('click', turnOnCamera);
     $('faceWarnOk').addEventListener('click', closeFaceWarning);
+    $('focusWarnOk').addEventListener('click', () => { $('focusWarnModal').hidden = true; backInExam(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') backInExam(); });
     $('camRestartBtn').addEventListener('click', () => { window.ExamCamera.restart().catch(() => {}); });
     $('prevBtn').addEventListener('click', goPrev);
     $('imgZoom').addEventListener('click', closeZoom);

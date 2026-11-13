@@ -28,7 +28,8 @@ const DEFAULT_OPTIONS = {
   blockCopyPaste: true,
   submitGraceSeconds: 60,
   faceGraceSeconds: 3,
-  cameraWarnings: 1,       // camera problems allowed (each shows a warning) before the next one voids the exam
+  cameraWarnings: 1,
+  focusWarnings: 0,        // tab/window switches allowed (each shows a warning) before the next one voids the exam       // camera problems allowed (each shows a warning) before the next one voids the exam
   phoneDetection: true,
   headDetection: true,     // a lowered head (writing, solving) counts as present, not 'no face'
   cameraSnapshots: true,   // save a small still picture when the camera flags something
@@ -48,6 +49,7 @@ function examOptions(raw) {
     submitGraceSeconds: num(o.submitGraceSeconds, 60, 0),
     faceGraceSeconds: num(o.faceGraceSeconds, 3, 1),
     cameraWarnings: Math.min(10, Math.round(num(o.cameraWarnings, 1, 0))),
+    focusWarnings: Math.min(10, Math.round(num(o.focusWarnings, 0, 0))),
     phoneDetection: o.phoneDetection !== false,
     headDetection: o.headDetection !== false,
     cameraSnapshots: o.cameraSnapshots !== false,

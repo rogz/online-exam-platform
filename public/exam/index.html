@@ -49,7 +49,7 @@
       <div class="rules" role="alert">
         <h2>⚠ Read before you start</h2>
         <ul>
-          <li><b>Switching tabs or windows will VOID your exam.</b> This includes opening another tab, minimizing the browser, using Alt+Tab / Cmd+Tab, or clicking another application.</li>
+          <li id="ruleFocus"><b>Switching tabs or windows will VOID your exam.</b> This includes opening another tab, minimizing the browser, using Alt+Tab / Cmd+Tab, or clicking another application.</li>
           <li id="ruleMonitor"><b>Multiple monitors are prohibited.</b> Disconnect any second monitor, TV or projector <u>before</u> starting. Connecting one during the exam will void it.</li>
           <li id="ruleReload"><b>Do not refresh, close, or navigate away from this page.</b> That also voids your exam.</li>
           <li id="ruleCamera" hidden></li>
@@ -157,6 +157,15 @@
   </div>
 
   <!-- Camera warning -->
+  <div class="modal-backdrop warn" id="focusWarnModal" hidden>
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="focusWarnTitle">
+      <h2 id="focusWarnTitle">⚠ You left the exam</h2>
+      <p class="void-reason" id="focusWarnReason"></p>
+      <p><b id="focusWarnNext"></b> Stay on this page until you submit. Close other apps and turn off notifications if they keep popping up.</p>
+      <div class="modal-actions"><button type="button" class="btn primary" id="focusWarnOk">Back to my exam</button></div>
+    </div>
+  </div>
+
   <div class="modal-backdrop warn" id="faceWarnModal" hidden>
     <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="faceWarnTitle">
       <h2 id="faceWarnTitle">⚠ Warning — this is your only warning</h2>

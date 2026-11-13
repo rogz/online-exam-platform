@@ -439,6 +439,7 @@
           <label class="check"><input type="checkbox" id="ePrev"${v('camera_preview', true) ? ' checked' : ''}> Show students their camera preview</label>
           <details><summary class="small" style="cursor:pointer;margin:6px 0">Advanced settings</summary>
             <div class="grid2" style="margin-top:8px">
+              <div class="field"><label for="oFocusWarn">Tab/window warnings</label><input type="number" id="oFocusWarn" min="0" max="10" value="${o.focusWarnings || 0}"><div class="hint">Warnings for switching tabs or apps before the exam is voided. 0 = void at once</div></div>
               <div class="field"><label for="oBlur">Focus grace (s)</label><input type="number" id="oBlur" min="0" value="${o.blurGraceSeconds}"><div class="hint">0 = leaving the window voids at once</div></div>
               <div class="field"><label for="oRecon">Reconnect window (s)</label><input type="number" id="oRecon" min="0" value="${o.reconnectSeconds}"><div class="hint">0 = reloading voids</div></div>
               <div class="field"><label for="oMaxRe">Max reconnects</label><input type="number" id="oMaxRe" min="0" value="${o.maxReconnects}"></div>
@@ -523,7 +524,7 @@
       pickCount: $('#ePick').value, topicCounts: activeTopics(), shuffleQuestions: $('#eShufQ').checked, shuffleChoices: $('#eShufC').checked, showScore: $('#eScore').checked,
       displayMode: $('#eMode').value, allowBack: $('#eBack').checked, questionSeconds: $('#eQsec').value,
       allowedDevices: $('#eDev').value, faceMode: $('#eFace').value, cameraPreview: $('#ePrev').checked,
-      options: { blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
+      options: { focusWarnings: $('#oFocusWarn').value, blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
         phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
     });
@@ -597,7 +598,7 @@
         <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
           ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}</td>
         <td data-label="Time" class="small"><div class="nowrap">${esc(App.fmtDate(a.started_at))}</div>${a.submitted_at ? '<div class="muted nowrap">→ ' + esc(endText) + ' · ' + mins + ' min</div>' : ''}</td>
-        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
+        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
         <td class="actions"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
           ${a.status !== 'IN_PROGRESS' ? `<label class="check small" title="Let this student take the exam again"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`;
       }).join('')

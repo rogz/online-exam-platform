@@ -237,3 +237,6 @@ CREATE TABLE IF NOT EXISTS attempt_snapshots (
   at         timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS attempt_snapshots_attempt ON attempt_snapshots (attempt_id, at);
+
+-- Tab/window switch warnings used in this attempt (the exam's focusWarnings option sets how many are allowed).
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS focus_warnings integer NOT NULL DEFAULT 0;

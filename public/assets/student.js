@@ -124,7 +124,7 @@
           <tr><td>Time limit</td><td>${x.timeLimitMinutes ? esc(minutes(x.timeLimitMinutes)) : 'None'}</td></tr>
         </tbody></table></div>
         <div><h2>Exam rules</h2><table class="kv"><tbody>
-          <tr><td>Switching tabs or apps</td><td>Voids exam</td></tr>
+          <tr><td>Switching tabs or apps</td><td>${x.focusWarnings ? x.focusWarnings + ' warning' + (x.focusWarnings === 1 ? '' : 's') + ', then voids exam' : 'Voids exam'}</td></tr>
           <tr><td>Copy &amp; paste</td><td>${x.blockCopyPaste ? 'OFF' : 'ON'}</td></tr>
           <tr><td>Reconnect after lost internet</td><td>${x.reconnectSeconds ? esc(minutes(x.reconnectSeconds / 60)) : 'Not allowed'}</td></tr>
           <tr><td>Score shown after submitting</td><td>${x.showScore ? 'Yes' : 'No'}</td></tr>

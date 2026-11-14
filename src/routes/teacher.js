@@ -432,7 +432,7 @@ function examInput(b) {
     displayMode,
     allowBack: displayMode === 'ONE' ? bool(b.allowBack, true) && !(questionSeconds > 0) : true,
     questionSeconds,
-    pickCount: topicCounts.length ? 0 : int(b.pickCount, 0, 0, 10000),
+    pickCount: topicCounts.length || (b.options && Array.isArray(b.options.typePicks) && b.options.typePicks.some((t) => +t.count > 0)) ? 0 : int(b.pickCount, 0, 0, 10000),
     topicCounts,
     faceMode: ['START', 'ALWAYS'].includes(b.faceMode) ? b.faceMode : 'OFF',
     cameraPreview: bool(b.cameraPreview, true),
@@ -458,6 +458,11 @@ async function examProblems(teacherId, e, forPublish) {
   e.topicCounts.forEach((tc) => {
     const n = qs.filter((q) => core.normTopic(q.topic) === core.normTopic(tc.topic)).length;
     if (tc.count > n) p.push('topic "' + tc.topic + '": ' + tc.count + ' requested but only ' + n + ' selected');
+  });
+  const TYPE_NAME = { MC: 'multiple choice', TF: 'true/false', FIB: 'fill in the blank', ESSAY: 'essay' };
+  if (!e.topicCounts.length) (e.options.typePicks || []).forEach((tp) => {
+    const n = qs.filter((q) => q.type === tp.type).length;
+    if (tp.count > n) p.push(TYPE_NAME[tp.type] + ': ' + tp.count + ' requested but only ' + n + ' selected');
   });
   return p;
 }

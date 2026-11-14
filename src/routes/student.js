@@ -13,6 +13,8 @@ function questionCount(x) {
   const ids = Array.isArray(x.question_ids) ? x.question_ids.length : 0;
   const topics = Array.isArray(x.topic_counts) ? x.topic_counts.reduce((s, t) => s + (Number(t.count) || 0), 0) : 0;
   if (topics) return Math.min(topics, ids);
+  const types = x.options && Array.isArray(x.options.typePicks) ? x.options.typePicks.reduce((s, t) => s + (Number(t.count) || 0), 0) : 0;
+  if (types) return Math.min(types, ids);
   if (x.pick_count > 0 && x.pick_count < ids) return x.pick_count;
   return ids;
 }

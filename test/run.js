@@ -436,6 +436,26 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const examInfo = await student.evaluate(async (id) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'getExam', examId: id }) })).json(), randExam.id);
   ok(factQ === '3' && examInfo.exam.poolSize === undefined && !JSON.stringify(examInfo).includes('random'), 'random set: student sees "' + factQ + '" questions, not the bank size (' + randExam.pool + ')');
 
+  // ── Pick per question type (1 multiple choice + 1 true/false per student) ──
+  const typeExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.type === 'MC' || q.type === 'TF').map((q) => q.id);
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Type quiz', questionIds: ids, timeLimitMinutes: 10, options: { typePicks: [{ type: 'MC', count: 1 }, { type: 'TF', count: 1 }] },
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  });
+  await teacher.goto(BASE + '/teacher#exam/' + typeExam); await teacher.waitForSelector('#typePicks [data-ptype="MC"]');
+  ok((await teacher.inputValue('#typePicks [data-ptype="MC"]')) === '1' && (await teacher.textContent('#pSum')).includes('1 multiple choice, 1 true/false'), 'exam editor shows the per-type picks');
+  const typeInfo = await student.evaluate(async (id) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const g = await post({ action: 'getExam', examId: id });
+    const st = await post({ action: 'start', examId: id, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    return { count: g.exam.questionCount, types: st.questions.map((q) => q.type).sort().join(',') };
+  }, typeExam);
+  ok(typeInfo.count === 2 && typeInfo.types === 'MC,TF', 'student gets 1 multiple choice + 1 true/false (' + typeInfo.types + ')');
+
   // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
   const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
@@ -690,7 +710,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await admin.waitForSelector('tr:has-text("juan@student.edu") [data-delete]');
   await admin.click('tr:has-text("juan@student.edu") [data-delete]');
   await admin.waitForSelector('.dialog #delEmail');
-  ok((await admin.textContent('.dialog .note.bad')).includes('5 exam attempts'), 'student delete lists their attempts');
+  ok((await admin.textContent('.dialog .note.bad')).includes('6 exam attempts'), 'student delete lists their attempts');
   await admin.fill('#delEmail', 'JUAN@student.edu');
   await admin.click('.dialog .btn.danger');
   ok(await toastSays(admin, 'was deleted'), 'student deleted');

@@ -407,6 +407,8 @@
     const sel = new Set(x ? x.question_ids : []);
     const order = x ? x.question_ids.slice() : [];
     const topicPick = {}; (x ? x.topic_counts : []).forEach((t) => { topicPick[t.topic] = t.count; });
+    const typePick = {}; ((x && x.options && x.options.typePicks) || []).forEach((t) => { typePick[t.type] = t.count; });
+    const TYPE_LONG = { MC: 'Multiple choice', TF: 'True/false', FIB: 'Fill in the blank', ESSAY: 'Essay' };
     const topics = [...new Set(qs.map((q) => q.topic).filter(Boolean))].sort();
     const v = (k, d) => (x && x[k] !== null && x[k] !== undefined ? x[k] : d);
     const opt = (val, cur, label) => `<option value="${val}"${val === cur ? ' selected' : ''}>${label}</option>`;
@@ -428,6 +430,7 @@
           <div class="field"><label for="ePick">Questions per student (0 = all selected)</label><input type="number" id="ePick" min="0" value="${v('pick_count', 0)}">
             <div class="hint">e.g. select 50 and enter 10: each student gets a different random 10.</div></div>
           <label>Or pick per topic <span class="muted">(replaces the number above)</span></label><div id="topicPicks" class="small muted"></div>
+          <label style="margin-top:10px">Or pick per question type <span class="muted">(e.g. 10 of 30 multiple choice and 5 of 12 true/false)</span></label><div id="typePicks" class="small muted"></div>
           <label class="check"><input type="checkbox" id="eShufQ"${v('shuffle_q', true) ? ' checked' : ''}> Shuffle question order</label>
           <label class="check"><input type="checkbox" id="eShufC"${v('shuffle_c', true) ? ' checked' : ''}> Shuffle multiple-choice options</label>
           <label class="check"><input type="checkbox" id="eScore"${v('show_score', true) ? ' checked' : ''}> Show score to students after submitting</label></fieldset>
@@ -481,8 +484,21 @@
       $$('[data-q]').forEach((c) => c.onchange = () => { toggle(c.dataset.q, c.checked); drawTopics(); drawSum(); });
       const ok = rows.filter((q) => !q.problems.length);
       $('#pAll').checked = ok.length > 0 && ok.every((q) => sel.has(q.id));
-      drawTopics(); drawSum();
+      drawTopics(); drawTypes(); drawSum();
     }
+    function drawTypes() {
+      const avail = {};
+      order.forEach((qid) => { const q = qs.find((y) => y.id === qid); if (q) avail[q.type] = (avail[q.type] || 0) + 1; });
+      const ts = ['MC', 'TF', 'FIB', 'ESSAY'].filter((t) => avail[t]);
+      $('#typePicks').innerHTML = ts.length ? `<table class="list"><thead><tr><th>Type</th><th>Selected</th><th>Each student gets</th></tr></thead><tbody>${ts.map((t) => `<tr><td>${TYPE_LONG[t]}</td><td>${avail[t]}</td>
+        <td><input type="number" min="0" max="${avail[t]}" style="width:80px" data-ptype="${t}" value="${typePick[t] || ''}" placeholder="0"></td></tr>`).join('')}</tbody></table>`
+        : 'Select questions to pick a number of each type.';
+      $$('[data-ptype]').forEach((i) => i.oninput = () => { const n = Math.max(0, Math.round(+i.value || 0)); if (n) typePick[i.dataset.ptype] = n; else delete typePick[i.dataset.ptype]; drawSum(); });
+    }
+    const activeTypes = () => {
+      const present = new Set(order.map((qid) => (qs.find((y) => y.id === qid) || {}).type).filter(Boolean));
+      return Object.keys(typePick).filter((t) => present.has(t) && typePick[t] > 0).map((t) => ({ type: t, count: typePick[t] }));
+    };
     function drawTopics() {
       const avail = {};
       order.forEach((qid) => { const q = qs.find((y) => y.id === qid); if (q && q.topic) avail[q.topic] = (avail[q.topic] || 0) + 1; });
@@ -499,12 +515,15 @@
     function drawSum() {
       const picked = order.map((qid) => qs.find((y) => y.id === qid)).filter(Boolean);
       const pts = picked.reduce((s, q) => s + q.points, 0);
-      const tps = activeTopics();
-      $('#ePick').disabled = tps.length > 0;
+      const tps = activeTopics(), tys = activeTypes();
+      $('#ePick').disabled = tps.length > 0 || tys.length > 0;
+      $$('[data-ptype]').forEach((i) => { i.disabled = tps.length > 0; });
+      $('#typePicks').title = tps.length ? 'Per-topic picking is on: clear those numbers to pick per type instead' : '';
       const pick = +$('#ePick').value || 0;
       $('#pSum').textContent = picked.length + ' selected — ' + pts + ' points' +
         (tps.length ? ' — each student gets ' + tps.reduce((s, t) => s + t.count, 0) + ' at random: ' + tps.map((t) => t.count + ' ' + t.topic).join(', ')
-          : pick > 0 && pick < picked.length ? ' — each student gets ' + pick + ' at random' : '');
+          : tys.length ? ' — each student gets ' + tys.reduce((s, t) => s + t.count, 0) + ' at random: ' + tys.map((t) => t.count + ' ' + TYPE_LONG[t.type].toLowerCase()).join(', ')
+            : pick > 0 && pick < picked.length ? ' — each student gets ' + pick + ' at random' : '');
     }
     function syncMode() {
       const one = $('#eMode').value === 'ONE', perQ = one && +$('#eQsec').value > 0;
@@ -528,7 +547,7 @@
       allowedDevices: $('#eDev').value, faceMode: $('#eFace').value, cameraPreview: $('#ePrev').checked,
       options: { focusWarnings: $('#oFocusWarn').value, blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
-        phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
+        typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
     });
     async function save() {
       const r = await api(x ? '/teacher/exams/' + x.id : '/teacher/exams', body());

@@ -29,7 +29,8 @@ const DEFAULT_OPTIONS = {
   submitGraceSeconds: 60,
   faceGraceSeconds: 3,
   cameraWarnings: 1,
-  focusWarnings: 0,        // tab/window switches allowed (each shows a warning) before the next one voids the exam       // camera problems allowed (each shows a warning) before the next one voids the exam
+  focusWarnings: 0,
+  typePicks: [],           // random picks per question type, e.g. [{ type: 'MC', count: 10 }, { type: 'TF', count: 5 }]        // tab/window switches allowed (each shows a warning) before the next one voids the exam       // camera problems allowed (each shows a warning) before the next one voids the exam
   phoneDetection: true,
   headDetection: true,     // a lowered head (writing, solving) counts as present, not 'no face'
   cameraSnapshots: true,   // save a small still picture when the camera flags something
@@ -50,6 +51,9 @@ function examOptions(raw) {
     faceGraceSeconds: num(o.faceGraceSeconds, 3, 1),
     cameraWarnings: Math.min(10, Math.round(num(o.cameraWarnings, 1, 0))),
     focusWarnings: Math.min(10, Math.round(num(o.focusWarnings, 0, 0))),
+    typePicks: (Array.isArray(o.typePicks) ? o.typePicks : [])
+      .map((t) => ({ type: String((t && t.type) || '').toUpperCase(), count: Math.round(Number(t && t.count) || 0) }))
+      .filter((t, i, a) => ['MC', 'TF', 'FIB', 'ESSAY'].includes(t.type) && t.count > 0 && a.findIndex((u) => u.type === t.type) === i),
     phoneDetection: o.phoneDetection !== false,
     headDetection: o.headDetection !== false,
     cameraSnapshots: o.cameraSnapshots !== false,
@@ -92,6 +96,7 @@ function examConfig(row) {
     allowedDevices: ['TABLET', 'ANY'].includes(row.allowed_devices) ? row.allowed_devices : 'COMPUTER',
     password: row.password || '',
     options: examOptions(row.options),
+    get typePicks() { return this.topicCounts.length ? [] : this.options.typePicks; },
     published: !!row.published,
   };
 }
@@ -221,6 +226,12 @@ function attemptQuestions(exam, pool, attemptId) {
       seededShuffle(inTopic, attemptId + ':pick:' + normTopic(tc.topic)).slice(0, tc.count).forEach((q) => picked.add(q.id));
     });
     qs = pool.filter((q) => picked.has(q.id));
+  } else if (exam.typePicks && exam.typePicks.length) {
+    const picked = new Set();
+    exam.typePicks.forEach((tp) => {
+      seededShuffle(pool.filter((q) => q.type === tp.type), attemptId + ':pick:' + tp.type).slice(0, tp.count).forEach((q) => picked.add(q.id));
+    });
+    qs = pool.filter((q) => picked.has(q.id));
   } else if (exam.pickCount > 0 && exam.pickCount < pool.length) {
     const picked = new Set(seededShuffle(pool, attemptId + ':pick').slice(0, exam.pickCount).map((q) => q.id));
     qs = pool.filter((q) => picked.has(q.id));
@@ -244,6 +255,20 @@ function setSummary(exam, pool) {
       return { topic: tc.topic, count: n, available: inTopic.length };
     });
     return { count, poolSize: pool.length, totalPoints: fixed ? points : null, typeCounts: null, topicBreakdown: breakdown };
+  }
+  if (exam.typePicks && exam.typePicks.length) {
+    let count = 0, points = 0, fixed = true;
+    const typeCounts = {};
+    exam.typePicks.forEach((tp) => {
+      const ofType = pool.filter((q) => q.type === tp.type);
+      const n = Math.min(tp.count, ofType.length);
+      if (!n) return;
+      count += n; typeCounts[tp.type] = n;
+      if (n === ofType.length) points += sum(ofType.map((q) => q.points));
+      else if (samePoints(ofType)) points += n * ofType[0].points;
+      else fixed = false;
+    });
+    return { count, poolSize: pool.length, totalPoints: fixed ? points : null, typeCounts, topicBreakdown: null };
   }
   if (exam.pickCount > 0 && exam.pickCount < pool.length) {
     return { count: exam.pickCount, poolSize: pool.length, totalPoints: samePoints(pool) ? exam.pickCount * pool[0].points : null, typeCounts: null, topicBreakdown: null };

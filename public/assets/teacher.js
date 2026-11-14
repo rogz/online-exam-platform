@@ -384,13 +384,17 @@
   async function viewExams() {
     const r = await api('/teacher/exams');
     view.innerHTML = `<div class="panel"><div class="hd"><h2>Exams</h2><a class="btn primary" href="#exam/new">+ New exam</a></div>
-      <div class="tablewrap"><table class="list"><thead><tr><th>Exam</th><th>Class</th><th>Opens</th><th>Closes</th><th>Status</th><th>Submitted</th><th></th></tr></thead><tbody>
-      ${r.exams.length ? r.exams.map((x) => `<tr><td><b>${esc(x.title)}</b><div class="small muted">${x.question_count} question${x.question_count === 1 ? '' : 's'}${x.time_limit_min ? ' · ' + x.time_limit_min + ' min' : ''}</div></td>
-        <td>${esc(x.class_name)}${x.class_section ? '<div class="small muted">' + esc(x.class_section) + '</div>' : ''}</td>
-        <td class="nowrap small">${esc(App.fmtDate(x.start_at)) || 'Now'}</td><td class="nowrap small">${esc(App.fmtDate(x.end_at)) || '—'}</td>
-        <td>${examStatus(x)}</td><td class="num">${x.submitted_count}${x.attempt_count > x.submitted_count ? ' <span class="muted small">(+' + (x.attempt_count - x.submitted_count) + ')</span>' : ''}</td>
-        <td class="nowrap"><a class="btn small" href="#exam/${x.id}">Edit</a> <button type="button" class="btn small" data-copylink="${x.id}" title="Copy the link students open to take this exam (e.g. for Google Classroom)">Copy link</button> <a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a> <a class="btn small" href="#results/${x.id}">Results</a></td></tr>`).join('')
-      : '<tr><td colspan="7"><div class="empty">No exams yet. Add questions to your bank, then create an exam.</div></td></tr>'}</tbody></table></div></div>`;
+      <div class="tablewrap"><table class="list exams"><thead><tr><th>Exam</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>
+      ${r.exams.length ? r.exams.map((x) => `<tr>
+        <td data-label="Exam"><a href="#exam/${x.id}" class="examname"><b>${esc(x.title)}</b></a>
+          <div class="small">${esc(x.class_name)}${x.class_section ? ' <span class="muted">— ' + esc(x.class_section) + '</span>' : ''}</div>
+          <div class="small muted">${x.question_count} question${x.question_count === 1 ? '' : 's'}${x.time_limit_min ? ' · ' + x.time_limit_min + ' min' : ''}</div></td>
+        <td data-label="When" class="small"><div class="nowrap"><span class="muted">Opens</span> ${esc(App.fmtDate(x.start_at)) || 'now'}</div>
+          <div class="nowrap"><span class="muted">Closes</span> ${esc(App.fmtDate(x.end_at)) || '—'}</div></td>
+        <td data-label="Status">${examStatus(x)}<div class="small" style="margin-top:4px"><b>${x.submitted_count}</b> submitted${x.attempt_count > x.submitted_count ? '<span class="muted"> · ' + (x.attempt_count - x.submitted_count) + ' not finished</span>' : ''}</div></td>
+        <td class="actions"><div class="actgrid"><a class="btn small primary" href="#results/${x.id}">Results</a><a class="btn small" href="#exam/${x.id}">Edit</a>
+          <button type="button" class="btn small" data-copylink="${x.id}" title="Copy the link students open to take this exam (e.g. for Google Classroom)">Copy link</button><a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a></div></td></tr>`).join('')
+      : '<tr><td colspan="4"><div class="empty">No exams yet. Add questions to your bank, then create an exam.</div></td></tr>'}</tbody></table></div></div>`;
     $$('[data-copylink]').forEach((btn) => { btn.onclick = () => App.copyText(location.origin + '/exam?id=' + btn.dataset.copylink); });
   }
 

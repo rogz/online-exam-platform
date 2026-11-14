@@ -30,6 +30,8 @@
   }
   const minutes = (m) => (m >= 60 ? (Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + Math.round(m % 60) + ' min' : '')) : Math.round(m * 10) / 10 + ' min');
 
+  try { const w = sessionStorage.getItem('welcome'); if (w) { setTimeout(() => App.toast(w), 400); sessionStorage.removeItem('welcome'); } } catch (e) { /* ignore */ }
+
   async function load() {
     try {
       data = await api('/student/dashboard');

@@ -61,14 +61,15 @@
     const card = (c) => `<div class="classcard"><div><h3>${esc(c.name)}${c.section ? ' <span class="muted">— ' + esc(c.section) + '</span>' : ''}</h3>
         <div class="small muted">${c.student_count} student${c.student_count === 1 ? '' : 's'} · ${c.exam_count} exam${c.exam_count === 1 ? '' : 's'}${c.archived ? ' · archived' : ''}</div>
         <div class="row" style="margin-top:8px"><span class="small muted">Class code</span> <span class="code-box" style="font-size:16px;padding:4px 10px">${esc(c.join_code)}</span>
-          <button type="button" class="btn small" data-copy="${esc(c.join_code)}">Copy</button></div></div>
+          <button type="button" class="btn small" data-copy="${esc(c.join_code)}">Copy code</button>
+          <button type="button" class="btn small" data-copy="${esc(location.origin + '/join/' + c.join_code)}" title="Post this link (e.g. in Google Classroom): students who open it join this class">Copy join link</button></div></div>
       <div class="row"><button type="button" class="btn small" data-students="${c.id}">Students</button>
         <button type="button" class="btn small" data-edit="${c.id}">Edit</button></div></div>`;
     view.innerHTML = `<div class="stack">
       <div class="panel"><div class="hd"><h2>Classes</h2><button type="button" class="btn primary" id="newClass">+ New class</button></div>
         <div>${active.length ? active.map(card).join('') : '<div class="empty">No classes yet. Create one, then give students its <b>class code</b> so they can join.</div>'}</div></div>
       ${archived.length ? '<div class="panel"><div class="hd"><h3>Archived</h3></div><div>' + archived.map(card).join('') + '</div></div>' : ''}
-      <div class="note info">Students sign up for free, then click <b>Join a class</b> and type the class code. All their exams then appear in one list.</div></div>`;
+      <div class="note info">Students sign up for free, then click <b>Join a class</b> and type the class code, or simply open the class's <b>join link</b> (great for Google Classroom). All their exams then appear in one list.</div></div>`;
     $('#newClass').onclick = () => classDialog();
     $$('[data-copy]').forEach((b) => b.onclick = () => App.copyText(b.dataset.copy));
     $$('[data-edit]').forEach((b) => b.onclick = () => classDialog(classes.find((c) => c.id === b.dataset.edit)));
@@ -388,8 +389,9 @@
         <td>${esc(x.class_name)}${x.class_section ? '<div class="small muted">' + esc(x.class_section) + '</div>' : ''}</td>
         <td class="nowrap small">${esc(App.fmtDate(x.start_at)) || 'Now'}</td><td class="nowrap small">${esc(App.fmtDate(x.end_at)) || '—'}</td>
         <td>${examStatus(x)}</td><td class="num">${x.submitted_count}${x.attempt_count > x.submitted_count ? ' <span class="muted small">(+' + (x.attempt_count - x.submitted_count) + ')</span>' : ''}</td>
-        <td class="nowrap"><a class="btn small" href="#exam/${x.id}">Edit</a> <a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a> <a class="btn small" href="#results/${x.id}">Results</a></td></tr>`).join('')
+        <td class="nowrap"><a class="btn small" href="#exam/${x.id}">Edit</a> <button type="button" class="btn small" data-copylink="${x.id}" title="Copy the link students open to take this exam (e.g. for Google Classroom)">Copy link</button> <a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a> <a class="btn small" href="#results/${x.id}">Results</a></td></tr>`).join('')
       : '<tr><td colspan="7"><div class="empty">No exams yet. Add questions to your bank, then create an exam.</div></td></tr>'}</tbody></table></div></div>`;
+    $$('[data-copylink]').forEach((btn) => { btn.onclick = () => App.copyText(location.origin + '/exam?id=' + btn.dataset.copylink); });
   }
 
   // ───────── Exam editor ─────────
@@ -410,7 +412,7 @@
     const opt = (val, cur, label) => `<option value="${val}"${val === cur ? ' selected' : ''}>${label}</option>`;
 
     view.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><h1 style="margin:0">${x ? 'Edit exam' : 'New exam'}</h1>
-      <div class="row">${x ? `<button type="button" class="btn primary" id="previewBtn" title="Save, then try the exam as a student would">👁 Preview</button><a class="btn" href="#results/${x.id}">Results</a><button type="button" class="btn" id="dupBtn">Duplicate</button><button type="button" class="btn danger" id="delBtn">Delete</button>` : ''}</div></div>
+      <div class="row">${x ? `<button type="button" class="btn primary" id="previewBtn" title="Save, then try the exam as a student would">👁 Preview</button><button type="button" class="btn" id="copyExamLink" title="Copy the link students open to take this exam (e.g. for Google Classroom)">🔗 Copy link</button><a class="btn" href="#results/${x.id}">Results</a><button type="button" class="btn" id="dupBtn">Duplicate</button><button type="button" class="btn danger" id="delBtn">Delete</button>` : ''}</div></div>
       ${x ? `<div class="note ${x.published ? 'ok' : 'info'}" style="margin-bottom:12px">${x.published ? 'Published: students in the class can see this exam.' : 'Draft: students cannot see this exam until you publish it.'}</div>` : ''}
       <div class="editor"><div class="panel"><div class="bd">
         <div class="field"><label for="eClass">Class</label><select id="eClass">${classes.filter((c) => !c.archived || (x && x.class_id === c.id)).map((c) => opt(c.id, v('class_id', ''), esc(c.name + (c.section ? ' — ' + c.section : '')))).join('')}</select></div>
@@ -532,6 +534,7 @@
       const r = await api(x ? '/teacher/exams/' + x.id : '/teacher/exams', body());
       return r.exam;
     }
+    if ($('#copyExamLink')) $('#copyExamLink').onclick = () => App.copyText(location.origin + '/exam?id=' + x.id);
     if ($('#previewBtn')) $('#previewBtn').onclick = async () => {
       const w = window.open('about:blank', '_blank');
       try {

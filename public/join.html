@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Join a class — {site}</title>
+<link rel="stylesheet" href="/assets/theme.css">
+</head>
+<body>
+<main style="max-width:480px;margin:40px auto;padding:0 16px">
+  <div class="panel"><div class="hd"><h2>Join a class</h2></div><div class="bd" id="joinBox"><div class="empty">Joining…</div></div></div>
+</main>
+<script src="/assets/common.js"></script>
+<script>
+// Class join link (e.g. posted in Google Classroom): /join/ABC123
+(async function () {
+  const { $, api, esc } = App;
+  const code = decodeURIComponent(location.pathname.split('/')[2] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const box = $('#joinBox');
+  const me = await api('/auth/me', undefined, { allowSignedOut: true });
+  App.renderTopbar(me.user, me.site, me.user ? [{ href: App.homeFor(me.user), label: 'Back' }] : []);
+  if (!me.user) { location.replace('/?next=' + encodeURIComponent('/join/' + code)); return; }
+  if (me.user.role !== 'student') {
+    box.innerHTML = `<p style="margin-top:0">This link lets <b>students</b> join a class (code <span class="code-box" style="font-size:15px;padding:2px 8px">${esc(code)}</span>).</p>
+      <p>You're signed in as a ${esc(me.user.role)}. To try it as a student, sign out first or use a private window.</p>`;
+    return;
+  }
+  try {
+    const r = await api('/student/join', { code });
+    try { sessionStorage.setItem('welcome', 'You joined ' + r.class.name + (r.class.section ? ' — ' + r.class.section : '') + '. Its exams are in your list.'); } catch (e) { /* ignore */ }
+    location.replace('/student');
+  } catch (e) {
+    box.innerHTML = `<div class="note bad">${esc(e.message)}</div><p><a class="btn" href="/student">Go to My Exams</a></p>`;
+  }
+})();
+</script>
+</body>
+</html>

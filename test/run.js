@@ -581,6 +581,24 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const testMail = await admin.evaluate(async () => (await (await fetch('/api/admin/test-email', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()));
   ok(testMail.ok && outbox[outbox.length - 1].to === 'admin@test.local', 'admin can send a test email');
 
+  // ── Links for Google Classroom: class join link and exam link ──
+  await teacher.goto(BASE + '/teacher#classes'); await teacher.waitForSelector('.classcard');
+  const joinLink = await teacher.getAttribute('.classcard [data-copy*="/join/"]', 'data-copy');
+  ok(/\/join\/[A-Z0-9]{6}$/.test(joinLink), 'class card has a "Copy join link" button (' + joinLink.replace(BASE, '') + ')');
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector('[data-copylink]');
+  ok(await teacher.isVisible('[data-copylink]'), 'exam list has a "Copy link" button');
+  const newbie = await newUser();
+  await newbie.goto(joinLink);
+  await newbie.waitForURL(/\?next=/);
+  ok(await newbie.isVisible('.note:has-text("Joining a class?")'), 'join link asks a signed-out student to sign in or create an account');
+  await newbie.click('#tabUp');
+  await newbie.fill('#upName', 'Nina Reyes'); await newbie.fill('#upEmail', 'nina@student.edu'); await newbie.fill('#upPass', 'student-pass-7');
+  await newbie.click('#signUp button[type=submit]');
+  await newbie.waitForURL(/\/student/);
+  ok(await toastSays(newbie, 'You joined'), 'after signing up, the student is in the class (from the join link)');
+  const ninaIn = await dbOne(`SELECT count(*)::int AS n FROM enrollments e JOIN users u ON u.id = e.student_id WHERE u.email = 'nina@student.edu'`);
+  ok(ninaIn.n === 1, 'enrollment saved');
+
   // ── Security checks ──
   const r1 = await student.evaluate(async () => (await fetch('/api/teacher/questions')).status);
   ok(r1 === 403, 'students cannot reach teacher pages (403)');

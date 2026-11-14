@@ -243,6 +243,12 @@
   const me = await api('/auth/me', undefined, { allowSignedOut: true });
   if (me.user) return go(me.user);
   resetByEmail = !!me.site.passwordEmail;
+  if (next && next.startsWith('/join/')) {
+    const n = document.createElement('div');
+    n.className = 'note info'; n.style.marginBottom = '12px';
+    n.innerHTML = '<b>Joining a class?</b> Sign in, or click <b>Create account</b> (free for students). You will be added to the class right after.';
+    $('#signIn').parentNode.insertBefore(n, $('#signIn'));
+  }
   App.renderTopbar(null, me.site, []);
   $('#footName').textContent = '© ' + new Date().getFullYear() + ' ' + me.site.name;
 

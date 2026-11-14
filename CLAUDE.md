@@ -4,6 +4,9 @@ Online exam website: teachers build question banks and exams; students join clas
 integrity checks (tab/window switching, second monitor, camera with phone detection, device checks).
 Live at the owner's domain on their own Ubuntu server (shared with other sites, behind nginx), database on Neon (PostgreSQL).
 
+**Read [`docs/overview.md`](docs/overview.md) first**: all features, settings, decisions, hosting and open ideas.
+When a feature is added or a decision is made, update that file in the same commit.
+
 ## Writing quiz questions
 When asked to write quiz/exam questions, output a CSV in the format in
 [`docs/question-format.md`](docs/question-format.md) (columns `QuestionID,Type,Question,Choices,Answer,Points,Topic,Folder`,

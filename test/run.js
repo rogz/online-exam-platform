@@ -563,6 +563,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await pwUser.fill('#upName', 'Lea Cruz'); await pwUser.fill('#upEmail', 'lea@student.edu'); await pwUser.fill('#upPass', 'student-pass-9');
   await pwUser.click('#signUp button[type=submit]'); await pwUser.waitForURL(/\/student/);
   await pwUser.evaluate(() => fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } }));
+  await pwUser.goto(BASE + '/'); await pwUser.waitForSelector('#signIn');
   for (let i = 0; i < 10; i++) await pwUser.evaluate((i) => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ email: 'lea@student.edu', password: 'guess-' + i }) }), i);
   const leaId = (await dbOne(`SELECT id FROM users WHERE email = 'lea@student.edu'`)).id;
   const leaTemp = await admin.evaluate(async (id) => (await (await fetch('/api/admin/users/' + id + '/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()).tempPassword, leaId);
@@ -600,6 +601,26 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(reuse === 'BAD_LINK', 'a reset link works only once');
   const testMail = await admin.evaluate(async () => (await (await fetch('/api/admin/test-email', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()));
   ok(testMail.ok && outbox[outbox.length - 1].to === 'admin@test.local', 'admin can send a test email');
+
+  // ── Archive: exams (teacher's list only) and classes (hidden from students) ──
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector('#activeExams [data-archive]');
+  const activeBefore = await teacher.$$eval('#activeExams tbody tr', (r) => r.length);
+  await teacher.click('#activeExams [data-archive]');
+  if (await teacher.isVisible('.dialog .btn.primary').catch(() => false)) await teacher.click('.dialog .btn.primary');
+  ok(await toastSays(teacher, 'Moved to Archived'), 'an exam can be archived');
+  await teacher.waitForSelector('#archivedPanel:not([hidden])');
+  ok((await teacher.$$eval('#activeExams tbody tr', (r) => r.length)) === activeBefore - 1 && (await teacher.$$eval('#archivedExams tbody tr', (r) => r.length)) === 1, 'archived exam moves to the Archived list');
+  await teacher.click('#archivedPanel > summary'); await teacher.click('#archivedExams [data-restore]');
+  ok(await toastSays(teacher, 'Moved back to Exams'), 'an archived exam can be restored');
+  await teacher.waitForFunction((n) => document.querySelectorAll('#activeExams tbody tr').length === n, activeBefore);
+  await teacher.goto(BASE + '/teacher#classes'); await teacher.waitForSelector('[data-carchive][data-to="1"]');
+  await teacher.click('[data-carchive][data-to="1"]'); await teacher.click('.dialog .btn.primary');
+  ok(await toastSays(teacher, 'Class archived'), 'a class can be archived');
+  const hidden = await student.evaluate(async () => (await (await fetch('/api/student/dashboard')).json()).exams.length);
+  await teacher.click('.archivepanel > summary'); await teacher.click('[data-carchive][data-to="0"]');
+  ok(await toastSays(teacher, 'Class restored'), 'an archived class can be restored');
+  const shown = await student.evaluate(async () => (await (await fetch('/api/student/dashboard')).json()).exams.length);
+  ok(hidden === 0 && shown > 0, 'students don\'t see an archived class\'s exams, and see them again after restoring (' + hidden + ' → ' + shown + ')');
 
   // ── Links for Google Classroom: class join link and exam link ──
   await teacher.goto(BASE + '/teacher#classes'); await teacher.waitForSelector('.classcard');

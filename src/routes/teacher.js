@@ -474,7 +474,7 @@ router.get('/exams', async (req, res) => {
   res.json({ ok: true, exams: await db.many(
     `SELECT x.id, x.title, x.class_id, c.name AS class_name, c.section AS class_section, x.start_at, x.end_at, x.time_limit_min,
             jsonb_array_length(x.question_ids) AS question_count, x.pick_count, x.topic_counts, x.published, x.face_mode, x.display_mode,
-            x.allowed_devices, x.updated_at,
+            x.allowed_devices, x.updated_at, x.archived,
             (SELECT count(*) FROM attempts a WHERE a.exam_id = x.id)::int AS attempt_count,
             (SELECT count(*) FROM attempts a WHERE a.exam_id = x.id AND a.status = 'SUBMITTED')::int AS submitted_count
        FROM exams x JOIN classes c ON c.id = x.class_id WHERE x.teacher_id = $1 ORDER BY x.created_at DESC`, [req.user.id]) });
@@ -494,9 +494,19 @@ router.post('/exams', async (req, res) => {
   res.json({ ok: true, exam: row });
 });
 
+// Archive every exam that has closed (end time passed), in one click.
+router.post('/exams-archive-closed', async (req, res) => {
+  const r = await db.many('UPDATE exams SET archived = true WHERE teacher_id = $1 AND NOT archived AND end_at IS NOT NULL AND end_at < now() RETURNING id', [req.user.id]);
+  res.json({ ok: true, archived: r.length });
+});
+
 router.post('/exams/:id', async (req, res) => {
   const x = await mine('exams', req.params.id, req.user.id, 'Exam');
   const b = req.body || {};
+  if (typeof b.archive === 'boolean' && Object.keys(b).length === 1) {
+    await db.query('UPDATE exams SET archived = $1 WHERE id = $2', [b.archive, x.id]);
+    return res.json({ ok: true, archived: b.archive });
+  }
   if (b.delete) {
     const n = await db.one('SELECT count(*)::int AS n FROM attempts WHERE exam_id = $1', [x.id]);
     if (n.n && !b.confirmDeleteResults) throw fail(409, 'HAS_RESULTS', 'This exam has ' + n.n + ' attempt(s). Deleting it also deletes those results.');

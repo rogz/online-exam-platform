@@ -64,15 +64,22 @@
           <button type="button" class="btn small" data-copy="${esc(c.join_code)}">Copy code</button>
           <button type="button" class="btn small" data-copy="${esc(location.origin + '/join/' + c.join_code)}" title="Post this link (e.g. in Google Classroom): students who open it join this class">Copy join link</button></div></div>
       <div class="row"><button type="button" class="btn small" data-students="${c.id}">Students</button>
-        <button type="button" class="btn small" data-edit="${c.id}">Edit</button></div></div>`;
+        <button type="button" class="btn small" data-edit="${c.id}">Edit</button>
+        ${c.archived ? `<button type="button" class="btn small primary" data-carchive="${c.id}" data-to="0">Restore</button>` : `<button type="button" class="btn small ghost" data-carchive="${c.id}" data-to="1" title="Hide this class from students (e.g. at the end of the semester)">Archive</button>`}</div></div>`;
     view.innerHTML = `<div class="stack">
       <div class="panel"><div class="hd"><h2>Classes</h2><button type="button" class="btn primary" id="newClass">+ New class</button></div>
         <div>${active.length ? active.map(card).join('') : '<div class="empty">No classes yet. Create one, then give students its <b>class code</b> so they can join.</div>'}</div></div>
-      ${archived.length ? '<div class="panel"><div class="hd"><h3>Archived</h3></div><div>' + archived.map(card).join('') + '</div></div>' : ''}
+      ${archived.length ? '<details class="panel archivepanel"><summary class="hd"><h3>Archived <span class="muted small">(' + archived.length + ')</span></h3><span class="small muted">Hidden from students. Restore a class to use it again.</span></summary><div>' + archived.map(card).join('') + '</div></details>' : ''}
       <div class="note info">Students sign up for free, then click <b>Join a class</b> and type the class code, or simply open the class's <b>join link</b> (great for Google Classroom). All their exams then appear in one list.</div></div>`;
     $('#newClass').onclick = () => classDialog();
     $$('[data-copy]').forEach((b) => b.onclick = () => App.copyText(b.dataset.copy));
     $$('[data-edit]').forEach((b) => b.onclick = () => classDialog(classes.find((c) => c.id === b.dataset.edit)));
+    $$('[data-carchive]').forEach((b) => b.onclick = async () => {
+      const c = classes.find((x) => x.id === b.dataset.carchive), to = b.dataset.to === '1';
+      if (to && !(await App.confirmBox('Archive ' + c.name + '?', 'Students will no longer see this class or its exams, and its class code stops working. Results are kept. You can restore it any time.', 'Archive'))) return;
+      await api('/teacher/classes/' + c.id, { archived: to }); cache.classes = null;
+      toast(to ? 'Class archived' : 'Class restored'); viewClasses();
+    });
     $$('[data-students]').forEach((b) => b.onclick = () => studentsDialog(classes.find((c) => c.id === b.dataset.students)));
   }
 
@@ -383,19 +390,37 @@
   }
   async function viewExams() {
     const r = await api('/teacher/exams');
-    view.innerHTML = `<div class="panel"><div class="hd"><h2>Exams</h2><a class="btn primary" href="#exam/new">+ New exam</a></div>
-      <div class="tablewrap"><table class="list exams"><thead><tr><th>Exam</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>
-      ${r.exams.length ? r.exams.map((x) => `<tr>
+    const active = r.exams.filter((x) => !x.archived), archived = r.exams.filter((x) => x.archived);
+    const closed = active.filter((x) => x.end_at && new Date(x.end_at) < Date.now());
+    const row = (x) => `<tr>
         <td data-label="Exam"><a href="#exam/${x.id}" class="examname"><b>${esc(x.title)}</b></a>
           <div class="small">${esc(x.class_name)}${x.class_section ? ' <span class="muted">— ' + esc(x.class_section) + '</span>' : ''}</div>
           <div class="small muted">${x.question_count} question${x.question_count === 1 ? '' : 's'}${x.time_limit_min ? ' · ' + x.time_limit_min + ' min' : ''}</div></td>
         <td data-label="When" class="small"><div class="nowrap"><span class="muted">Opens</span> ${esc(App.fmtDate(x.start_at)) || 'now'}</div>
           <div class="nowrap"><span class="muted">Closes</span> ${esc(App.fmtDate(x.end_at)) || '—'}</div></td>
         <td data-label="Status">${examStatus(x)}<div class="small" style="margin-top:4px"><b>${x.submitted_count}</b> submitted${x.attempt_count > x.submitted_count ? '<span class="muted"> · ' + (x.attempt_count - x.submitted_count) + ' not finished</span>' : ''}</div></td>
-        <td class="actions"><div class="actgrid"><a class="btn small primary" href="#results/${x.id}">Results</a><a class="btn small" href="#exam/${x.id}">Edit</a>
-          <button type="button" class="btn small" data-copylink="${x.id}" title="Copy the link students open to take this exam (e.g. for Google Classroom)">Copy link</button><a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a></div></td></tr>`).join('')
-      : '<tr><td colspan="4"><div class="empty">No exams yet. Add questions to your bank, then create an exam.</div></td></tr>'}</tbody></table></div></div>`;
+        <td class="actions"><div class="actgrid"><a class="btn small primary" href="#results/${x.id}">Results</a>${x.archived
+          ? `<button type="button" class="btn small" data-restore="${x.id}" title="Move back to the active list">Restore</button><a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a><a class="btn small" href="#exam/${x.id}">Edit</a>`
+          : `<a class="btn small" href="#exam/${x.id}">Edit</a><button type="button" class="btn small" data-copylink="${x.id}" title="Copy the link students open to take this exam (e.g. for Google Classroom)">Copy link</button><a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a>
+             <button type="button" class="btn small ghost span2" data-archive="${x.id}" data-open="${x.published && !(x.end_at && new Date(x.end_at) < Date.now()) ? 1 : 0}" title="Move to the Archived list (nothing is deleted)">Archive</button>`}</div></td></tr>`;
+    const table = (list, empty, id) => `<div class="tablewrap examscroll" id="${id}"><table class="list exams"><thead><tr><th>Exam</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>
+      ${list.length ? list.map(row).join('') : '<tr><td colspan="4"><div class="empty">' + empty + '</div></td></tr>'}</tbody></table></div>`;
+    view.innerHTML = `<div class="stack"><div class="panel"><div class="hd"><h2>Exams <span class="muted small">(${active.length})</span></h2>
+        <div class="toolbar">${closed.length ? `<button type="button" class="btn" id="archiveClosed" title="Move every exam that has closed to the Archived list">Archive closed exams (${closed.length})</button>` : ''}<a class="btn primary" href="#exam/new">+ New exam</a></div></div>
+      ${table(active, archived.length ? 'No active exams. Create one, or restore one from the Archived list below.' : 'No exams yet. Add questions to your bank, then create an exam.', 'activeExams')}</div>
+      <details class="panel archivepanel" id="archivedPanel"${archived.length ? '' : ' hidden'}><summary class="hd"><h3>Archived <span class="muted small">(${archived.length})</span></h3><span class="small muted">Past exams you put away. Results are kept; students still see their own scores.</span></summary>
+      ${table(archived, 'Nothing archived.', 'archivedExams')}</details></div>`;
     $$('[data-copylink]').forEach((btn) => { btn.onclick = () => App.copyText(location.origin + '/exam?id=' + btn.dataset.copylink); });
+    $$('[data-archive]').forEach((btn) => { btn.onclick = async () => {
+      if (btn.dataset.open === '1' && !(await App.confirmBox('Archive an open exam?', 'This exam is still open or scheduled. Students can still take it; it only moves to your Archived list.', 'Archive'))) return;
+      await api('/teacher/exams/' + btn.dataset.archive, { archive: true }); toast('Moved to Archived'); viewExams();
+    }; });
+    $$('[data-restore]').forEach((btn) => { btn.onclick = async () => { await api('/teacher/exams/' + btn.dataset.restore, { archive: false }); toast('Moved back to Exams'); viewExams(); }; });
+    if ($('#archiveClosed')) $('#archiveClosed').onclick = async () => {
+      const n = closed.length;
+      if (!(await App.confirmBox('Archive closed exams?', 'Move ' + n + ' closed exam' + (n === 1 ? '' : 's') + ' to the Archived list? Nothing is deleted, and you can restore them any time.', 'Archive'))) return;
+      const res = await api('/teacher/exams-archive-closed', {}); toast(res.archived + ' exam' + (res.archived === 1 ? '' : 's') + ' archived'); viewExams();
+    };
   }
 
   // ───────── Exam editor ─────────

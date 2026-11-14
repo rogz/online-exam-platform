@@ -253,3 +253,6 @@ CREATE TABLE IF NOT EXISTS password_resets (
   used_at     timestamptz,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- Archived exams are moved to the teacher's Archived list (students still see their own past results).
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;

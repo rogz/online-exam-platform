@@ -220,3 +220,15 @@ table.exams .actgrid .btn { text-align: center; white-space: nowrap; }
   table.exams td.actions { width: 100%; }
   table.exams .actgrid { grid-template-columns: repeat(4, auto); justify-content: start; }
 }
+
+/* Exams: scroll when the list is long; archived list below */
+.examscroll { max-height: 560px; overflow-y: auto; }
+.examscroll thead th { position: sticky; top: 0; z-index: 1; }
+table.exams .actgrid .span2 { grid-column: 1 / -1; }
+.btn.ghost { background: transparent; border-color: var(--line-soft); color: var(--muted); }
+.btn.ghost:hover { color: var(--text); border-color: var(--line); }
+.archivepanel > summary { cursor: pointer; list-style: none; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.archivepanel > summary::-webkit-details-marker { display: none; }
+.archivepanel > summary h3::before { content: '▸ '; color: var(--muted); }
+.archivepanel[open] > summary h3::before { content: '▾ '; }
+@media (max-width: 760px) { table.exams .actgrid .span2 { grid-column: auto; } .examscroll { max-height: none; } }

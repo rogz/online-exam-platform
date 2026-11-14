@@ -240,3 +240,16 @@ CREATE INDEX IF NOT EXISTS attempt_snapshots_attempt ON attempt_snapshots (attem
 
 -- Tab/window switch warnings used in this attempt (the exam's focusWarnings option sets how many are allowed).
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS focus_warnings integer NOT NULL DEFAULT 0;
+
+-- Temporary passwords from an admin: the user must choose a new password after signing in.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
+
+-- "Forgot password" email links (only a hash of the link's secret is stored; each link works once, for 1 hour).
+CREATE TABLE IF NOT EXISTS password_resets (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  text NOT NULL UNIQUE,
+  expires_at  timestamptz NOT NULL,
+  used_at     timestamptz,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);

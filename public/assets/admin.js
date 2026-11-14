@@ -218,6 +218,9 @@
         <div class="field"><label for="sPay">Instructions shown to teachers</label><textarea id="sPay" rows="3">${esc(s.paymentInstructions)}</textarea>
           <div class="hint">To hide your GCash number, remove it from this text and upload your GCash QR code instead.</div></div>
         ${qrField('other', s.otherQr)}</div>
+      <h3 class="settings-h">Email (forgot password)</h3>
+      <div class="paymethod"><div id="sEmailStatus" class="note small info">Checking…</div>
+        <button type="button" class="btn small" id="sTestEmail" style="margin-top:8px">Send me a test email</button></div>
       <h3 class="settings-h">Support</h3>
       <div class="field"><label for="sSupport">Support contact <span class="muted">(optional)</span></label><input type="text" id="sSupport" value="${esc(s.supportContact)}" placeholder="e.g. Email support@abnjworks.com"></div>
       <button type="button" class="btn primary" id="sSave">Save settings</button></div></div>`;
@@ -229,7 +232,14 @@
     $$('[data-qrdel]').forEach((b) => { b.onclick = async () => {
       await api('/admin/payment-qr', { method: b.dataset.qrdel, remove: true }); toast('QR code removed'); settings();
     }; });
+    $('#sTestEmail').onclick = async () => {
+      try { const r = await api('/admin/test-email', {}); toast('Test email sent to ' + r.to + '. Check the inbox (and Spam).'); } catch (e) { toast(e.message, true); }
+    };
     api('/admin/payments').then((x) => {
+      const e = $('#sEmailStatus');
+      if (e) { e.className = 'note small ' + (x.email ? 'ok' : 'info'); e.innerHTML = x.email
+        ? '✓ <b>Email is on.</b> "Forgot your password?" on the sign-in page sends a reset link.'
+        : 'Email is off: "Forgot your password?" tells people to ask you. To turn it on, add the SMTP settings to the server (see the README, "Email").'; }
       const n = $('#sPpStatus'); if (!n) return;
       n.className = 'note small ' + (x.paypalCheckout ? 'ok' : 'info');
       n.innerHTML = x.paypalCheckout

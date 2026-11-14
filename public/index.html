@@ -101,7 +101,7 @@
           <div class="field"><label for="inPass">Password</label><input type="password" id="inPass" autocomplete="current-password" required></div>
           <div id="inMsg" class="note bad" hidden></div>
           <div class="row" style="margin-top:12px"><button class="btn primary big" type="submit">Sign in</button></div>
-          <p class="hint" style="margin-top:12px">Forgot your password? Ask your teacher or the site administrator to reset it.</p>
+          <p class="hint" style="margin-top:12px"><a href="#" id="forgotLink">Forgot your password?</a></p>
         </form>
 
         <form id="signUp" novalidate hidden>
@@ -198,9 +198,26 @@
 <script src="/assets/common.js"></script>
 <script>
 (async function () {
-  const { $, api } = App;
+  const { $, $$, api } = App;
   const next = new URLSearchParams(location.search).get('next');
   const go = (u) => { location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : App.homeFor(u); };
+  let resetByEmail = false; // set once the site settings are known
+  $('#forgotLink').onclick = (ev) => {
+    ev.preventDefault();
+    if (!resetByEmail) {
+      App.dialog('Forgot your password?', '<p style="margin-top:0">Ask your teacher or the site administrator to reset it. They will give you a temporary password; after signing in with it, you choose your own.</p>', { buttons: [{ label: 'OK', primary: true }] });
+      return;
+    }
+    App.dialog('Forgot your password?', `<p style="margin-top:0">Enter the email you signed up with. We'll send you a link to choose a new password.</p>
+      <div class="field"><label for="fpEmail">Email</label><input type="email" id="fpEmail" autocomplete="email" value="${App.esc($('#inEmail').value)}"></div><div id="fpMsg"></div>`, {
+      buttons: [{ label: 'Cancel' }, { label: 'Send link', primary: true, onClick: async (ov) => {
+        const r = await api('/auth/forgot', { email: $('#fpEmail', ov).value });
+        $('#fpMsg', ov).innerHTML = '<div class="note ok">' + App.esc(r.message) + '</div>';
+        $$('.ft .btn', ov).forEach((b) => { b.hidden = b.textContent !== 'Cancel'; if (b.textContent === 'Cancel') b.textContent = 'Close'; });
+        return true;
+      } }],
+    });
+  };
   // Forms work right away (Enter included), even while the page checks whether you're signed in.
   const role = () => document.querySelector('input[name=role]:checked').value;
   $('#signIn').onsubmit = async (e) => {
@@ -225,6 +242,7 @@
   };
   const me = await api('/auth/me', undefined, { allowSignedOut: true });
   if (me.user) return go(me.user);
+  resetByEmail = !!me.site.passwordEmail;
   App.renderTopbar(null, me.site, []);
   $('#footName').textContent = '© ' + new Date().getFullYear() + ' ' + me.site.name;
 

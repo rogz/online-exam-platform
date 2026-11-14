@@ -19,6 +19,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await ensureAdmin();
   const server = createApp().listen(0);
   const BASE = 'http://localhost:' + server.address().port;
+  Object.assign(process.env, { SMTP_HOST: 'test', PUBLIC_URL: BASE }); // emails go to an in-memory outbox
+  const { outbox } = require('../src/mailer');
   const browser = await chromium.launch();
   const errors = [];
   const newUser = async (opts) => {
@@ -534,6 +536,50 @@ fs.mkdirSync(SHOTS, { recursive: true });
     return out.map((r) => r.status + (r.warned ? '/warned' : ''));
   }, snap.attemptId);
   ok(strikes.join(',') === 'IN_PROGRESS/warned,IN_PROGRESS/warned,VOIDED', 'with 2 camera warnings set, the 3rd phone detection voids (' + strikes.join(', ') + ')');
+
+  // ── Passwords: admin reset (forgiving temporary code), forced new password, forgot-password email ──
+  const pwUser = await newUser();
+  await pwUser.goto(BASE + '/#signup');
+  await pwUser.fill('#upName', 'Lea Cruz'); await pwUser.fill('#upEmail', 'lea@student.edu'); await pwUser.fill('#upPass', 'student-pass-9');
+  await pwUser.click('#signUp button[type=submit]'); await pwUser.waitForURL(/\/student/);
+  await pwUser.evaluate(() => fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } }));
+  for (let i = 0; i < 10; i++) await pwUser.evaluate((i) => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ email: 'lea@student.edu', password: 'guess-' + i }) }), i);
+  const leaId = (await dbOne(`SELECT id FROM users WHERE email = 'lea@student.edu'`)).id;
+  const leaTemp = await admin.evaluate(async (id) => (await (await fetch('/api/admin/users/' + id + '/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()).tempPassword, leaId);
+  await pwUser.goto(BASE + '/');
+  await pwUser.fill('#inEmail', 'lea@student.edu'); await pwUser.fill('#inPass', leaTemp.toLowerCase() + ' '); await pwUser.press('#inPass', 'Enter');
+  await pwUser.waitForURL(/\/student/);
+  ok(true, 'temporary password works in small letters with a space, even after 10 earlier wrong tries');
+  await pwUser.waitForSelector('.dialog:has-text("Choose your own password")');
+  ok(!(await pwUser.isVisible('.dialog .x')), 'after a temporary password, choosing a new one is required (no close button)');
+  await pwUser.fill('#cnNew', 'my-new-pass-1'); await pwUser.fill('#cnAgain', 'my-new-pass-1'); await pwUser.click('.dialog .btn.primary');
+  ok(await toastSays(pwUser, 'Password saved'), 'student saves a new password');
+  ok((await dbOne(`SELECT must_change_password FROM users WHERE id = $1`, [leaId])).must_change_password === false, 'the "must change password" flag is cleared');
+  // Forgot password by email
+  await pwUser.evaluate(() => fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } }));
+  await pwUser.goto(BASE + '/');
+  await pwUser.fill('#inEmail', 'lea@student.edu');
+  await pwUser.click('#forgotLink');
+  await pwUser.waitForSelector('#fpEmail');
+  ok((await pwUser.inputValue('#fpEmail')) === 'lea@student.edu', 'forgot-password box is filled with the typed email');
+  const before = outbox.length;
+  await pwUser.click('.dialog .btn.primary');
+  await pwUser.waitForSelector('#fpMsg .note.ok');
+  const mail = outbox[outbox.length - 1];
+  ok(outbox.length === before + 1 && mail.to === 'lea@student.edu' && /\/reset\?token=[0-9a-f]{64}/.test(mail.text), 'a reset link is emailed');
+  const nobody = await pwUser.evaluate(async () => (await (await fetch('/api/auth/forgot', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ email: 'nobody@student.edu' }) })).json()));
+  ok(nobody.ok && outbox.length === before + 1, 'an unknown email gets the same answer and no email (no account guessing)');
+  const link = mail.text.match(/https?:\/\/\S+\/reset\?token=[0-9a-f]{64}/)[0];
+  await pwUser.goto(link);
+  await pwUser.waitForSelector('#rpNew');
+  ok(!pwUser.url().includes('token='), 'the secret link is removed from the address bar');
+  await pwUser.fill('#rpNew', 'from-email-1'); await pwUser.fill('#rpAgain', 'from-email-1'); await pwUser.click('#rpSave');
+  await pwUser.waitForURL(/\/student/);
+  ok(true, 'new password set from the email link, and signed in');
+  const reuse = await pwUser.evaluate(async (t) => (await (await fetch('/api/auth/reset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ token: t, password: 'again-pass-1' }) })).json()).code, link.split('token=')[1]);
+  ok(reuse === 'BAD_LINK', 'a reset link works only once');
+  const testMail = await admin.evaluate(async () => (await (await fetch('/api/admin/test-email', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()));
+  ok(testMail.ok && outbox[outbox.length - 1].to === 'admin@test.local', 'admin can send a test email');
 
   // ── Security checks ──
   const r1 = await student.evaluate(async () => (await fetch('/api/teacher/questions')).status);

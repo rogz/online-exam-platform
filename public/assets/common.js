@@ -32,16 +32,15 @@
   }
 
   /** Opens a dialog. content: HTML string. Returns { el, close }. */
-  function dialog(title, content, { wide, buttons } = {}) {
+  function dialog(title, content, { wide, buttons, locked } = {}) {
     const ov = document.createElement('div');
     ov.className = 'overlay';
     ov.innerHTML = `<div class="dialog${wide ? ' wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
-      <div class="hd"><h2>${esc(title)}</h2><button type="button" class="x" aria-label="Close">×</button></div>
+      <div class="hd"><h2>${esc(title)}</h2>${locked ? '' : '<button type="button" class="x" aria-label="Close">×</button>'}</div>
       <div class="bd">${content}</div>${buttons ? '<div class="ft"></div>' : ''}</div>`;
     const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
-    $('.x', ov).onclick = close;
-    ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); });
+    const onKey = (e) => { if (e.key === 'Escape' && !locked) close(); };
+    if (!locked) { $('.x', ov).onclick = close; ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); }); }
     document.addEventListener('keydown', onKey);
     (buttons || []).forEach((b) => {
       const btn = document.createElement('button');
@@ -167,7 +166,21 @@
     const r = await api('/auth/me', undefined, { allowSignedOut: true });
     if (!r.user) { location.href = '/?next=' + encodeURIComponent(location.pathname + location.hash); throw new Error('signed out'); }
     if (roles && !roles.includes(r.user.role)) { location.href = homeFor(r.user); throw new Error('wrong role'); }
+    if (r.user.mustChangePassword) setTimeout(chooseNewPassword, 300);
     return r;
+  }
+  /** After signing in with a temporary password from an admin: choose your own password first. */
+  function chooseNewPassword() {
+    dialog('Choose your own password', `<p style="margin-top:0">You signed in with a temporary password. Choose your own password to continue.</p>
+      <div class="field"><label for="cnNew">New password</label><input type="password" id="cnNew" autocomplete="new-password"><div class="hint">At least 8 characters.</div></div>
+      <div class="field"><label for="cnAgain">Type it again</label><input type="password" id="cnAgain" autocomplete="new-password"></div>`, {
+      locked: true,
+      buttons: [{ label: 'Save password', primary: true, onClick: async (ov) => {
+        if ($('#cnNew', ov).value !== $('#cnAgain', ov).value) throw new Error('The two passwords are not the same.');
+        await api('/auth/password', { next: $('#cnNew', ov).value });
+        toast('Password saved');
+      } }],
+    });
   }
   const homeFor = (u) => (u.role === 'student' ? '/student' : u.role === 'admin' ? '/admin' : '/teacher');
 

@@ -78,6 +78,8 @@ function tooManyTries(key) {
   return t.length >= 10;
 }
 function noteFailedTry(key) { (tries.get(key) || tries.set(key, []).get(key)).push(Date.now()); }
+/** Forget failed sign-in tries for an email (after a successful sign-in or a password reset). */
+function clearTries(email) { const pre = String(email || '').toLowerCase() + '|'; for (const k of [...tries.keys()]) if (k.startsWith(pre)) tries.delete(k); }
 
 /** Teachers can publish when they have time-based access or credits; the admin always can. */
 function teacherAccess(u) {
@@ -100,7 +102,7 @@ const avatarUrl = (id, updated) => (updated ? '/api/auth/avatar/' + id + '?v=' +
 
 function publicUser(u) {
   if (!u) return null;
-  const out = { id: u.id, email: u.email, name: u.name, role: u.role, studentNo: u.student_no || '', school: u.school || '', avatarUrl: avatarUrl(u.id, u.avatar_updated) };
+  const out = { id: u.id, email: u.email, name: u.name, role: u.role, studentNo: u.student_no || '', school: u.school || '', avatarUrl: avatarUrl(u.id, u.avatar_updated), mustChangePassword: !!u.must_change_password };
   if (u.role !== 'student') {
     const a = teacherAccess(u);
     out.access = { until: a.until, timeOk: a.timeOk, credits: a.credits, canPublish: a.canPublish };
@@ -110,5 +112,5 @@ function publicUser(u) {
 
 module.exports = {
   hashPassword, checkPassword, passwordProblem, startSession, endSession, loadUser,
-  requireUser, requireRole, sameSiteOnly, tooManyTries, noteFailedTry, teacherAccess, publicUser, userById, avatarUrl,
+  requireUser, requireRole, sameSiteOnly, tooManyTries, noteFailedTry, clearTries, teacherAccess, publicUser, userById, avatarUrl,
 };

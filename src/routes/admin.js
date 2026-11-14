@@ -81,7 +81,7 @@ router.post('/admins', async (req, res) => {
   const name = str(b.name, 120);
   if (!name) throw fail(400, 'BAD_INPUT', 'Enter the new admin\'s full name.');
   const temp = randomCode(4) + '-' + randomCode(4);
-  await db.query(`INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, 'admin')`, [email, await auth.hashPassword(temp), name]);
+  await db.query(`INSERT INTO users (email, password_hash, name, role, must_change_password) VALUES ($1, $2, $3, 'admin', true)`, [email, await auth.hashPassword(temp), name]);
   res.json({ ok: true, created: true, name, tempPassword: temp });
 });
 
@@ -134,12 +134,13 @@ router.post('/users/:id/delete', async (req, res) => {
 
 router.post('/users/:id/reset-password', async (req, res) => {
   if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'User not found.');
-  const target = await db.one('SELECT id, role FROM users WHERE id = $1', [req.params.id]);
+  const target = await db.one('SELECT id, role, email FROM users WHERE id = $1', [req.params.id]);
   if (!target) throw fail(404, 'NOT_FOUND', 'User not found.');
   // Resetting an admin's password would hand over their account: only the site owner may do that.
   if (target.role === 'admin' && req.user.email !== ownerEmail()) throw fail(403, 'OWNER_ONLY', 'Only the site owner can reset an admin\'s password.');
   const temp = randomCode(4) + '-' + randomCode(4);
-  await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await auth.hashPassword(temp), req.params.id]);
+  await db.query('UPDATE users SET password_hash = $1, must_change_password = true WHERE id = $2', [await auth.hashPassword(temp), req.params.id]);
+  auth.clearTries(target.email); // earlier wrong guesses must not block the new password
   await db.query('DELETE FROM sessions WHERE user_id = $1', [req.params.id]);
   res.json({ ok: true, tempPassword: temp });
 });
@@ -227,9 +228,18 @@ router.get('/payment-qr/:method', async (req, res) => {
   res.set('Content-Type', img.mime).set('Cache-Control', 'no-cache').send(Buffer.from(img.data));
 });
 
+router.post('/test-email', async (req, res) => {
+  const mailer = require('../mailer');
+  if (!mailer.enabled()) throw fail(400, 'NO_EMAIL', 'Email is not set up yet: add the SMTP settings to the server (see the README).');
+  try {
+    await mailer.send({ to: req.user.email, subject: 'Exam Wizard: test email', text: 'Email works. Students and teachers can now reset forgotten passwords by email.' });
+  } catch (e) { throw fail(409, 'EMAIL_FAILED', 'Sending failed: ' + e.message); }
+  res.json({ ok: true, to: req.user.email });
+});
+
 router.get('/payments', async (req, res) => {
   const pp = require('../paypal').config();
-  res.json({ ok: true, paypalCheckout: pp ? { sandbox: pp.sandbox } : null });
+  res.json({ ok: true, paypalCheckout: pp ? { sandbox: pp.sandbox } : null, email: require('../mailer').enabled() });
 });
 
 router.post('/requests/:id', async (req, res) => {

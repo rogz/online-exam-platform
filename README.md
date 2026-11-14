@@ -97,6 +97,25 @@ After that, every push to `main` goes live in a few minutes. Settings live in `~
 
 ---
 
+## Email: "Forgot your password?"
+Until email is set up, "Forgot your password?" tells people to ask their teacher or an admin. An admin can reset a password in **Admin → Students/Teachers → Reset password**: the temporary password works in small or capital letters, clears any sign-in lock, and the user must choose their own password right after signing in.
+
+To let people reset their password by email, give the site an email account to send from. The simplest is a Gmail account (up to about 500 emails a day):
+1. Use (or create) a Gmail account for the site, e.g. `examwizard.noreply@gmail.com`. Turn on **2-Step Verification** in its Google Account → Security.
+2. In the same place, open **App passwords**, create one named "Exam Wizard", and copy the 16 letters (without the spaces).
+3. On the server, open the settings file: `nano ~/exam-wizard/.env` and add these lines (with your own values):
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=examwizard.noreply@gmail.com
+   SMTP_PASS=the16letterapppassword
+   MAIL_FROM=Exam Wizard <examwizard.noreply@gmail.com>
+   ```
+   Save with **Ctrl+O**, **Enter**, then **Ctrl+X**.
+4. Restart: `sudo systemctl restart exam-wizard`. Then in **Admin → Site settings → Email**, click **Send me a test email**.
+
+Reset links go to `https://` + your DOMAIN (set `PUBLIC_URL` to change it). Each link works once, for 1 hour. Never paste the app password in chat or commit it to GitHub.
+
 ## Profiles
 Everyone (students, teachers, admins) can click their name in the top bar to open **My profile**: profile picture, name, student number, school, and password. Pictures are cropped to a square and shrunk to about 10–30 KB. Teachers see student pictures in class lists and results. Pictures are only shown to signed-in users.
 

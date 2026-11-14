@@ -135,6 +135,9 @@ ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=pick-a-password npm start
 
 Open http://localhost:3000. Without `DATABASE_URL`, the site uses a built-in database stored in the `data/` folder.
 
+## Question CSV format
+The full format for **Import CSV**, with examples and tips for writing quizzes (also with AI), is in [docs/question-format.md](docs/question-format.md).
+
 ## Bringing questions over from the Google Sheets version
 In your Sheet, open the **Questions** tab and click **File → Download → Comma-separated values (.csv)**. Then, on the website, go to **Question bank → Import CSV**. The columns are the same: QuestionID, Type, Question, Choices, Answer, Points, Topic, Image. Image links are kept. Uploaded Drive pictures need to be uploaded again in the question editor.
 

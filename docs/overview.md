@@ -40,7 +40,8 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 
 - **Teacher's manual** at `/manual` (linked in the teacher menu): step-by-step guide with annotated screenshots
   (`public/manual/`; screenshots are generated from a demo site, so re-capture them when screens change). The same
-  manual as an e-book: `public/manual/exam-wizard-teachers-manual.epub` (built from the page with pandoc; rebuild it when the page changes).
+  manual as an e-book: `public/manual/exam-wizard-teachers-manual.pdf` (cover, contents with page numbers, bookmarks; built
+  from the page with Chromium's PDF printing; rebuild it when the page changes).
 
 ### Exam integrity (exam screen, `public/exam/`)
 - **Leaving the exam** (tab switch, minimize, Alt+Tab, clicking another app): voids at once, or after

@@ -34,7 +34,8 @@
   kbd, .btn { display: inline-block; border: 1px solid #b8c2cf; border-radius: 4px; padding: 0 6px; font: 600 13.5px/1.5 Arial, sans-serif; background: #f5f7f9; white-space: nowrap; }
   .btn.p { background: #2f7bd1; border-color: #2465ad; color: #fff; }
   code { background: var(--soft); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 14px; }
-  .printbar { text-align: right; margin: -6px 0 10px; } .printbar button { font: inherit; font-size: 14px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+  .printbar { text-align: right; margin: -6px 0 10px; } .printbar a.dl { display: inline-block; font-size: 14px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); text-decoration: none; margin-right: 6px; }
+  .printbar button { font: inherit; font-size: 14px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
   td, th, figcaption, p, li { overflow-wrap: anywhere; }
   @media (max-width: 640px) { .toc { columns: 1; } h1 { font-size: 25px; } table { display: block; overflow-x: auto; } figure.narrow img, figure.mid img { max-width: 100%; } header.top a { font-size: 12px; } }
   @media print { body { background: #fff; font-size: 12.5px; } header.top, .printbar { display: none; } .wrap { border: 0; max-width: none; padding: 0; } h2 { break-before: page; margin-top: 0; } h2, h3 { break-after: avoid; } h3 + p, h3 + ol, p:has(+ figure) { break-after: avoid; } h2.first { break-before: auto; } figure img { box-shadow: none; max-height: 430px; width: auto; } a { color: inherit; text-decoration: none; } }
@@ -45,7 +46,7 @@
 <div class="wrap">
   <h1>Teacher's manual</h1>
   <p class="lead">How to set up classes, build a question bank, give an exam and check the results. In the pictures, the numbered red boxes <span class="n">1</span> show what to click or fill in.</p>
-  <div class="printbar"><button type="button" onclick="window.print()">🖨 Print or save as PDF</button></div>
+  <div class="printbar"><a class="dl" href="/manual/exam-wizard-teachers-manual.epub" download>📘 Download as e-book (EPUB)</a> <button type="button" onclick="window.print()">🖨 Print or save as PDF</button></div>
 
   <nav class="toc" aria-label="Contents">
     <a href="#quick">Quick start: your first exam in 7 steps</a>

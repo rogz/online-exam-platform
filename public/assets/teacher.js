@@ -469,7 +469,7 @@
           <div class="field"><label for="eQsec">Time limit per question (seconds, 0 = none)</label><input type="number" id="eQsec" min="0" value="${v('question_seconds', 0)}"></div></fieldset>
         <fieldset><legend>Security</legend>
           <div class="field"><label for="eDev">Allowed devices</label><select id="eDev">${opt('COMPUTER', v('allowed_devices', 'COMPUTER'), 'Computers only')}${opt('TABLET', v('allowed_devices', 'COMPUTER'), 'Computers and tablets')}${opt('ANY', v('allowed_devices', 'COMPUTER'), 'Any device, including phones')}</select></div>
-          <div class="field"><label for="eFace">Camera / face check</label><select id="eFace">${opt('OFF', v('face_mode', 'OFF'), 'Not required')}${opt('START', v('face_mode', 'OFF'), 'Check face at the start only')}${opt('ALWAYS', v('face_mode', 'OFF'), 'Monitor during the whole exam (1 warning, then void)')}</select></div>
+          <div class="field"><label for="eFace">Camera / face check</label><select id="eFace">${opt('OFF', v('face_mode', 'OFF'), 'Not required')}${opt('START', v('face_mode', 'OFF'), 'Check face at the start only')}${opt('ALWAYS', v('face_mode', 'OFF'), 'Monitor during the whole exam (warnings, then void)')}</select></div>
           <label class="check"><input type="checkbox" id="ePrev"${v('camera_preview', true) ? ' checked' : ''}> Show students their camera preview</label>
           <details><summary class="small" style="cursor:pointer;margin:6px 0">Advanced settings</summary>
             <div class="grid2" style="margin-top:8px">

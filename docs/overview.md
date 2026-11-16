@@ -38,6 +38,9 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   and tab warnings, reconnects, device), answers per student with grading (essays), events log, **camera
   snapshots**, Allow retake, Not started list, CSV downloads (results and all answers).
 
+- **Teacher's manual** at `/manual` (linked in the teacher menu): step-by-step guide with annotated screenshots
+  (`public/manual/`; screenshots are generated from a demo site, so re-capture them when screens change).
+
 ### Exam integrity (exam screen, `public/exam/`)
 - **Leaving the exam** (tab switch, minimize, Alt+Tab, clicking another app): voids at once, or after
   **Tab/window warnings** (per exam, default 0). One warning per time away; staying away > 1 minute voids.

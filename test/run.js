@@ -622,6 +622,15 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const shown = await student.evaluate(async () => (await (await fetch('/api/student/dashboard')).json()).exams.length);
   ok(hidden === 0 && shown > 0, 'students don\'t see an archived class\'s exams, and see them again after restoring (' + hidden + ' → ' + shown + ')');
 
+  // ── Teacher's manual ──
+  await teacher.goto(BASE + '/teacher#classes'); await teacher.waitForSelector('#manualLink');
+  const man = await teacher.context().newPage(); man.on('pageerror', (e) => errors.push(e.message));
+  await man.goto(BASE + '/manual', { waitUntil: 'networkidle' });
+  const manInfo = await man.evaluate(() => ({ title: document.title, imgs: document.images.length, broken: [...document.images].filter((i) => !i.naturalWidth).length,
+    badLinks: [...document.querySelectorAll('a[href^="#"]')].filter((a) => !document.getElementById(a.getAttribute('href').slice(1))).length }));
+  ok(/manual/i.test(manInfo.title) && !manInfo.title.includes('{site}') && manInfo.imgs > 20 && manInfo.broken === 0 && manInfo.badLinks === 0, "teacher's manual opens from the menu with all its pictures (" + manInfo.imgs + ')');
+  await man.close();
+
   // ── Links for Google Classroom: class join link and exam link ──
   await teacher.goto(BASE + '/teacher#classes'); await teacher.waitForSelector('.classcard');
   const joinLink = await teacher.getAttribute('.classcard [data-copy*="/join/"]', 'data-copy');

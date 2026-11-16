@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Teacher's manual — {site}</title>
+<style>
+  :root { --ink: #1d2330; --muted: #5d6677; --line: #dde2ea; --blue: #23558c; --mark: #e11d48; --soft: #f4f6fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.6 "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background: var(--soft); }
+  header.top { background: var(--blue); color: #fff; padding: 14px 20px; display: flex; gap: 12px; align-items: center; }
+  header.top img { width: 34px; height: 34px; border-radius: 8px; }
+  header.top b { font-size: 18px; } header.top a { color: #fff; margin-left: auto; font-size: 14px; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 80px; background: #fff; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  h1 { font-size: 30px; margin: 8px 0 6px; } .lead { color: var(--muted); margin: 0 0 20px; }
+  h2 { font-size: 23px; margin: 44px 0 10px; padding-top: 14px; border-top: 3px solid var(--blue); color: var(--blue); }
+  h3 { font-size: 18px; margin: 26px 0 8px; }
+  p { margin: 8px 0; } ol, ul { margin: 8px 0; padding-left: 24px; } li { margin: 5px 0; }
+  .toc { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; columns: 2; column-gap: 30px; }
+  .toc a { display: block; padding: 2px 0; color: var(--blue); text-decoration: none; break-inside: avoid; } .toc a:hover { text-decoration: underline; }
+  figure { margin: 16px 0 20px; break-inside: avoid; }
+  figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 2px 10px rgba(20, 40, 80, .08); }
+  figure.narrow img { max-width: 420px; } figure.mid img { max-width: 620px; }
+  figcaption { font-size: 14.5px; color: var(--ink); margin-top: 8px; }
+  figcaption ol { list-style: none; padding: 0; margin: 4px 0 0; }
+  figcaption li { position: relative; padding-left: 32px; margin: 5px 0; }
+  .n, figcaption li::before { display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: var(--mark); color: #fff; font: 700 13px/22px Arial, sans-serif; text-align: center; }
+  figcaption ol { counter-reset: c; } figcaption li { counter-increment: c; } figcaption li::before { content: counter(c); position: absolute; left: 0; top: 1px; }
+  .tip, .warn { border-radius: 8px; padding: 10px 14px; margin: 14px 0; font-size: 15px; break-inside: avoid; }
+  .tip { background: #e8f4ea; border: 1px solid #b9dcc0; } .warn { background: #fff4dc; border: 1px solid #ecd59e; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; } th { background: var(--soft); }
+  kbd, .btn { display: inline-block; border: 1px solid #b8c2cf; border-radius: 4px; padding: 0 6px; font: 600 13.5px/1.5 Arial, sans-serif; background: #f5f7f9; white-space: nowrap; }
+  .btn.p { background: #2f7bd1; border-color: #2465ad; color: #fff; }
+  code { background: var(--soft); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 14px; }
+  .printbar { text-align: right; margin: -6px 0 10px; } .printbar button { font: inherit; font-size: 14px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+  td, th, figcaption, p, li { overflow-wrap: anywhere; }
+  @media (max-width: 640px) { .toc { columns: 1; } h1 { font-size: 25px; } table { display: block; overflow-x: auto; } figure.narrow img, figure.mid img { max-width: 100%; } header.top a { font-size: 12px; } }
+  @media print { body { background: #fff; font-size: 12.5px; } header.top, .printbar { display: none; } .wrap { border: 0; max-width: none; padding: 0; } h2 { break-before: page; margin-top: 0; } h2, h3 { break-after: avoid; } h3 + p, h3 + ol, p:has(+ figure) { break-after: avoid; } h2.first { break-before: auto; } figure img { box-shadow: none; max-height: 430px; width: auto; } a { color: inherit; text-decoration: none; } }
+</style>
+</head>
+<body>
+<header class="top"><img src="/assets/logo.svg" alt=""><b>{site}</b><a href="/teacher">← Back to the teacher page</a></header>
+<div class="wrap">
+  <h1>Teacher's manual</h1>
+  <p class="lead">How to set up classes, build a question bank, give an exam and check the results. In the pictures, the numbered red boxes <span class="n">1</span> show what to click or fill in.</p>
+  <div class="printbar"><button type="button" onclick="window.print()">🖨 Print or save as PDF</button></div>
+
+  <nav class="toc" aria-label="Contents">
+    <a href="#quick">Quick start: your first exam in 7 steps</a>
+    <a href="#account">1. Create your account and sign in</a>
+    <a href="#menu">2. The teacher page</a>
+    <a href="#classes">3. Classes</a>
+    <a href="#bank">4. Question bank</a>
+    <a href="#exam">5. Create an exam</a>
+    <a href="#preview">6. Preview and check the answer key</a>
+    <a href="#publish">7. Publish and share the link</a>
+    <a href="#results">8. Results and grading</a>
+    <a href="#archive">9. Archive old exams and classes</a>
+    <a href="#access">10. Credits, access codes and your profile</a>
+    <a href="#students">11. What your students see</a>
+    <a href="#voided">12. Why was an exam voided?</a>
+    <a href="#help">13. Common problems</a>
+  </nav>
+
+  <h2 id="quick" class="first">Quick start: your first exam in 7 steps</h2>
+  <ol>
+    <li><b>Create an account</b> as a teacher (<a href="#account">section 1</a>). New teachers get 5 free credits.</li>
+    <li><b>Create a class</b> and send its <b>join link</b> to your students (<a href="#classes">section 3</a>).</li>
+    <li><b>Add questions</b> to your question bank, one by one or from an Excel/CSV file (<a href="#bank">section 4</a>).</li>
+    <li><b>Create an exam</b>: choose the class, the dates, the time limit and the questions (<a href="#exam">section 5</a>).</li>
+    <li><b>Preview</b> it and check the answer key (<a href="#preview">section 6</a>).</li>
+    <li><b>Publish</b> it and post the exam link, e.g. in Google Classroom (<a href="#publish">section 7</a>).</li>
+    <li><b>See the results</b> as students submit (<a href="#results">section 8</a>).</li>
+  </ol>
+
+  <h2 id="account">1. Create your account and sign in</h2>
+  <ol>
+    <li>Open the site and click <b>Create account</b>.</li>
+    <li>Choose <b>I'm a teacher</b>.</li>
+    <li>Fill in your full name, email and a password (at least 8 characters). The school name is optional.</li>
+    <li>If the administrator gave you an <b>access code</b>, type it in. You can also add it later.</li>
+    <li>Click <span class="btn p">Create account</span>.</li>
+  </ol>
+  <figure class="narrow"><img src="/manual/img/01-signup.webp" alt="Create account form">
+    <figcaption><ol><li>Open the <b>Create account</b> tab.</li><li>Choose <b>I'm a teacher</b>.</li><li>Type your name, email and password.</li><li>Click <b>Create account</b>.</li></ol></figcaption></figure>
+  <h3>Signing in later</h3>
+  <figure class="narrow"><img src="/manual/img/02-signin.webp" alt="Sign in form">
+    <figcaption><ol><li>Type your email and password.</li><li>Click <b>Sign in</b>, or press <kbd>Enter</kbd>.</li><li>Forgot your password? Click here and enter your email: you get a link to choose a new one (check the Spam folder too).</li></ol></figcaption></figure>
+
+  <h2 id="menu">2. The teacher page</h2>
+  <p>After signing in you land on the teacher page. The menu on the left has four parts:</p>
+  <figure class="narrow"><img src="/manual/img/03-menu.webp" alt="Teacher menu">
+    <figcaption><ol><li><b>Classes</b>: your classes and their students.</li><li><b>Question bank</b>: all your questions, in folders.</li><li><b>Exams &amp; results</b>: create exams and see scores.</li><li><b>My account</b>: credits, access codes and your profile.</li></ol></figcaption></figure>
+  <p>Under your name you can see your access: either "Full access until …" or the number of credits you have. Click the <b>Exam Wizard</b> logo at any time to come back to this page.</p>
+
+  <h2 id="classes">3. Classes</h2>
+  <p>An exam is always given to a <b>class</b>. Students must join the class to see its exams.</p>
+  <h3>Create a class</h3>
+  <ol><li>Click <b>Classes</b> in the menu, then <span class="btn p">+ New class</span>.</li><li>Type the class name (e.g. <i>EEE 152</i>) and, if you like, a section.</li><li>Click <span class="btn p">Create class</span>.</li></ol>
+  <figure class="mid"><img src="/manual/img/05-new-class.webp" alt="New class window">
+    <figcaption><ol><li>Class name.</li><li>Section or description (optional).</li><li>Click <b>Create class</b>.</li></ol></figcaption></figure>
+  <h3>Let students join</h3>
+  <figure><img src="/manual/img/04-classes.webp" alt="Classes page">
+    <figcaption><ol><li><b>+ New class</b> creates another class.</li><li>The <b>class code</b>: students type it under <i>Join a class</i>.</li><li><b>Copy join link</b>: the easiest way. Post the link (e.g. in Google Classroom); students who open it are added to the class after signing in or creating their free account.</li><li><b>Students</b> shows who has joined. You can remove a student there.</li><li><b>Archive</b> hides the class from students at the end of the semester (see <a href="#archive">section 9</a>).</li></ol></figcaption></figure>
+  <div class="tip"><b>Tip:</b> post the join link once at the start of the term. Students only need to join once per class.</div>
+
+  <h2 id="bank">4. Question bank</h2>
+  <p>The question bank holds all your questions. You pick from it each time you create an exam, so a question can be reused in many exams.</p>
+  <figure><img src="/manual/img/06-bank.webp" alt="Question bank">
+    <figcaption><ol><li><b>+ Add question</b>: type one question.</li><li><b>Import CSV</b>: add many questions at once from Excel or Google Sheets.</li><li><b>+ New</b> creates a folder (e.g. one per course, with subfolders per quiz). Click a folder to see only its questions.</li><li>Click here to see the <b>CSV format</b> and download a sample file.</li></ol></figcaption></figure>
+  <h3>Add one question</h3>
+  <figure><img src="/manual/img/07-add-question.webp" alt="Add question window">
+    <figcaption><ol><li>Choose the <b>type</b>: multiple choice, true/false, fill in the blank, or essay.</li><li>Type the <b>question</b>.</li><li>Type the choices and <b>select the correct one</b>.</li><li><b>Topic</b> (optional): lets you filter, and pick random questions per topic.</li><li><b>Picture</b> (optional): choose a file, or paste a link.</li><li>Click <b>Save question</b>.</li></ol></figcaption></figure>
+  <table>
+    <tr><th>Type</th><th>How the answer works</th></tr>
+    <tr><td>Multiple choice</td><td>Select the correct choice. Graded automatically.</td></tr>
+    <tr><td>True/false</td><td>Select True or False. Graded automatically.</td></tr>
+    <tr><td>Fill in the blank</td><td>Type <code>____</code> (4 underscores) in the question where the blank goes. List every accepted answer separated by <code>|</code>, e.g. <code>R | resistance</code>. Capital letters don't matter. Graded automatically.</td></tr>
+    <tr><td>Essay</td><td>You grade it yourself in Results. You can add a guide answer for yourself.</td></tr>
+  </table>
+  <h3>Import many questions (Excel or Google Sheets)</h3>
+  <ol>
+    <li>Click the blue line under the title (number 4 above) and <b>download the sample</b>.</li>
+    <li>Open it in Excel or Google Sheets and replace the rows with your questions. Keep the first row (column names).</li>
+    <li>Save as CSV: Excel <b>File → Save As → CSV UTF-8</b>; Google Sheets <b>File → Download → Comma-separated values</b>.</li>
+    <li>Click <b>Import CSV</b>, choose the file and click <span class="btn p">Import</span>.</li>
+  </ol>
+  <figure class="mid"><img src="/manual/img/08-import.webp" alt="Import window">
+    <figcaption><ol><li>Download the sample file.</li><li>Choose the folder for the new questions (or use a <i>Folder</i> column in the file).</li><li>Choose your CSV file.</li><li>Click <b>Import</b>. Rows with a problem are listed; the others are added.</li></ol></figcaption></figure>
+  <table>
+    <tr><th>Column</th><th>What to put</th><th>Example</th></tr>
+    <tr><td>Type *</td><td>MC, TF, FIB or ESSAY</td><td>MC</td></tr>
+    <tr><td>Question *</td><td>The question text</td><td>What is the unit of resistance?</td></tr>
+    <tr><td>Choices</td><td>MC only, separated by <code>|</code></td><td>Volt | Ohm | Ampere | Watt</td></tr>
+    <tr><td>Answer *</td><td>MC: the letter. TF: TRUE or FALSE. FIB: accepted answers separated by <code>|</code></td><td>B</td></tr>
+    <tr><td>Points, Topic, Folder, Image, QuestionID</td><td>Optional. Importing a row with a QuestionID you already have <b>updates</b> that question.</td><td>1 · Units · EEE 150/Quiz 1</td></tr>
+  </table>
+
+  <h2 id="exam">5. Create an exam</h2>
+  <p>Click <b>Exams &amp; results</b>, then <span class="btn p">+ New exam</span>.</p>
+  <figure><img src="/manual/img/09-exams.webp" alt="Exams list">
+    <figcaption><ol><li><b>+ New exam</b>.</li><li>For an existing exam: <b>Results</b>, <b>Edit</b>, <b>Copy link</b>, <b>Preview</b> and <b>Archive</b>.</li></ol></figcaption></figure>
+  <h3>Step 1: the basics</h3>
+  <figure><img src="/manual/img/10-editor-basics.webp" alt="Exam editor: basics">
+    <figcaption><ol><li>The <b>class</b> that takes the exam.</li><li>The <b>title</b> students see.</li><li><b>Instructions</b> shown before they start.</li><li><b>Opens</b>: students cannot start before this date and time.</li><li><b>Closes</b>: students cannot start after this.</li><li><b>Time limit</b> in minutes for each student (0 = until the exam closes).</li><li><b>Exam password</b> (optional): announce it in the room so only students who are present can start.</li></ol></figcaption></figure>
+  <h3>Step 2: choose the questions</h3>
+  <p>The right side lists your question bank. Tick the questions for this exam.</p>
+  <figure><img src="/manual/img/11-editor-pick.webp" alt="Exam editor: selecting questions">
+    <figcaption><ol><li>Show one <b>folder</b> only (also filter by type, topic or search).</li><li>Tick this box to select <b>all</b> the questions shown.</li><li>Or tick single questions.</li><li>The summary: how many are selected, the total points, and what each student gets.</li></ol></figcaption></figure>
+  <h3>Step 3: different questions for each student (optional)</h3>
+  <p>Select <b>more</b> questions than a student should answer, then choose one of three ways:</p>
+  <figure><img src="/manual/img/12-editor-random.webp" alt="Exam editor: random questions">
+    <figcaption><ol><li><b>Questions per student</b>: e.g. select 30 and type 10; each student gets a different random 10.</li><li><b>Or pick per topic</b>: e.g. 5 from Resistance, 5 from Inductance, 5 from Capacitance.</li><li><b>Or pick per question type</b>: e.g. 10 multiple choice and 5 true/false.</li><li><b>Shuffle</b> the question order and the multiple-choice options.</li><li><b>Show score to students after submitting</b>: untick to hide scores.</li></ol></figcaption></figure>
+  <div class="tip">Students are never told that questions are picked at random or how many are in the bank. They never see the correct answers.</div>
+  <h3>Step 4: how questions are shown</h3>
+  <figure class="mid"><img src="/manual/img/13-editor-display.webp" alt="Exam editor: display">
+    <figcaption><ol><li><b>All on one page</b>, or <b>One question at a time</b>.</li><li>One at a time: untick to stop students from <b>going back</b>.</li><li>One at a time: an optional time limit <b>per question</b>, in seconds.</li></ol></figcaption></figure>
+  <h3>Step 5: security</h3>
+  <figure class="mid"><img src="/manual/img/13b-editor-security.webp" alt="Exam editor: security">
+    <figcaption><ol><li><b>Allowed devices</b>: computers only, computers and tablets, or any device. Phones are blocked even in "desktop site" mode.</li><li><b>Camera</b>: not required, check the face at the start only, or monitor during the whole exam.</li><li>Show students a small preview of their camera.</li><li><b>Tab/window warnings</b> (click <i>Advanced settings</i> to see these): how many times a student may switch tabs or apps before the exam is voided. 0 = voided the first time. 1–2 is a good choice.</li><li><b>Focus grace</b>: seconds a student may be away before it counts.</li><li><b>Camera warnings</b>: how many camera problems (phone seen, no face, covered camera, another person) before the exam is voided.</li><li><b>Camera grace</b>: seconds a camera problem must last before it counts (default 3).</li></ol></figcaption></figure>
+  <table>
+    <tr><th>Advanced setting</th><th>What it does</th><th>Default</th></tr>
+    <tr><td>Reconnect window / Max reconnects</td><td>If the internet drops or the page reloads, the student can continue within this many seconds, this many times.</td><td>60 s / 3</td></tr>
+    <tr><td>Time warnings</td><td>Reminders before time runs out, in minutes.</td><td>5, 1</td></tr>
+    <tr><td>Late submit grace</td><td>Extra seconds allowed for the automatic submit when time runs out.</td><td>60 s</td></tr>
+    <tr><td>Watch for a phone</td><td>Camera exams: a phone in view counts as a camera problem.</td><td>On</td></tr>
+    <tr><td>Accept the head when the student looks down</td><td>Camera exams: looking down to write is not "no face".</td><td>On</td></tr>
+    <tr><td>Save a small snapshot as proof</td><td>Camera exams: a small picture is saved when the camera flags something.</td><td>On</td></tr>
+    <tr><td>Block copy, paste and right-click</td><td>During the exam.</td><td>On</td></tr>
+  </table>
+  <h3>Step 6: save</h3>
+  <figure class="narrow"><img src="/manual/img/13c-editor-save.webp" alt="Save and Save &amp; publish buttons">
+    <figcaption><ol><li><b>Save</b> keeps it as a <b>draft</b>: students cannot see it yet.</li><li><b>Save &amp; publish</b> makes it visible to the class (see <a href="#publish">section 7</a>). On a published exam this button becomes <b>Unpublish</b>.</li></ol></figcaption></figure>
+
+  <h2 id="preview">6. Preview and check the answer key</h2>
+  <p>Before publishing, try the exam yourself. Nothing is saved, and the security checks are off.</p>
+  <figure><img src="/manual/img/14-editor-top.webp" alt="Preview and Copy link buttons">
+    <figcaption><ol><li><b>Preview</b> saves your changes and opens the exam in a new tab.</li><li><b>Copy link</b> copies the link students use.</li></ol></figcaption></figure>
+  <figure><img src="/manual/img/15-preview.webp" alt="Preview page">
+    <figcaption><ol><li><b>All questions</b>: every question in your order, best for checking wording, pictures and answer keys.</li><li><b>As a student sees it</b>: one random set, shuffled like a real attempt.</li></ol></figcaption></figure>
+  <p>Answer the questions, then click <span class="btn p">Check answers</span> at the bottom.</p>
+  <figure><img src="/manual/img/16-preview-checked.webp" alt="Preview after checking answers">
+    <figcaption><ol><li>Each question shows <b>Correct</b> or <b>Wrong</b>, with your answer and the <b>answer key</b>. If you answered correctly but it says Wrong, the answer key needs fixing.</li><li>Click <b>Edit</b> to open that question and fix it.</li></ol></figcaption></figure>
+  <div class="tip">The preview also flags questions with no correct answer marked and pictures that do not load (e.g. a Google Drive picture that is not shared publicly).</div>
+
+  <h2 id="publish">7. Publish and share the link</h2>
+  <ol>
+    <li>In the exam editor, click <span class="btn p">Save &amp; publish</span>. Publishing an exam the first time uses <b>1 credit</b>, unless you have days of full access. Editing or re-publishing it later is free.</li>
+    <li>Click <span class="btn">Copy link</span> (in the editor or in the Exams list).</li>
+    <li>Paste the link where your students will see it. In Google Classroom: <b>Classwork → Create → Assignment → Add → Link</b>.</li>
+  </ol>
+  <p>Students who are signed in and in the class land on the exam. Others are asked to sign in first. The exam also appears by itself on every student's <b>My Exams</b> page.</p>
+  <div class="warn"><b>Before a big exam:</b> ask students to sign in the day before, check that the dates and the time limit are right in the Exams list, and try the Preview once.</div>
+
+  <h2 id="results">8. Results and grading</h2>
+  <p>Click <b>Exams &amp; results</b>, then <span class="btn p">Results</span> next to the exam.</p>
+  <figure><img src="/manual/img/17-results-top.webp" alt="Results summary">
+    <figcaption><ol><li>The summary: submitted, average, in progress, voided, not started, essays to grade.</li><li><b>Download results (CSV)</b> for your class record; <b>Download all answers</b> has every answer.</li></ol></figcaption></figure>
+  <figure><img src="/manual/img/18-results-list.webp" alt="Results list">
+    <figcaption><ol><li><b>Find a student</b> by name, student number or email.</li><li>Show only <b>Submitted</b>, <b>Voided</b>, <b>In progress</b> or <b>Not submitted</b>.</li><li><b>Sort</b> by name, start time, finish time, time taken or score (or click a column title).</li><li><b>Answers</b> opens the student's answers, events and camera snapshots.</li><li><b>Allow retake</b>: tick it and the student can open the exam again (e.g. after an exam voided by accident).</li></ol></figcaption></figure>
+  <h3>A student's answers, events and snapshots</h3>
+  <figure class="mid"><img src="/manual/img/19-answers.webp" alt="Answers window">
+    <figcaption><ol><li><b>Events</b>: every warning and the reason an exam was voided, with the time.</li><li><b>Camera snapshots</b>: a small picture taken when the camera flagged something. Click it to enlarge. Look at it before deciding: a calculator held up can look like a phone.</li></ol></figcaption></figure>
+  <p><b>Grading essays:</b> in the Answers window, type the points next to each essay and click <b>Save points</b>. The score is updated. You can also change the points of any other question there.</p>
+  <p>Students who have not started are listed under <b>Not started</b> at the bottom of the page, with their email.</p>
+
+  <h2 id="archive">9. Archive old exams and classes</h2>
+  <figure><img src="/manual/img/20-archive.webp" alt="Archive buttons">
+    <figcaption><ol><li><b>Archive closed exams</b> moves every exam that has closed to the Archived list, in one click.</li><li><b>Archive</b> moves one exam.</li><li><b>Copy link</b> (for sharing, see section 7).</li></ol></figcaption></figure>
+  <ul>
+    <li><b>Archiving an exam</b> only tidies your list. Nothing is deleted, results are kept and students still see their own scores. Open <b>Archived</b> below the list and click <b>Restore</b> to bring one back.</li>
+    <li><b>Archiving a class</b> (Classes page) hides the class and its exams from students, and its code stops working. Use it at the end of a semester. <b>Restore</b> brings it back.</li>
+    <li><b>Duplicate</b> (in the exam editor) copies an exam, e.g. to give the same quiz to another class.</li>
+  </ul>
+
+  <h2 id="access">10. Credits, access codes and your profile</h2>
+  <figure><img src="/manual/img/21-account.webp" alt="My account page">
+    <figcaption><ol><li>Type an <b>access code</b> from the administrator here.</li><li>Click <b>Redeem</b>: it adds days of full access, or credits.</li><li><b>Request an access code</b>: choose days or credits, add a short message and send it. When the administrator approves it, the access is added automatically.</li><li><b>Edit profile, picture or password</b>.</li></ol></figcaption></figure>
+  <ul><li><b>1 credit</b> = publishing 1 exam for the first time. During <b>days of full access</b>, publishing is free.</li><li>The <b>History</b> list shows every credit or day added and used.</li></ul>
+
+  <h2 id="students">11. What your students see</h2>
+  <p>Students see every exam from all their classes on one page, <b>My Exams</b>: open now, upcoming, completed and expired.</p>
+  <figure><img src="/manual/img/22-student-dashboard.webp" alt="Student dashboard"><figcaption>The student's <b>My Exams</b> page: the list on the left, and the selected exam's settings and rules on the right.</figcaption></figure>
+  <p>Before starting, they read the rules for <b>your</b> settings and pass a system check (device, browser, monitors, camera).</p>
+  <figure><img src="/manual/img/23-student-rules.webp" alt="Exam rules screen"><figcaption>The rules screen of a camera exam, with the calculator reminder.</figcaption></figure>
+  <ul>
+    <li>Exams are taken on a <b>laptop or desktop</b> (or a tablet, if you allow it). Phones are for checking the schedule and scores.</li>
+    <li>If the internet drops or the page reloads, the student reopens the same link within the reconnect window and continues. The timer keeps running.</li>
+    <li>When time runs out, answers are submitted automatically.</li>
+    <li>After submitting, students see their score only if you allowed it, and never the correct answers.</li>
+  </ul>
+
+  <h2 id="voided">12. Why was an exam voided?</h2>
+  <p>Open <b>Results → Answers</b> for the student and read <b>Events</b>.</p>
+  <table>
+    <tr><th>Event</th><th>What happened</th><th>Common innocent causes</th></tr>
+    <tr><td>LEFT_WINDOW</td><td>Another window or app was in front of the exam</td><td>A notification or pop-up, clicking the taskbar, a touchpad gesture</td></tr>
+    <tr><td>TAB_SWITCH</td><td>The exam page was hidden</td><td>Another tab, minimizing, the screen turning off</td></tr>
+    <tr><td>SECOND_MONITOR</td><td>A second screen was connected</td><td>An HDMI cable or projector plugged in</td></tr>
+    <tr><td>PHONE_DETECTED, NO_FACE, CAMERA_BLOCKED, MULTIPLE_FACES, CAMERA_OFF</td><td>A camera problem lasted longer than the camera grace</td><td>A calculator held up, poor lighting, someone walking behind</td></tr>
+    <tr><td>Reconnect / page closed</td><td>The page was closed or reloaded and the student did not return in time</td><td>Browser crash, slow internet</td></tr>
+  </table>
+  <div class="tip">If you believe the student, tick <b>Allow retake</b>. To make an exam more forgiving, set <b>Tab/window warnings</b> and <b>Camera warnings</b> to 1 or 2 in the exam's Advanced settings.</div>
+
+  <h2 id="help">13. Common problems</h2>
+  <table>
+    <tr><th>Problem</th><th>What to do</th></tr>
+    <tr><td>A student cannot see the exam</td><td>Check that they joined the right class (Classes → Students), that the exam is <b>published</b>, and that the class is not archived. Ask them to click <i>Refresh the list</i>.</td></tr>
+    <tr><td>A student forgot their password</td><td>They click <b>Forgot your password?</b> on the sign-in page. Or ask the administrator to reset it.</td></tr>
+    <tr><td>"You need an access code or 1 credit to publish"</td><td>Go to <b>My account</b>: redeem a code or request access.</td></tr>
+    <tr><td>"This exam must be taken on a laptop or desktop computer"</td><td>The student is on a phone. Change <b>Allowed devices</b> if you want to allow tablets or any device.</td></tr>
+    <tr><td>The camera does not start</td><td>The student must allow the camera in the browser (camera icon in the address bar) and close other apps using it (Zoom, Meet).</td></tr>
+    <tr><td>A picture does not show</td><td>Use Preview. For Google Drive pictures, share the file as "Anyone with the link", or upload the picture in the question editor.</td></tr>
+    <tr><td>I changed the exam but students see the old one</td><td>Click <b>Save</b> in the editor. Students who already started keep the questions they started with.</td></tr>
+  </table>
+</div>
+</body>
+</html>

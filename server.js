@@ -67,6 +67,7 @@ function createApp() {
   app.get('/preview', page('exam/preview.html'));
   app.get('/reset', page('reset.html'));
   app.get('/join/:code', page('join.html'));
+  app.get('/manual', page('manual/index.html'));
   // no-cache: browsers keep a copy but check for a newer one each time, so updates show up at once
   app.use(express.static(pub, { index: false, setHeaders: (res) => res.set('Cache-Control', 'no-cache') }));
 

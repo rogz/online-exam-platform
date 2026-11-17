@@ -29,7 +29,7 @@ async function loadPool(q, exam) {
   if (!exam.questionIds.length) throw fail(409, 'CONFIG', 'This exam has no questions yet. Please tell your teacher.');
   const rows = (await q('SELECT * FROM questions WHERE teacher_id = $1 AND id = ANY($2::uuid[])', [exam.teacherId, exam.questionIds])).rows;
   const byId = new Map(rows.map((r) => [r.id, core.questionFromRow(r)]));
-  return exam.questionIds.map((id) => byId.get(id)).filter(Boolean);
+  return core.applyPoints(exam, exam.questionIds.map((id) => byId.get(id)).filter(Boolean));
 }
 
 async function lockAttempt(q, attemptId, studentId) {

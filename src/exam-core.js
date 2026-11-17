@@ -30,6 +30,7 @@ const DEFAULT_OPTIONS = {
   faceGraceSeconds: 3,
   cameraWarnings: 1,
   focusWarnings: 0,
+  pointsRule: { mode: 'OFF', all: 1, byType: {}, byTopic: {} }, // optional: override the bank's points for this exam
   typePicks: [],           // random picks per question type, e.g. [{ type: 'MC', count: 10 }, { type: 'TF', count: 5 }]        // tab/window switches allowed (each shows a warning) before the next one voids the exam       // camera problems allowed (each shows a warning) before the next one voids the exam
   phoneDetection: true,
   headDetection: true,     // a lowered head (writing, solving) counts as present, not 'no face'
@@ -54,6 +55,7 @@ function examOptions(raw) {
     typePicks: (Array.isArray(o.typePicks) ? o.typePicks : [])
       .map((t) => ({ type: String((t && t.type) || '').toUpperCase(), count: Math.round(Number(t && t.count) || 0) }))
       .filter((t, i, a) => ['MC', 'TF', 'FIB', 'ESSAY'].includes(t.type) && t.count > 0 && a.findIndex((u) => u.type === t.type) === i),
+    pointsRule: pointsRule(o.pointsRule),
     phoneDetection: o.phoneDetection !== false,
     headDetection: o.headDetection !== false,
     cameraSnapshots: o.cameraSnapshots !== false,
@@ -63,6 +65,35 @@ function examOptions(raw) {
     reconnectSeconds: Math.round(num(o.reconnectSeconds, 60, 0)),
     maxReconnects: Math.round(num(o.maxReconnects, 3, 0)),
   };
+}
+
+const ptsVal = (v) => { const n = Math.round(Number(v) * 100) / 100; return Number.isFinite(n) && n > 0 ? Math.min(1000, n) : null; };
+
+/** Optional points override: OFF (bank points), ALL (same for every question), TYPE or TOPIC (per type/topic; blank = bank points). */
+function pointsRule(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const mode = ['ALL', 'TYPE', 'TOPIC'].includes(String(r.mode).toUpperCase()) ? String(r.mode).toUpperCase() : 'OFF';
+  const byType = {}, byTopic = {};
+  Object.entries(r.byType && typeof r.byType === 'object' ? r.byType : {}).forEach(([k, v]) => {
+    const t = String(k).toUpperCase(), n = ptsVal(v);
+    if (['MC', 'TF', 'FIB', 'ESSAY'].includes(t) && n) byType[t] = n;
+  });
+  Object.entries(r.byTopic && typeof r.byTopic === 'object' ? r.byTopic : {}).slice(0, 300).forEach(([k, v]) => {
+    const t = String(k).trim().slice(0, 200), n = ptsVal(v);
+    if (t && n) byTopic[t] = n;
+  });
+  return { mode, all: ptsVal(r.all) || 1, byType, byTopic };
+}
+
+/** The exam's questions with the exam's points override applied (the bank is not changed). */
+function applyPoints(exam, pool) {
+  const r = exam.options && exam.options.pointsRule;
+  if (!r || r.mode === 'OFF') return pool;
+  const topics = new Map(Object.entries(r.byTopic).map(([k, v]) => [normTopic(k), v]));
+  return pool.map((q) => {
+    const p = r.mode === 'ALL' ? r.all : r.mode === 'TYPE' ? r.byType[q.type] : topics.get(normTopic(q.topic));
+    return p ? Object.assign({}, q, { points: p }) : q;
+  });
 }
 
 /** Exam row from the database → the settings the rules below use. */
@@ -337,6 +368,6 @@ module.exports = {
   STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS, MAX_IMAGE_BYTES, DEFAULT_OPTIONS,
   examOptions, examConfig, questionFromRow, windowStatus,
   normText, parseTF, mcCorrectIndex, normType, validateQuestion, gradeQuestion,
-  seededShuffle, attemptQuestions, setSummary, publicQuestion, normTopic,
+  seededShuffle, attemptQuestions, setSummary, applyPoints, pointsRule, publicQuestion, normTopic,
   driveFileId, externalImageUrl, deviceOf, deviceAllowed,
 };

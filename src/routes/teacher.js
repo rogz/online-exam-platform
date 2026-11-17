@@ -583,7 +583,7 @@ async function previewPool(req) {
   const exam = core.examConfig(x);
   const rows = exam.questionIds.length ? await db.many('SELECT * FROM questions WHERE teacher_id = $1 AND id = ANY($2::uuid[])', [req.user.id, exam.questionIds]) : [];
   const byId = new Map(rows.map((r) => [r.id, core.questionFromRow(r)]));
-  return { x, exam, pool: exam.questionIds.map((id) => byId.get(id)).filter(Boolean) };
+  return { x, exam, pool: core.applyPoints(exam, exam.questionIds.map((id) => byId.get(id)).filter(Boolean)) };
 }
 
 router.get('/exams/:id/preview', async (req, res) => {

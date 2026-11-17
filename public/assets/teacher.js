@@ -437,6 +437,8 @@
     const order = x ? x.question_ids.slice() : [];
     const topicPick = {}; (x ? x.topic_counts : []).forEach((t) => { topicPick[t.topic] = t.count; });
     const typePick = {}; ((x && x.options && x.options.typePicks) || []).forEach((t) => { typePick[t.type] = t.count; });
+    const pr0 = (x && x.options && x.options.pointsRule) || {};
+    const pr = { mode: pr0.mode || 'OFF', all: pr0.all || 1, byType: Object.assign({}, pr0.byType), byTopic: Object.assign({}, pr0.byTopic) };
     const TYPE_LONG = { MC: 'Multiple choice', TF: 'True/false', FIB: 'Fill in the blank', ESSAY: 'Essay' };
     const topics = [...new Set(qs.map((q) => q.topic).filter(Boolean))].sort();
     const v = (k, d) => (x && x[k] !== null && x[k] !== undefined ? x[k] : d);
@@ -460,6 +462,10 @@
             <div class="hint">e.g. select 50 and enter 10: each student gets a different random 10.</div></div>
           <label>Or pick per topic <span class="muted">(replaces the number above)</span></label><div id="topicPicks" class="small muted"></div>
           <label style="margin-top:10px">Or pick per question type <span class="muted">(e.g. 10 of 30 multiple choice and 5 of 12 true/false)</span></label><div id="typePicks" class="small muted"></div>
+          <div class="field" style="margin-top:10px"><label for="ePtsMode">Points <span class="muted">(optional)</span></label>
+            <select id="ePtsMode">${opt('OFF', pr.mode, "Use each question's points from the bank")}${opt('ALL', pr.mode, 'Same points for every question')}${opt('TYPE', pr.mode, 'Set points per question type')}${opt('TOPIC', pr.mode, 'Set points per topic')}</select>
+            <div id="ptsBox" class="small"></div>
+            <div class="hint">For this exam only; your question bank is not changed. Use it so every student has the same total. Results already submitted keep their points.</div></div>
           <label class="check"><input type="checkbox" id="eShufQ"${v('shuffle_q', true) ? ' checked' : ''}> Shuffle question order</label>
           <label class="check"><input type="checkbox" id="eShufC"${v('shuffle_c', true) ? ' checked' : ''}> Shuffle multiple-choice options</label>
           <label class="check"><input type="checkbox" id="eScore"${v('show_score', true) ? ' checked' : ''}> Show score to students after submitting</label></fieldset>
@@ -513,7 +519,27 @@
       $$('[data-q]').forEach((c) => c.onchange = () => { toggle(c.dataset.q, c.checked); drawTopics(); drawSum(); });
       const ok = rows.filter((q) => !q.problems.length);
       $('#pAll').checked = ok.length > 0 && ok.every((q) => sel.has(q.id));
-      drawTopics(); drawTypes(); drawSum();
+      drawTopics(); drawTypes(); drawPts(); drawSum();
+    }
+    const effPts = (q) => {
+      const p = pr.mode === 'ALL' ? pr.all : pr.mode === 'TYPE' ? pr.byType[q.type] : pr.mode === 'TOPIC' ? pr.byTopic[q.topic] : 0;
+      return +p > 0 ? +p : q.points;
+    };
+    function drawPts() {
+      const picked = order.map((qid) => qs.find((y) => y.id === qid)).filter(Boolean);
+      const range = (list) => { const ps = [...new Set(list.map((q) => q.points))].sort((a, b) => a - b); return ps.length > 1 ? ps[0] + '–' + ps[ps.length - 1] : String(ps[0]); };
+      const table = (head, keys, label, list, attr, vals) => keys.length ? `<table class="list" style="margin-top:6px"><thead><tr><th>${head}</th><th>Points in the bank</th><th>Points in this exam</th></tr></thead><tbody>${keys.map((k) =>
+        `<tr><td>${esc(label(k))}</td><td>${range(list(k))}</td><td><input type="number" min="0.25" step="0.25" style="width:80px" ${attr}="${esc(k)}" value="${vals[k] || ''}" placeholder="same"></td></tr>`).join('')}</tbody></table>`
+        : '<div class="muted" style="margin-top:6px">Select questions first.</div>';
+      const box = $('#ptsBox');
+      if (pr.mode === 'ALL') box.innerHTML = `<div class="row" style="margin-top:6px"><label for="ePtsAll" style="margin:0">Every question is worth</label><input type="number" id="ePtsAll" min="0.25" step="0.25" style="width:80px" value="${pr.all}"> point(s)</div>`;
+      else if (pr.mode === 'TYPE') box.innerHTML = table('Type', ['MC', 'TF', 'FIB', 'ESSAY'].filter((t) => picked.some((q) => q.type === t)), (t) => TYPE_LONG[t], (t) => picked.filter((q) => q.type === t), 'data-ptspt', pr.byType);
+      else if (pr.mode === 'TOPIC') box.innerHTML = table('Topic', [...new Set(picked.map((q) => q.topic).filter(Boolean))].sort(), (t) => t, (t) => picked.filter((q) => q.topic === t), 'data-ptstp', pr.byTopic)
+        + (picked.some((q) => !q.topic) ? '<div class="muted">Questions without a topic keep their bank points.</div>' : '');
+      else box.innerHTML = '';
+      if ($('#ePtsAll')) $('#ePtsAll').oninput = (e) => { pr.all = +e.target.value > 0 ? +e.target.value : 1; drawSum(); };
+      const bind = (attr, obj) => $$('[' + attr + ']').forEach((i) => i.oninput = () => { const k = i.getAttribute(attr); if (+i.value > 0) obj[k] = +i.value; else delete obj[k]; drawSum(); });
+      bind('data-ptspt', pr.byType); bind('data-ptstp', pr.byTopic);
     }
     function drawTypes() {
       const avail = {};
@@ -543,7 +569,8 @@
     };
     function drawSum() {
       const picked = order.map((qid) => qs.find((y) => y.id === qid)).filter(Boolean);
-      const pts = picked.reduce((s, q) => s + q.points, 0);
+      const pts = Math.round(picked.reduce((s, q) => s + effPts(q), 0) * 100) / 100;
+      const per = picked.length ? [...new Set(picked.map(effPts))] : [];
       const tps = activeTopics(), tys = activeTypes();
       $('#ePick').disabled = tps.length > 0 || tys.length > 0;
       $$('[data-ptype]').forEach((i) => { i.disabled = tps.length > 0; });
@@ -552,7 +579,8 @@
       $('#pSum').textContent = picked.length + ' selected — ' + pts + ' points' +
         (tps.length ? ' — each student gets ' + tps.reduce((s, t) => s + t.count, 0) + ' at random: ' + tps.map((t) => t.count + ' ' + t.topic).join(', ')
           : tys.length ? ' — each student gets ' + tys.reduce((s, t) => s + t.count, 0) + ' at random: ' + tys.map((t) => t.count + ' ' + TYPE_LONG[t.type].toLowerCase()).join(', ')
-            : pick > 0 && pick < picked.length ? ' — each student gets ' + pick + ' at random' : '');
+            : pick > 0 && pick < picked.length ? ' — each student gets ' + pick + ' at random' : '') +
+        (per.length > 1 && (tps.length || tys.length || (pick > 0 && pick < picked.length)) ? ' (questions have different points, so totals may differ between students; see Points)' : '');
     }
     function syncMode() {
       const one = $('#eMode').value === 'ONE', perQ = one && +$('#eQsec').value > 0;
@@ -564,6 +592,7 @@
     $('#pAll').onchange = (e) => { visible().filter((q) => !q.problems.length).forEach((q) => toggle(q.id, e.target.checked)); drawPicker(); };
     ['eMode', 'eQsec', 'eFace'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
     $('#ePick').addEventListener('input', drawSum);
+    $('#ePtsMode').addEventListener('input', (e) => { pr.mode = e.target.value; drawPts(); drawSum(); });
     drawPicker(); syncMode();
     const a = me.user.access || {};
     $('#pubHint').textContent = me.user.role === 'admin' || a.timeOk ? 'Publishing is included in your access.' : x && x.credit_spent ? 'Already paid for: publishing again is free.' : 'Publishing uses 1 credit (you have ' + (a.credits || 0) + ').';
@@ -576,7 +605,8 @@
       allowedDevices: $('#eDev').value, faceMode: $('#eFace').value, cameraPreview: $('#ePrev').checked,
       options: { focusWarnings: $('#oFocusWarn').value, blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
-        typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked },
+        typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
+        pointsRule: { mode: pr.mode, all: pr.all, byType: pr.byType, byTopic: pr.byTopic } },
     });
     async function save() {
       const r = await api(x ? '/teacher/exams/' + x.id : '/teacher/exams', body());

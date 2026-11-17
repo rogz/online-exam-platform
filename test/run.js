@@ -456,6 +456,30 @@ fs.mkdirSync(SHOTS, { recursive: true });
   }, typeExam);
   ok(typeInfo.count === 2 && typeInfo.types === 'MC,TF', 'student gets 1 multiple choice + 1 true/false (' + typeInfo.types + ')');
 
+  // ── Points override: every question worth 2 in this exam (the bank is not changed) ──
+  const ptsExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const qs = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.type === 'MC' || q.type === 'TF');
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Points quiz', questionIds: qs.map((q) => q.id), timeLimitMinutes: 10,
+      options: { typePicks: [{ type: 'MC', count: 1 }, { type: 'TF', count: 1 }], pointsRule: { mode: 'TYPE', byType: { MC: 2, TF: 3 } } },
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  });
+  await teacher.goto(BASE + '/teacher#exam/' + ptsExam); await teacher.waitForSelector('#ptsBox [data-ptspt="TF"]');
+  ok((await teacher.inputValue('#ePtsMode')) === 'TYPE' && (await teacher.inputValue('#ptsBox [data-ptspt="TF"]')) === '3', 'exam editor shows points per question type');
+  await teacher.selectOption('#ePtsMode', 'ALL'); await teacher.fill('#ePtsAll', '2');
+  ok(/— \d+ points/.test(await teacher.textContent('#pSum')), 'exam editor totals use the exam points');
+  await teacher.selectOption('#ePtsMode', 'TYPE');
+  const ptsInfo = await student.evaluate(async (id) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId: id, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    const sub = await post({ action: 'submit', attemptId: st.attemptId, answers: {} });
+    return { points: st.questions.map((q) => q.type + q.points).sort().join(','), max: sub.maxScore, err: sub.error || st.error };
+  }, ptsExam);
+  ok(ptsInfo.points === 'MC2,TF3' && ptsInfo.max === 5, 'points per type: every student out of 5 (' + JSON.stringify(ptsInfo) + ')');
+
   // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
   const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
@@ -740,7 +764,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await admin.waitForSelector('tr:has-text("juan@student.edu") [data-delete]');
   await admin.click('tr:has-text("juan@student.edu") [data-delete]');
   await admin.waitForSelector('.dialog #delEmail');
-  ok((await admin.textContent('.dialog .note.bad')).includes('6 exam attempts'), 'student delete lists their attempts');
+  const juanAttempts = Number((await dbOne(`SELECT count(*)::int AS n FROM attempts a JOIN users u ON u.id = a.student_id WHERE u.email = 'juan@student.edu'`)).n);
+  ok((await admin.textContent('.dialog .note.bad')).includes(juanAttempts + ' exam attempts'), 'student delete lists their attempts (' + juanAttempts + ')');
   await admin.fill('#delEmail', 'JUAN@student.edu');
   await admin.click('.dialog .btn.danger');
   ok(await toastSays(admin, 'was deleted'), 'student deleted');

@@ -27,7 +27,9 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   (upload ≤ 2 MB, or a link incl. Google Drive/Dropbox); **folders and subfolders**; CSV import/export with a
   built-in format guide and sample file; IDs (re-import with the same ID updates the question).
 - **Exam editor**: class, title, instructions, open/close time, time limit, password; random set per student
-  (**N of the selected**, or **per topic**, or **per question type**, e.g. 10 MC + 5 TF); shuffle questions/choices;
+  (**N of the selected**, or **per topic**, or **per question type**, e.g. 10 MC + 5 TF); optional **Points** override for
+  the exam (same points for all, or per type, or per topic; the bank isn't changed) so random sets have equal totals;
+  shuffle questions/choices;
   show score; all on one page or **one at a time** (optional no going back, time per question); allowed devices
   (computer / computer or tablet / any); camera (off / at start / throughout) with preview; advanced settings
   (below). **Preview** (try it as a student, check answers against the key, problems flagged, Edit links),

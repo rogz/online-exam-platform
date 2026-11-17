@@ -460,11 +460,11 @@
         <fieldset><legend>Questions</legend>
           <div class="field"><label for="ePick">Questions per student (0 = all selected)</label><input type="number" id="ePick" min="0" value="${v('pick_count', 0)}">
             <div class="hint">e.g. select 50 and enter 10: each student gets a different random 10.</div></div>
-          <label>Or pick per topic <span class="muted">(replaces the number above)</span></label><div id="topicPicks" class="small muted"></div>
-          <label style="margin-top:10px">Or pick per question type <span class="muted">(e.g. 10 of 30 multiple choice and 5 of 12 true/false)</span></label><div id="typePicks" class="small muted"></div>
+          <label>Or pick per topic <span class="muted">(replaces the number above)</span></label><div id="topicPicks" class="fit-table small muted"></div>
+          <label style="margin-top:10px">Or pick per question type <span class="muted">(e.g. 10 of 30 multiple choice and 5 of 12 true/false)</span></label><div id="typePicks" class="fit-table small muted"></div>
           <div class="field" style="margin-top:10px"><label for="ePtsMode">Points <span class="muted">(optional)</span></label>
             <select id="ePtsMode">${opt('OFF', pr.mode, "Use each question's points from the bank")}${opt('ALL', pr.mode, 'Same points for every question')}${opt('TYPE', pr.mode, 'Set points per question type')}${opt('TOPIC', pr.mode, 'Set points per topic')}</select>
-            <div id="ptsBox" class="small"></div>
+            <div id="ptsBox" class="fit-table small"></div>
             <div class="hint">For this exam only; your question bank is not changed. Use it so every student has the same total. Results already submitted keep their points.</div></div>
           <label class="check"><input type="checkbox" id="eShufQ"${v('shuffle_q', true) ? ' checked' : ''}> Shuffle question order</label>
           <label class="check"><input type="checkbox" id="eShufC"${v('shuffle_c', true) ? ' checked' : ''}> Shuffle multiple-choice options</label>

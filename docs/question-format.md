@@ -14,7 +14,7 @@ The first row holds the column names. Column order doesn't matter. `*` = require
 | `Type` * | `MC` multiple choice, `TF` true/false, `FIB` fill in the blank, `ESSAY` | `MC` |
 | `Question` * | The question text. For `FIB`, put `____` (4 underscores) where the blank goes. | `V = I × ____` |
 | `Choices` | `MC` only: the choices separated by ` \| ` (space, bar, space). Leave empty for other types. | `Volt \| Ohm \| Ampere \| Watt` |
-| `Answer` * | `MC`: the **letter** of the correct choice (`A`, `B`, `C`…). `TF`: `TRUE` or `FALSE`. `FIB`: accepted answers separated by ` \| ` (capital letters don't matter). `ESSAY`: optional guide answer for the teacher. | `B` · `TRUE` · `R \| resistance` |
+| `Answer` * | `MC`: the **letter** of the correct choice (`A`, `B`, `C`…). `TF`: `TRUE` or `FALSE`. `FIB`: accepted answers separated by ` \| ` (capital letters don't matter); for a calculated number, a range: `122.1-122.9 V`, `122.5 ± 0.4 V` or `122.5 ± 1%` (`+-` also works; any number inside counts, the unit is optional). `ESSAY`: optional guide answer for the teacher. | `B` · `TRUE` · `R \| resistance` |
 | `Points` | Points for the question; empty = 1. | `2` |
 | `Topic` | Optional. Used for filtering and for picking random questions per topic. | `Inductance` |
 | `Image` | Optional picture link starting with `https://` (Google Drive links must be shared publicly). | `https://…` |
@@ -42,6 +42,7 @@ PSA-LP-04,ESSAY,Explain why transmission lines are transposed.,,"To make the ave
 - Give every question a `QuestionID` with a short course prefix and a number (`PSA-LP-01`, `PSA-LP-02`, …), so a corrected file can be re-imported to **update** the same questions.
 - Multiple choice: 4 choices, one clearly correct; spread the correct letters evenly over A–D; plausible wrong choices (common mistakes, wrong units, off by a factor).
 - For calculation questions, work the answer out step by step and double-check the numbers and units before writing the row; state the constants used (e.g. ε₀ = 8.854 × 10⁻¹² F/m, GMR = 0.7788 r) in the question when the answer depends on them.
+- Fill-in-the-blank calculations: give the answer as a range, normally ± 1% of the worked-out value (e.g. `122.5 ± 1% V`), so rounding along the way still counts; put the unit wanted in the question.
 - Use `Topic` for the sub-topics (so exams can pick e.g. 5 per topic) and one `Folder` for the whole set.
 - Output the CSV only (header + rows), properly quoted, ready to save as `.csv`.
 - Ask the teacher to review the answer key, or use **Preview → Check answers** on the site, before publishing.

@@ -480,6 +480,36 @@ fs.mkdirSync(SHOTS, { recursive: true });
   }, ptsExam);
   ok(ptsInfo.points === 'MC2,TF3' && ptsInfo.max === 5, 'points per type: every student out of 5 (' + JSON.stringify(ptsInfo) + ')');
 
+  // ── Fill in the blank: number ranges, units, close numbers and close spellings ──
+  const fibExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const mk = async (code, text, answer) => (await post('/api/teacher/questions', { type: 'FIB', code, text, answer, points: 1 })).question.id;
+    const ids = [await mk('FIB-R1', 'Receiving-end voltage is ____ V.', '122.1-122.9 V'), await mk('FIB-R2', 'Sending-end voltage is ____ V.', '122.5 ± 1% V'),
+      await mk('FIB-R3', 'Line current is ____ A.', '50.0 ± 0.2'), await mk('FIB-S1', 'The voltage rise at a light load is the ____ effect.', 'Ferranti')];
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Range quiz', questionIds: ids, timeLimitMinutes: 10, shuffleQuestions: false,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return { id: x.id, ids };
+  });
+  const fibRes = await student.evaluate(async ({ id, ids }) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId: id, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    const answers = { [ids[0]]: '122.48 V', [ids[1]]: '123.6 kV', [ids[2]]: '50.3', [ids[3]]: 'Feranti' };
+    return post({ action: 'submit', attemptId: st.attemptId, answers });
+  }, fibExam);
+  ok(fibRes.score === 2 && fibRes.maxScore === 4, 'number ranges: 122.48 V and 123.6 kV count, 50.3 and "Feranti" do not (' + fibRes.score + ' / ' + fibRes.maxScore + ')');
+  await teacher.goto(BASE + '/teacher#results/' + fibExam.id); await teacher.waitForSelector('[data-answers]');
+  ok((await teacher.textContent('#aRows')).includes('3 to check'), 'results flag 3 answers to check');
+  await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-give]');
+  const notes = await teacher.textContent('.dialog');
+  ok(notes.includes('Different unit') && notes.includes('Close number') && notes.includes('Close spelling'), 'answers show the unit, close number and spelling notes');
+  await teacher.click('.dialog .resp:has-text("Ferranti") [data-give]');
+  await teacher.click('.dialog .btn.primary');
+  ok(await toastSays(teacher, '3 / 4'), 'one click gives the points for the close spelling: 3 / 4');
+  await teacher.waitForSelector('[data-answers]');
+  ok(!(await teacher.textContent('#aRows')).includes('to check'), 'saving clears "to check"');
+
   // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
   const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
@@ -699,11 +729,12 @@ fs.mkdirSync(SHOTS, { recursive: true });
   // ── Deleting a folder never deletes questions ──
   await teacher.goto(BASE + '/teacher#questions');
   await teacher.waitForSelector('.folder:has-text("Circuits")');
+  const qBefore = (await dbOne(`SELECT count(*)::int AS n FROM questions WHERE teacher_id = (SELECT id FROM users WHERE email = 'maria@school.edu')`)).n;
   await teacher.click('.folder:has-text("Circuits")'); await teacher.click('#delFolder'); await teacher.click('.dialog .btn.danger');
   ok(await toastSays(teacher, 'Folder deleted'), 'folder deleted');
   const after = await dbOne(`SELECT (SELECT count(*) FROM questions WHERE teacher_id = (SELECT id FROM users WHERE email = 'maria@school.edu'))::int AS q,
     (SELECT parent_id FROM question_folders WHERE name = 'Units') AS parent`);
-  ok(after.q === 6 && after.parent === null && (await folderOf('Q004')) === 'Units' && (await folderOf('H-1')) === null, 'questions kept; subfolder moved up');
+  ok(after.q === qBefore && after.parent === null && (await folderOf('Q004')) === 'Units' && (await folderOf('H-1')) === null, 'questions kept; subfolder moved up');
 
   // ── Admins: promote a teacher, create a new admin, owner protection ──
   await admin.goto(BASE + '/admin#admins');

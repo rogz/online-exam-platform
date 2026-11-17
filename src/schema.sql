@@ -183,6 +183,10 @@ CREATE TABLE IF NOT EXISTS responses (
   PRIMARY KEY (attempt_id, question_id)
 );
 
+-- teacher-only note from automatic grading (close spelling, different unit); cleared from "to check" once the teacher saves points
+ALTER TABLE responses ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT '';
+ALTER TABLE responses ADD COLUMN IF NOT EXISTS note_checked boolean NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS locked_answers (
   attempt_id  uuid NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
   question_id uuid NOT NULL,

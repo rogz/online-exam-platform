@@ -310,8 +310,10 @@
         box.innerHTML = `<label>Correct answer</label><div class="row" style="margin-bottom:12px"><label class="check"><input type="radio" name="tf" value="TRUE"${v === 'TRUE' ? ' checked' : ''}> True</label>
           <label class="check"><input type="radio" name="tf" value="FALSE"${v === 'FALSE' ? ' checked' : ''}> False</label></div>`;
       } else if (st.type === 'FIB') {
-        box.innerHTML = `<div class="field"><label for="qeFib">Accepted answers</label><input type="text" id="qeFib" value="${esc(q && q.type === 'FIB' ? q.answer : '')}" placeholder="e.g. ohm | ohms | Ω">
-          <div class="hint">Separate several accepted answers with |. Capital letters and extra spaces are ignored.</div></div>`;
+        box.innerHTML = `<div class="field"><label for="qeFib">Accepted answers</label><input type="text" id="qeFib" value="${esc(q && q.type === 'FIB' ? q.answer : '')}" placeholder="e.g. ohm | ohms | Ω   or   122.5 ± 1% V">
+          <div class="hint">Separate several accepted answers with |. Capital letters and extra spaces are ignored.<br>
+          Numbers: <b>122.1-122.9 V</b> (a range), <b>122.5 ± 0.4 V</b> or <b>122.5 ± 1% V</b> (+- also works). Any number inside counts; the unit is optional.
+          Close spellings, numbers just outside, and a different unit are flagged in Results for you to decide.</div></div>`;
       } else {
         box.innerHTML = `<div class="field"><label for="qeModel">Model answer <span class="muted">(optional, only you see it)</span></label><textarea id="qeModel" rows="3">${esc(q && q.type === 'ESSAY' ? q.answer : '')}</textarea>
           <div class="hint">Essays are graded by you in Results.</div></div>`;
@@ -352,7 +354,7 @@
         <tr><td><b>Type</b> *</td><td><b>MC</b> multiple choice, <b>TF</b> true/false, <b>FIB</b> fill in the blank, <b>ESSAY</b></td><td>MC</td></tr>
         <tr><td><b>Question</b> *</td><td>The question text. For FIB, type <b>____</b> (4 underscores) where the blank goes.</td><td>V = I × ____</td></tr>
         <tr><td><b>Choices</b></td><td>MC only: the choices separated by <b>|</b> (the key above Enter, with Shift)</td><td>Volt | Ohm | Ampere | Watt</td></tr>
-        <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter)<br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>(optional)</td></tr>
+        <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter); for numbers a range: <b>122.1-122.9 V</b>, <b>122.5 ± 1%</b><br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>(optional)</td></tr>
         <tr><td><b>Points</b></td><td>Points for the question. Empty = 1</td><td>2</td></tr>
         <tr><td><b>Topic</b></td><td>Optional. Used for filtering and for picking random questions per topic</td><td>Circuits</td></tr>
         <tr><td><b>Folder</b></td><td>Optional. Folder path; folders are created if they don't exist</td><td>EEE 150/Midterm</td></tr>
@@ -659,7 +661,7 @@
         <div class="stat"><b>${r.attempts.filter((a) => a.status === 'IN_PROGRESS').length}</b><span>In progress</span></div>
         <div class="stat"><b>${r.attempts.filter((a) => a.status === 'VOIDED').length}</b><span>Voided</span></div>
         <div class="stat"><b>${r.notStarted.length}</b><span>Not started</span></div>
-        <div class="stat"><b>${sub.reduce((s, a) => s + (a.pending_essays || 0), 0)}</b><span>Essays to grade</span></div></div>
+        <div class="stat"><b>${sub.reduce((s, a) => s + (a.pending_essays || 0), 0)}</b><span>Essays to grade</span></div>${sub.some((a) => a.to_check) ? `<div class="stat"><b>${sub.reduce((s, a) => s + (a.to_check || 0), 0)}</b><span>Answers to check</span></div>` : ''}</div>
       <div class="panel"><div class="hd"><h3>Attempts <span class="muted small">(${r.attempts.length})</span></h3>
         ${r.attempts.length > 1 ? `<div class="toolbar">${r.attempts.length > 5 ? `<input type="search" id="aFind" placeholder="Find a student…" aria-label="Find a student" style="width:200px">
           <select id="aStatus" aria-label="Show"><option value="">All</option><option value="SUBMITTED">Submitted</option><option value="VOIDED">Voided</option><option value="IN_PROGRESS">In progress</option><option value="EXPIRED">Not submitted</option></select>` : ''}
@@ -677,7 +679,7 @@
         return `<tr data-status="${esc(a.status)}" data-name="${esc(a.student_name.toLowerCase())}" data-start="${startMs}" data-end="${endMs}" data-dur="${endMs ? endMs - startMs : ''}" data-score="${a.percent === null || a.percent === undefined ? '' : a.percent}" data-find="${esc((a.student_name + ' ' + (a.student_no || '') + ' ' + (a.student_email || '')).toLowerCase())}">
         <td data-label="Student"><span class="person">${App.avatarHtml({ name: a.student_name, avatarUrl: a.avatarUrl }, 32)}<span><b>${esc(a.student_name)}</b><div class="small muted">${esc(a.student_no || a.student_email)}</div></span></span></td>
         <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
-          ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}</td>
+          ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}${a.to_check ? '<div class="small" style="color:var(--warn)" title="Close spelling, a number just outside the range, or a different unit: open Answers to decide">⚠ ' + a.to_check + ' to check</div>' : ''}</td>
         <td data-label="Time" class="small"><div class="nowrap">${esc(App.fmtDate(a.started_at))}</div>${a.submitted_at ? '<div class="muted nowrap">→ ' + esc(endText) + ' · ' + mins + ' min</div>' : ''}</td>
         <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
         <td class="actions"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
@@ -739,6 +741,7 @@
         <div class="small muted">Answer</div><div class="a">${esc(x.student_answer) || '<span class="muted">(no answer)</span>'}</div>
         ${x.type !== 'ESSAY' ? `<div class="small" style="margin-top:6px">Correct answer: ${esc(x.correct_answer)} — ${x.is_correct ? '<span class="tag ok">Correct</span>' : '<span class="tag bad">Wrong</span>'}</div>`
           : (x.correct_answer ? '<div class="small muted" style="margin-top:6px">Model answer: ' + esc(x.correct_answer) + '</div>' : '')}
+        ${x.note ? `<div class="note warn small" style="margin-top:6px">⚠ ${esc(x.note)} <button type="button" class="btn small" data-give="${i}" data-max="${x.max_points}">Give full points</button></div>` : ''}
         <div class="row" style="margin-top:8px"><label for="pts${i}" style="margin:0">Points</label><input type="number" id="pts${i}" data-pts="${x.question_id}" min="0" max="${x.max_points}" step="0.5"
           value="${x.points_earned === null ? '' : x.points_earned}" style="width:90px"${x.type === 'ESSAY' && x.points_earned === null ? ' placeholder="grade"' : ''}> <span class="muted">/ ${x.max_points}</span></div></div>`).join('')
         : '<div class="empty">No answers recorded (the exam was not submitted).</div>'}
@@ -756,6 +759,7 @@
         viewResults(examId);
       } }] : [{ label: 'Close' }],
     });
+    $$('[data-give]').forEach((b) => b.onclick = () => { $('#pts' + b.dataset.give).value = b.dataset.max; toast('Click "Save points" to keep it'); });
     return d;
   }
 

@@ -23,7 +23,8 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 ### Teachers
 - **Classes**: 6-character join code, **Copy join link** (`/join/CODE`, signs in or signs up, then joins), student
   list with profile pictures, archive/restore (an archived class is hidden from students).
-- **Question bank**: types MC, TF, FIB (accepted answers separated by `|`), ESSAY; points; topic; pictures
+- **Question bank**: types MC, TF, FIB (accepted answers separated by `|`; numbers as a range `122.1-122.9 V`,
+  `122.5 ± 0.4` or `122.5 ± 1%`), ESSAY; points; topic; pictures
   (upload ≤ 2 MB, or a link incl. Google Drive/Dropbox); **folders and subfolders**; CSV import/export with a
   built-in format guide and sample file; IDs (re-import with the same ID updates the question).
 - **Exam editor**: class, title, instructions, open/close time, time limit, password; random set per student
@@ -36,6 +37,9 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   **Copy link**, Duplicate, Delete.
 - **Exams list**: Results / Edit / Copy link / Preview; scrollable; **Archive**, "Archive closed exams (N)",
   Archived list with Restore (archiving an exam only tidies the teacher's list).
+- **Fill-in-the-blank checks**: close spellings ("Feranti"), numbers just outside the range and a different unit
+  ("kV" for "V") are flagged as **to check** in Results (the number decides correct/wrong; spellings stay wrong) with a
+  one-click **Give full points**. Notes are for the teacher only.
 - **Results**: search, status filter, sort (name, started, finished, time taken, score), notes (void reason, camera
   and tab warnings, reconnects, device), answers per student with grading (essays), events log, **camera
   snapshots**, Allow retake, Not started list, CSV downloads (results and all answers).

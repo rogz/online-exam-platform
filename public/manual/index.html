@@ -118,7 +118,7 @@
     <tr><th>Type</th><th>How the answer works</th></tr>
     <tr><td>Multiple choice</td><td>Select the correct choice. Graded automatically.</td></tr>
     <tr><td>True/false</td><td>Select True or False. Graded automatically.</td></tr>
-    <tr><td>Fill in the blank</td><td>Type <code>____</code> (4 underscores) in the question where the blank goes. List every accepted answer separated by <code>|</code>, e.g. <code>R | resistance</code>. Capital letters don't matter. Graded automatically.</td></tr>
+    <tr><td>Fill in the blank</td><td>Type <code>____</code> (4 underscores) in the question where the blank goes. List every accepted answer separated by <code>|</code>, e.g. <code>R | resistance</code>. Capital letters don't matter. For a calculated number, give a range: <code>122.1-122.9 V</code>, <code>122.5 ± 0.4 V</code> or <code>122.5 ± 1% V</code>. Graded automatically; close spellings, numbers just outside the range and a different unit are flagged in Results as <b>to check</b>, with a <b>Give full points</b> button.</td></tr>
     <tr><td>Essay</td><td>You grade it yourself in Results. You can add a guide answer for yourself.</td></tr>
   </table>
   <h3>Import many questions (Excel or Google Sheets)</h3>
@@ -135,7 +135,7 @@
     <tr><td>Type *</td><td>MC, TF, FIB or ESSAY</td><td>MC</td></tr>
     <tr><td>Question *</td><td>The question text</td><td>What is the unit of resistance?</td></tr>
     <tr><td>Choices</td><td>MC only, separated by <code>|</code></td><td>Volt | Ohm | Ampere | Watt</td></tr>
-    <tr><td>Answer *</td><td>MC: the letter. TF: TRUE or FALSE. FIB: accepted answers separated by <code>|</code></td><td>B</td></tr>
+    <tr><td>Answer *</td><td>MC: the letter. TF: TRUE or FALSE. FIB: accepted answers separated by <code>|</code>; a number range like <code>122.5 ± 1%</code></td><td>B</td></tr>
     <tr><td>Points, Topic, Folder, Image, QuestionID</td><td>Optional. Importing a row with a QuestionID you already have <b>updates</b> that question.</td><td>1 · Units · EEE 150/Quiz 1</td></tr>
   </table>
 

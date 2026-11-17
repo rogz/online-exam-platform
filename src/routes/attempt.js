@@ -331,9 +331,9 @@ const actions = {
         const g = core.gradeQuestion(qq, answers[qq.id]);
         max += qq.points;
         if (g.pending) pending++; else score += g.points;
-        await q(`INSERT INTO responses (attempt_id, question_id, position, type, question_text, student_answer, correct_answer, is_correct, points_earned, max_points)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (attempt_id, question_id) DO NOTHING`,
-          [a.id, qq.id, i, qq.type, qq.text, g.studentText, g.correctText, g.pending ? null : g.correct, g.pending ? null : g.points, qq.points]);
+        await q(`INSERT INTO responses (attempt_id, question_id, position, type, question_text, student_answer, correct_answer, is_correct, points_earned, max_points, note)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (attempt_id, question_id) DO NOTHING`,
+          [a.id, qq.id, i, qq.type, qq.text, g.studentText, g.correctText, g.pending ? null : g.correct, g.pending ? null : g.points, qq.points, g.note || '']);
       }
       const percent = max ? Math.round(score / max * 10000) / 100 : 0;
       await q(`UPDATE attempts SET status = $1, submitted_at = $2, score = $3, max_score = $4, percent = $5, pending_essays = $6, late = $7 WHERE id = $8`,

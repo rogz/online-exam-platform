@@ -199,9 +199,94 @@ function validateQuestion(q) {
   return p;
 }
 
+// ───────── Fill in the blank: number ranges, units, close spellings ─────────
+
+const NUM = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?';
+const cleanNum = (s) => String(s).trim().replace(/[−–—]/g, (c) => (c === '−' ? '-' : c)).replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
+const cleanUnit = (u) => String(u || '').trim().replace(/\.$/, '').replace(/\s+/g, '');
+
+/** "122.5 V" → { value: 122.5, unit: 'V' }; null when the text doesn't start with a number. */
+function parseNumber(s) {
+  const m = new RegExp('^(' + NUM + ')\\s*(.*)$').exec(cleanNum(s));
+  if (!m) return null;
+  const value = Number(m[1]);
+  return Number.isFinite(value) ? { value, unit: cleanUnit(m[2]) } : null;
+}
+
+/**
+ * A numeric accepted answer: "122.1..122.9 V", "122.1-122.9", "122.1 to 122.9", "122.5 ± 0.4", "122.5 +- 0.5%", or a plain
+ * number "0.7788" (exact value, so ".7788" and "0.77880" also count). null when the entry is text.
+ */
+function numericSpec(entry) {
+  const t = cleanNum(entry);
+  let m = new RegExp('^(' + NUM + ')\\s*(?:\\.\\.|to|–|—|-)\\s*(' + NUM + ')\\s*([^\\d\\s].*)?$', 'i').exec(t);
+  if (m && Number(m[1]) <= Number(m[2])) return { lo: Number(m[1]), hi: Number(m[2]), unit: cleanUnit(m[3]) };
+  m = new RegExp('^(' + NUM + ')\\s*(?:±|\\+-|\\+/-)\\s*(' + NUM + ')\\s*(%)?\\s*(.*)$').exec(t);
+  if (m) {
+    const c = Number(m[1]), d = Math.abs(Number(m[2])) * (m[3] ? Math.abs(c) / 100 : 1);
+    return { lo: c - d, hi: c + d, unit: cleanUnit(m[4]) };
+  }
+  const n = parseNumber(t);
+  if (n && /^[^\d]*$/.test(n.unit) && !/^[-–—]/.test(n.unit)) return { lo: n.value, hi: n.value, unit: n.unit };
+  return null;
+}
+
+const inRange = (v, sp) => { const eps = 1e-9 * Math.max(1, Math.abs(sp.lo), Math.abs(sp.hi)); return v >= sp.lo - eps && v <= sp.hi + eps; };
+
+/** Edit distance with swapped neighbours counting as one (Damerau, optimal string alignment). */
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i].concat(Array(b.length).fill(0)));
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+/** True when `given` looks like a misspelling of `expected` (1 letter off; 2 for 8+ letters). Not for short words or numbers. */
+function closeSpelling(given, expected) {
+  const a = normText(given), b = normText(expected);
+  if (a === b || b.length < 4 || /\d/.test(b) || /\d/.test(a) || Math.abs(a.length - b.length) > 2) return false;
+  return editDistance(a, b) <= (b.length >= 8 ? 2 : 1);
+}
+
+/** Grades a fill-in-the-blank answer. Returns { correct, note } where note is for the teacher only. */
+function gradeFib(answerKey, value) {
+  const entries = String(answerKey).split('|').map((s) => s.trim()).filter(Boolean);
+  const given = String(value).trim();
+  if (!given) return { correct: false, note: '' };
+  if (entries.some((e) => normText(e) === normText(given))) return { correct: true, note: '' };
+  const n = parseNumber(given);
+  if (n) {
+    for (const e of entries) {
+      const sp = numericSpec(e);
+      if (!sp || !inRange(n.value, sp)) continue;
+      const diff = sp.unit && n.unit && sp.unit.toLowerCase() !== n.unit.toLowerCase();
+      return { correct: true, note: diff ? 'Different unit: the student wrote "' + n.unit + '", the answer key uses "' + sp.unit + '".' : '' };
+    }
+  }
+  if (n) {
+    // just outside: within one more range width (a plain number: within 1%) → flag for the teacher
+    for (const e of entries) {
+      const sp = numericSpec(e);
+      if (!sp) continue;
+      const w = sp.hi > sp.lo ? (sp.hi - sp.lo) / 2 : Math.abs(sp.lo) * 0.01;
+      if (w > 0 && n.value >= sp.lo - w && n.value <= sp.hi + w) {
+        return { correct: false, note: 'Close number: ' + given + ' is just outside the answer key (' + e + '). Give the points if you accept it.' };
+      }
+    }
+  }
+  const near = entries.find((e) => !numericSpec(e) && closeSpelling(given, e));
+  return { correct: false, note: near ? 'Close spelling: "' + given + '" is close to "' + near + '". Give the points if you accept it.' : '' };
+}
+
 function gradeQuestion(q, raw) {
   const value = raw === undefined || raw === null ? '' : String(raw).slice(0, 20000);
-  const out = { correct: false, points: 0, pending: false, studentText: value, correctText: '' };
+  const out = { correct: false, points: 0, pending: false, studentText: value, correctText: '', note: '' };
   if (q.type === 'MC') {
     const ci = mcCorrectIndex(q);
     out.correctText = ci >= 0 ? letter(ci) + '. ' + q.choices[ci] : String(q.answer);
@@ -216,9 +301,8 @@ function gradeQuestion(q, raw) {
     out.studentText = given === null ? '' : (given ? 'True' : 'False');
     out.correct = given !== null && given === expected;
   } else if (q.type === 'FIB') {
-    const accepted = String(q.answer).split('|').map(normText).filter(Boolean);
     out.correctText = String(q.answer).split('|').map((s) => s.trim()).filter(Boolean).join(' / ');
-    out.correct = value.trim() !== '' && accepted.includes(normText(value));
+    Object.assign(out, gradeFib(q.answer, value));
   } else {
     out.pending = true;
     out.correctText = String(q.answer || '');
@@ -368,6 +452,6 @@ module.exports = {
   STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS, MAX_IMAGE_BYTES, DEFAULT_OPTIONS,
   examOptions, examConfig, questionFromRow, windowStatus,
   normText, parseTF, mcCorrectIndex, normType, validateQuestion, gradeQuestion,
-  seededShuffle, attemptQuestions, setSummary, applyPoints, pointsRule, publicQuestion, normTopic,
+  seededShuffle, attemptQuestions, setSummary, gradeFib, numericSpec, parseNumber, closeSpelling, applyPoints, pointsRule, publicQuestion, normTopic,
   driveFileId, externalImageUrl, deviceOf, deviceAllowed,
 };

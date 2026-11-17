@@ -565,6 +565,7 @@ router.get('/exams/:id/results', async (req, res) => {
   const attempts = await db.many(
     `SELECT a.*, u.name AS student_name, u.email AS student_email, u.student_no,
             (SELECT count(*) FROM violations v WHERE v.attempt_id = a.id)::int AS event_count,
+            (SELECT count(*) FROM responses r WHERE r.attempt_id = a.id AND r.note <> '' AND NOT r.note_checked)::int AS to_check,
             (SELECT updated_at FROM avatars av WHERE av.user_id = u.id) AS avatar_updated
        FROM attempts a JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at`, [x.id]);
   attempts.forEach((a) => { a.avatarUrl = auth.avatarUrl(a.student_id, a.avatar_updated); });
@@ -616,7 +617,7 @@ router.post('/exams/:id/preview/check', async (req, res) => {
   let score = 0, max = 0, pending = 0;
   pool.filter((q) => ids.includes(q.id)).forEach((q) => {
     const g = core.gradeQuestion(q, answers[q.id]);
-    results[q.id] = { correct: g.correct, pending: g.pending, points: g.points, max: q.points, yourAnswer: g.studentText, correctAnswer: g.correctText };
+    results[q.id] = { correct: g.correct, pending: g.pending, points: g.points, max: q.points, yourAnswer: g.studentText, correctAnswer: g.correctText, note: g.note };
     score += g.points; max += q.points; if (g.pending) pending++;
   });
   res.json({ ok: true, results, score, max, pending });
@@ -664,6 +665,7 @@ router.post('/exams/:id/attempts/:aid', async (req, res) => {
       if (v !== null && !Number.isFinite(v)) throw fail(400, 'BAD_INPUT', 'Points must be a number.');
       await db.query('UPDATE responses SET points_earned = $1, is_correct = CASE WHEN $1::float8 IS NULL THEN is_correct ELSE $1::float8 >= max_points END WHERE attempt_id = $2 AND question_id = $3', [v, a.id, qid]);
     }
+    await db.query(`UPDATE responses SET note_checked = true WHERE attempt_id = $1 AND note <> ''`, [a.id]);
     await db.query(`UPDATE attempts SET
         score = (SELECT COALESCE(sum(points_earned), 0) FROM responses WHERE attempt_id = $1),
         max_score = (SELECT COALESCE(sum(max_points), 0) FROM responses WHERE attempt_id = $1),
@@ -680,11 +682,11 @@ router.get('/exams/:id/export.csv', async (req, res) => {
   const x = await mine('exams', req.params.id, req.user.id, 'Exam');
   let out;
   if (req.query.detail) {
-    const rows = await db.many(`SELECT u.name, u.student_no, u.email, a.status, r.position, r.type, r.question_text, r.student_answer, r.correct_answer, r.is_correct, r.points_earned, r.max_points
+    const rows = await db.many(`SELECT u.name, u.student_no, u.email, a.status, r.position, r.type, r.question_text, r.student_answer, r.correct_answer, r.is_correct, r.points_earned, r.max_points, r.note
         FROM responses r JOIN attempts a ON a.id = r.attempt_id JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at, r.position`, [x.id]);
-    out = [['Student', 'Student No.', 'Email', 'Status', 'No.', 'Type', 'Question', 'Answer', 'Correct answer', 'Correct?', 'Points', 'Max points']]
+    out = [['Student', 'Student No.', 'Email', 'Status', 'No.', 'Type', 'Question', 'Answer', 'Correct answer', 'Correct?', 'Points', 'Max points', 'Note']]
       .concat(rows.map((r) => [r.name, r.student_no, r.email, r.status, r.position + 1, r.type, r.question_text, r.student_answer, r.correct_answer,
-        r.is_correct === null ? '' : r.is_correct ? 'Yes' : 'No', r.points_earned === null ? 'to grade' : r.points_earned, r.max_points]));
+        r.is_correct === null ? '' : r.is_correct ? 'Yes' : 'No', r.points_earned === null ? 'to grade' : r.points_earned, r.max_points, r.note]));
   } else {
     const rows = await db.many(`SELECT u.name, u.student_no, u.email, a.* FROM attempts a JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at`, [x.id]);
     out = [['Student', 'Student No.', 'Email', 'Status', 'Score', 'Max', 'Percent', 'Essays to grade', 'Started', 'Submitted', 'Late', 'Void reason', 'Warnings', 'Reconnects', 'Device', 'Retake']]

@@ -153,6 +153,7 @@
           if (!res.yourAnswer) blank++; else wrong++;
           box.textContent = res.yourAnswer ? '✗ Wrong (0 / ' + res.max + ')' : '— Not answered (0 / ' + res.max + ')';
           box.appendChild(el('span', '', (res.yourAnswer ? 'You answered: ' + res.yourAnswer + ' · ' : '') + 'Answer key: ' + (res.correctAnswer || '(none set)')));
+          if (res.note) box.appendChild(el('span', '', '⚠ ' + res.note));
         }
         if (!res.pending) li.classList.add(res.correct ? 'pv-right' : 'pv-wrong');
         li.appendChild(box);

@@ -118,9 +118,23 @@
     <tr><th>Type</th><th>How the answer works</th></tr>
     <tr><td>Multiple choice</td><td>Select the correct choice. Graded automatically.</td></tr>
     <tr><td>True/false</td><td>Select True or False. Graded automatically.</td></tr>
-    <tr><td>Fill in the blank</td><td>Type <code>____</code> (4 underscores) in the question where the blank goes. List every accepted answer separated by <code>|</code>, e.g. <code>R | resistance</code>. Capital letters don't matter. For a calculated number, give a range: <code>122.1-122.9 V</code>, <code>122.5 ± 0.4 V</code> or <code>122.5 ± 1% V</code>. Graded automatically; close spellings, numbers just outside the range and a different unit are flagged in Results as <b>to check</b>, with a <b>Give full points</b> button.</td></tr>
+    <tr><td>Fill in the blank</td><td>Type <code>____</code> (4 underscores) in the question where the blank goes. List every accepted answer separated by <code>|</code>, e.g. <code>R | resistance</code>. Capital letters don't matter. For a calculated number, give a range such as <code>122.5 ± 1%</code> (see below). Graded automatically.</td></tr>
     <tr><td>Essay</td><td>You grade it yourself in Results. You can add a guide answer for yourself.</td></tr>
   </table>
+  <h3>Fill in the blank with a calculated answer</h3>
+  <p>For a calculation, students rarely get exactly the same digits as you. Give the answer as a <b>range</b>, so rounding along the way still counts.</p>
+  <figure><img src="/manual/img/07b-fib-range.webp" alt="A fill-in-the-blank question with a number range">
+    <figcaption><ol><li>Type: <b>Fill in the blank</b>.</li><li>Put <code>____</code> where the answer goes. Say the unit you want in the question.</li><li><b>Accepted answers</b>: the number with a range, e.g. <code>20 ± 1% Ω</code>.</li></ol></figcaption></figure>
+  <table>
+    <tr><th>You write</th><th>Counts as correct</th></tr>
+    <tr><td><code>122.1-122.9 V</code></td><td>any number from 122.1 to 122.9</td></tr>
+    <tr><td><code>122.5 ± 0.4 V</code> (or <code>+-</code>)</td><td>the same range, written as ±</td></tr>
+    <tr><td><code>122.5 ± 1% V</code></td><td>within 1% of 122.5. <b>A good choice for most calculations.</b></td></tr>
+    <tr><td><code>0.7788</code></td><td>exactly that number (<code>.7788</code> and <code>0.77880</code> also count)</td></tr>
+  </table>
+  <p>Students may type <code>122.48</code>, <code>122.48 V</code> or <code>122.48V</code>; the unit is optional. You can mix numbers and words: <code>122.5 ± 1% | one hundred twenty-two</code>.</p>
+  <div class="tip">Exam Wizard also spots answers that are <b>almost</b> right: a close spelling ("Feranti" for "Ferranti"), a number just outside your range, or a different unit ("kV" instead of "V"). They are marked <b>to check</b> in Results, and you decide (see <a href="#results">section 8</a>).</div>
+
   <h3>Import many questions (Excel or Google Sheets)</h3>
   <ol>
     <li>Click the blue line under the title (number 4 above) and <b>download the sample</b>.</li>
@@ -155,6 +169,11 @@
   <figure><img src="/manual/img/12-editor-random.webp" alt="Exam editor: random questions">
     <figcaption><ol><li><b>Questions per student</b>: e.g. select 30 and type 10; each student gets a different random 10.</li><li><b>Or pick per topic</b>: e.g. 5 from Resistance, 5 from Inductance, 5 from Capacitance.</li><li><b>Or pick per question type</b>: e.g. 10 multiple choice and 5 true/false.</li><li><b>Shuffle</b> the question order and the multiple-choice options.</li><li><b>Show score to students after submitting</b>: untick to hide scores.</li></ol></figcaption></figure>
   <div class="tip">Students are never told that questions are picked at random or how many are in the bank. They never see the correct answers.</div>
+  <h3>Points for this exam (optional)</h3>
+  <p>If your questions are worth different points (e.g. 2 for calculations, 1 for the rest), a random set can give students different totals: one is out of 34, another out of 36. The <b>Points</b> setting fixes this for one exam, without changing your question bank.</p>
+  <figure class="mid"><img src="/manual/img/12b-editor-points.webp" alt="Points setting in the exam editor">
+    <figcaption><ol><li>Choose: the bank's points (normal), <b>the same points for every question</b>, <b>points per question type</b>, or <b>points per topic</b>.</li><li>Type the points for this exam. A box left on <i>same</i> keeps the bank's points. The total under the question list updates as you type.</li></ol></figcaption></figure>
+  <div class="tip">Set this before the exam opens. Results already submitted keep the points they had. Another way to give everyone the same total: pick per question type or per topic (e.g. 26 multiple choice + 4 fill in the blank), so every student gets the same mix.</div>
   <h3>Step 4: how questions are shown</h3>
   <figure class="mid"><img src="/manual/img/13-editor-display.webp" alt="Exam editor: display">
     <figcaption><ol><li><b>All on one page</b>, or <b>One question at a time</b>.</li><li>One at a time: untick to stop students from <b>going back</b>.</li><li>One at a time: an optional time limit <b>per question</b>, in seconds.</li></ol></figcaption></figure>
@@ -184,7 +203,7 @@
   <p>Answer the questions, then click <span class="btn p">Check answers</span> at the bottom.</p>
   <figure><img src="/manual/img/16-preview-checked.webp" alt="Preview after checking answers">
     <figcaption><ol><li>Each question shows <b>Correct</b> or <b>Wrong</b>, with your answer and the <b>answer key</b>. If you answered correctly but it says Wrong, the answer key needs fixing.</li><li>Click <b>Edit</b> to open that question and fix it.</li></ol></figcaption></figure>
-  <div class="tip">The preview also flags questions with no correct answer marked and pictures that do not load (e.g. a Google Drive picture that is not shared publicly).</div>
+  <div class="tip">The preview also flags questions with no correct answer marked and pictures that do not load (e.g. a Google Drive picture that is not shared publicly). For fill in the blank, try a slightly different answer too (another rounding, a typo): the preview shows what would be accepted and what would be flagged for you to check.</div>
 
   <h2 id="publish">7. Publish and share the link</h2>
   <ol>
@@ -198,12 +217,25 @@
   <h2 id="results">8. Results and grading</h2>
   <p>Click <b>Exams &amp; results</b>, then <span class="btn p">Results</span> next to the exam.</p>
   <figure><img src="/manual/img/17-results-top.webp" alt="Results summary">
-    <figcaption><ol><li>The summary: submitted, average, in progress, voided, not started, essays to grade.</li><li><b>Download results (CSV)</b> for your class record; <b>Download all answers</b> has every answer.</li></ol></figcaption></figure>
+    <figcaption><ol><li>The summary: submitted, average, in progress, voided, not started, essays to grade (and <b>answers to check</b>, when there are any).</li><li><b>Download results (CSV)</b> for your class record; <b>Download all answers</b> has every answer.</li></ol></figcaption></figure>
   <figure><img src="/manual/img/18-results-list.webp" alt="Results list">
     <figcaption><ol><li><b>Find a student</b> by name, student number or email.</li><li>Show only <b>Submitted</b>, <b>Voided</b>, <b>In progress</b> or <b>Not submitted</b>.</li><li><b>Sort</b> by name, start time, finish time, time taken or score (or click a column title).</li><li><b>Answers</b> opens the student's answers, events and camera snapshots.</li><li><b>Allow retake</b>: tick it and the student can open the exam again (e.g. after an exam voided by accident).</li></ol></figcaption></figure>
   <h3>A student's answers, events and snapshots</h3>
   <figure class="mid"><img src="/manual/img/19-answers.webp" alt="Answers window">
     <figcaption><ol><li><b>Events</b>: every warning and the reason an exam was voided, with the time.</li><li><b>Camera snapshots</b>: a small picture taken when the camera flagged something. Click it to enlarge. Look at it before deciding: a calculator held up can look like a phone.</li></ol></figcaption></figure>
+  <h3>Answers to check (close spellings, numbers, units)</h3>
+  <p>When a fill-in-the-blank answer is almost right, the student's row shows <b>⚠ to check</b>.</p>
+  <figure><img src="/manual/img/18b-results-check.webp" alt="Results with answers to check">
+    <figcaption><ol><li><b>Answers to check</b>: how many answers in this exam need your decision.</li><li>The student's row shows how many of their answers to check. Click <b>Answers</b> to see them.</li></ol></figcaption></figure>
+  <figure class="mid"><img src="/manual/img/19b-answers-check.webp" alt="An answer flagged as a close spelling">
+    <figcaption><ol><li>The note says why the answer was flagged.</li><li><b>Give full points</b> if you accept it (or type the points yourself, e.g. half).</li><li>Click <b>Save points</b>. The score is updated and the "to check" mark goes away, even if you left the points as they were.</li></ol></figcaption></figure>
+  <table>
+    <tr><th>Note</th><th>Marked</th><th>Example</th></tr>
+    <tr><td>Close spelling</td><td>Wrong, until you give the points</td><td>"Feranti" for "Ferranti"</td></tr>
+    <tr><td>Close number</td><td>Wrong, until you give the points</td><td>123.2 when the range is 122.1–122.9</td></tr>
+    <tr><td>Different unit</td><td>Correct (the number decides); you can take the points back</td><td>"127 V" when the answer key is in kV</td></tr>
+  </table>
+  <p>Students never see these notes.</p>
   <p><b>Grading essays:</b> in the Answers window, type the points next to each essay and click <b>Save points</b>. The score is updated. You can also change the points of any other question there.</p>
   <p>Students who have not started are listed under <b>Not started</b> at the bottom of the page, with their email.</p>
 
@@ -254,6 +286,8 @@
     <tr><td>"This exam must be taken on a laptop or desktop computer"</td><td>The student is on a phone. Change <b>Allowed devices</b> if you want to allow tablets or any device.</td></tr>
     <tr><td>The camera does not start</td><td>The student must allow the camera in the browser (camera icon in the address bar) and close other apps using it (Zoom, Meet).</td></tr>
     <tr><td>A picture does not show</td><td>Use Preview. For Google Drive pictures, share the file as "Anyone with the link", or upload the picture in the question editor.</td></tr>
+    <tr><td>Students have different totals (e.g. 34/34, 32/36) although each got 30 questions</td><td>Your questions are worth different points, and each student got a different random mix. Use <b>Points</b> in the exam editor (all the same, or per type or topic), or pick per question type or topic. See <a href="#exam">section 5</a>.</td></tr>
+    <tr><td>A correct calculation was marked wrong</td><td>The answer key needs a range, e.g. <code>122.5 ± 1%</code> instead of <code>122.5</code> (Question bank → Edit). For students who already submitted, open <b>Answers</b> and give the points.</td></tr>
     <tr><td>I changed the exam but students see the old one</td><td>Click <b>Save</b> in the editor. Students who already started keep the questions they started with.</td></tr>
   </table>
 </div>

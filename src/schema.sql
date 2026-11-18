@@ -247,6 +247,15 @@ ALTER TABLE attempt_snapshots ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAUL
 ALTER TABLE attempt_snapshots ADD COLUMN IF NOT EXISTS file text;
 ALTER TABLE attempt_snapshots ALTER COLUMN data DROP NOT NULL;
 
+-- Unstable internet: the open exam page (page_token) may lose the connection without voiding; answers are also kept on
+-- the server as a draft while the exam runs. offline_ms = total time the page was without internet.
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS page_token text;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS offline_ms bigint NOT NULL DEFAULT 0;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS draft_answers jsonb;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS draft_at timestamptz;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS sent_late boolean NOT NULL DEFAULT false;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS finished_at timestamptz;
+
 -- Tab/window switch warnings used in this attempt (the exam's focusWarnings option sets how many are allowed).
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS focus_warnings integer NOT NULL DEFAULT 0;
 

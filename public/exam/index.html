@@ -14,6 +14,7 @@
       <!-- Camera preview: bottom-right corner on wide screens, small thumbnail here on narrower ones -->
       <div class="cam-float" id="camFloat" hidden></div>
       <span class="cam-indicator" id="camIndicator" hidden>📷 Camera on</span>
+      <span class="save-state" id="saveState" hidden></span>
       <span class="progress" id="progress">0 / 0 answered</span>
       <span class="timer" id="timer" aria-live="polite">--:--</span>
     </div>
@@ -114,6 +115,16 @@
         <span id="progress2" class="muted"></span>
         <button type="button" class="btn primary big" id="submitBtn">Submit exam</button>
       </div>
+    </section>
+
+    <!-- Finished while offline: waiting for the internet to send the answers -->
+    <section id="screen-pending" class="card center" hidden>
+      <div class="big-icon warn">⏳</div>
+      <h1>Your exam is finished</h1>
+      <p><b>Your answers are saved on this device</b> and will be sent automatically when the internet is back.</p>
+      <p class="notice warn"><b>Keep this page open.</b> Do not close or reload it until you see "Exam submitted".</p>
+      <p class="muted" id="pendingStatus">Waiting for the internet…</p>
+      <button type="button" class="btn primary" id="pendingRetry">Try sending now</button>
     </section>
 
     <!-- Result -->

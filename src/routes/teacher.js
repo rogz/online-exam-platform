@@ -699,9 +699,9 @@ router.get('/exams/:id/export.csv', async (req, res) => {
         r.is_correct === null ? '' : r.is_correct ? 'Yes' : 'No', r.points_earned === null ? 'to grade' : r.points_earned, r.max_points, r.note]));
   } else {
     const rows = await db.many(`SELECT u.name, u.student_no, u.email, a.* FROM attempts a JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at`, [x.id]);
-    out = [['Student', 'Student No.', 'Email', 'Status', 'Score', 'Max', 'Percent', 'Essays to grade', 'Started', 'Submitted', 'Late', 'Void reason', 'Warnings', 'Reconnects', 'Device', 'Retake']]
+    out = [['Student', 'Student No.', 'Email', 'Status', 'Score', 'Max', 'Percent', 'Essays to grade', 'Started', 'Submitted', 'Late', 'Void reason', 'Warnings', 'Reconnects', 'Device', 'Retake', 'Offline (min)', 'Sent after the internet came back']]
       .concat(rows.map((r) => [r.name, r.student_no, r.email, r.status, r.score, r.max_score, r.percent, r.pending_essays, r.started_at, r.submitted_at,
-        r.late ? 'Yes' : '', r.void_reason, r.warnings, r.reconnects, r.device, r.is_retake ? 'Yes' : '']));
+        r.late ? 'Yes' : '', r.void_reason, r.warnings, r.reconnects, r.device, r.is_retake ? 'Yes' : '', Math.round(Number(r.offline_ms || 0) / 60000), r.sent_late ? 'Yes' : '']));
   }
   const name = x.title.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'exam';
   res.set('Content-Type', 'text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="${name}${req.query.detail ? '-answers' : '-results'}.csv"`).send(toCsv(out));

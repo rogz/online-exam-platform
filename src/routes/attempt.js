@@ -67,10 +67,27 @@ function blockedError(a) {
   }
 }
 
-/** Voids the attempt if the page was out of contact too long. Returns false if voided. */
-async function enforceGap(q, a, opts, now) {
-  if (!(opts.reconnectSeconds > 0) || !a.last_seen) return true;
+const fmtGap = (ms) => { const s = Math.round(ms / 1000); return s < 90 ? s + ' s' : Math.round(s / 60) + ' min'; };
+
+/** True when the request comes from the exam page that is still open (it lost only the internet, not the page). */
+const samePage = (a, opts, token) => opts.keepGoingOffline && !!a.page_token && typeof token === 'string' && token === a.page_token;
+
+/**
+ * Voids the attempt if the page was out of contact too long. Returns false if voided.
+ * With "keep going offline", the same open page may come back after any gap: it is logged as time offline instead.
+ */
+async function enforceGap(q, a, opts, now, token) {
+  if (!a.last_seen) return true;
   const gap = now - new Date(a.last_seen);
+  if (samePage(a, opts, token)) {
+    if (gap > 45000) {
+      await logEvent(q, a.id, 'OFFLINE', 'No internet for about ' + fmtGap(gap) + '; the exam page stayed open and kept checking.');
+      await q('UPDATE attempts SET offline_ms = offline_ms + $1 WHERE id = $2', [Math.round(gap), a.id]);
+      a.offline_ms = Number(a.offline_ms || 0) + gap;
+    }
+    return true;
+  }
+  if (!(opts.reconnectSeconds > 0)) return true;
   if (gap <= opts.reconnectSeconds * 1000 + PING_SLACK_MS) return true;
   await logEvent(q, a.id, 'CONNECTION_LOST', 'VOIDED: no contact for ' + Math.round(gap / 1000) + ' s (limit ' + opts.reconnectSeconds + ' s)');
   await voidAttempt(q, a, 'CONNECTION_LOST');
@@ -191,6 +208,9 @@ const actions = {
           [id, exam.id, req.user.id, STATUS.IN_PROGRESS, now, deadline, maxScore, isRetake, str(env.userAgent, 300), device])).rows[0];
       }
 
+      if (typeof b.pageToken === 'string' && /^[0-9a-f-]{36}$/.test(b.pageToken)) {
+        await q('UPDATE attempts SET page_token = $1 WHERE id = $2', [b.pageToken, attempt.id]);
+      }
       const deadline = attempt.deadline ? new Date(attempt.deadline) : null;
       const lockedIds = resumed && !exam.allowBack
         ? (await q('SELECT question_id FROM locked_answers WHERE attempt_id = $1 ORDER BY at', [attempt.id])).rows.map((r) => r.question_id) : [];
@@ -204,6 +224,7 @@ const actions = {
           remainingMs: deadline ? Math.max(0, deadline.getTime() - now.getTime()) : null,
           questions: core.attemptQuestions(exam, pool, attempt.id).map((qq) => core.publicQuestion(qq, exam, attempt.id)),
           lockedIds,
+          draftAnswers: resumed && attempt.draft_answers ? attempt.draft_answers : null,
         },
       };
     });
@@ -216,9 +237,14 @@ const actions = {
       const a = await lockAttempt(t.query, req.body.attemptId, req.user.id);
       if (a.status !== STATUS.IN_PROGRESS) return { status: a.status, reason: a.void_reason };
       const exam = await examOfAttempt(t.query, a);
-      if (!(await enforceGap(t.query, a, exam.options, new Date()))) return { status: a.status, reason: a.void_reason };
-      await t.query('UPDATE attempts SET last_seen = now(), disconnected_at = NULL WHERE id = $1', [a.id]);
-      return { status: a.status };
+      if (!(await enforceGap(t.query, a, exam.options, new Date(), req.body.pageToken))) return { status: a.status, reason: a.void_reason };
+      const ans = req.body.answers && typeof req.body.answers === 'object' && !Array.isArray(req.body.answers) ? req.body.answers : null;
+      if (ans && JSON.stringify(ans).length <= 400000) {
+        await t.query('UPDATE attempts SET last_seen = now(), disconnected_at = NULL, draft_answers = $1, draft_at = now() WHERE id = $2', [JSON.stringify(ans), a.id]);
+      } else {
+        await t.query('UPDATE attempts SET last_seen = now(), disconnected_at = NULL WHERE id = $1', [a.id]);
+      }
+      return { status: a.status, saved: !!ans };
     });
   },
 
@@ -327,8 +353,22 @@ const actions = {
         return { error: blockedError(a) };
       }
       const now = new Date();
-      if (!(await enforceGap(q, a, exam.options, now))) return { error: blockedError(a) };
-      const late = !!a.deadline && now.getTime() > new Date(a.deadline).getTime() + exam.options.submitGraceSeconds * 1000;
+      const token = req.body.pageToken;
+      if (!(await enforceGap(q, a, exam.options, now, token))) return { error: blockedError(a) };
+      // Finished while offline: the page sends when the internet is back. It counts as on time if it was finished before
+      // the deadline and arrives within the exam's limit; the teacher sees "Sent late (offline)".
+      const graceMs = exam.options.submitGraceSeconds * 1000;
+      const deadlineMs = a.deadline ? new Date(a.deadline).getTime() : null;
+      const finishedMs = Number(req.body.finishedAt);
+      const offlineFinish = samePage(a, exam.options, token) && Number.isFinite(finishedMs) && finishedMs <= now.getTime() && now.getTime() - finishedMs > 30000;
+      let late = deadlineMs !== null && now.getTime() > deadlineMs + graceMs;
+      let sentLate = false;
+      if (offlineFinish) {
+        sentLate = true;
+        late = deadlineMs !== null && (finishedMs > deadlineMs + graceMs || now.getTime() > deadlineMs + exam.options.offlineSubmitMinutes * 60000);
+        await logEvent(q, a.id, 'SENT_LATE', 'Finished ' + new Date(finishedMs).toISOString() + ' while offline; the answers arrived ' + fmtGap(now.getTime() - finishedMs) + ' later' +
+          (late ? ' (too late: marked Late).' : '.'));
+      }
       const questions = core.attemptQuestions(exam, await loadPool(q, exam), a.id);
       const answers = Object.assign({}, req.body.answers && typeof req.body.answers === 'object' ? req.body.answers : {});
       if (!exam.allowBack) {
@@ -345,8 +385,9 @@ const actions = {
           [a.id, qq.id, i, qq.type, qq.text, g.studentText, g.correctText, g.pending ? null : g.correct, g.pending ? null : g.points, qq.points, g.note || '']);
       }
       const percent = max ? Math.round(score / max * 10000) / 100 : 0;
-      await q(`UPDATE attempts SET status = $1, submitted_at = $2, score = $3, max_score = $4, percent = $5, pending_essays = $6, late = $7 WHERE id = $8`,
-        [STATUS.SUBMITTED, now, score, max, percent, pending, late, a.id]);
+      await q(`UPDATE attempts SET status = $1, submitted_at = $2, score = $3, max_score = $4, percent = $5, pending_essays = $6, late = $7,
+                 sent_late = $9, finished_at = $10 WHERE id = $8`,
+        [STATUS.SUBMITTED, now, score, max, percent, pending, late, a.id, sentLate, sentLate ? new Date(finishedMs) : now]);
       Object.assign(a, { status: STATUS.SUBMITTED, score, max_score: max, percent, pending_essays: pending });
       return { result: resultFor(a, exam) };
     });

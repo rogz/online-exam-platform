@@ -53,7 +53,14 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Leaving the exam** (tab switch, minimize, Alt+Tab, clicking another app): voids at once, or after
   **Tab/window warnings** (per exam, default 0). One warning per time away; staying away > 1 minute voids.
 - **Second monitor** (`screen.isExtended`): blocked before start, voids during the exam.
-- **Reload / lost connection**: reconnect window (default 60 s, max 3 times); the timer keeps running.
+- **Reload / closed page**: reconnect window (default 60 s, max 3 times); the timer keeps running.
+- **Unstable internet** (per exam, on by default: "If the internet drops: keep going"): the open exam page keeps
+  running and checking without internet; answers are kept on the device (and as a draft on the server whenever there
+  is a connection, "✓ Saved"); the page has a token so the server can tell "internet dropped" (logged as OFFLINE,
+  `offline_ms`) from "page closed" (reconnect rules). Finished while offline: "Your exam is finished… keep this page
+  open", sent automatically when the internet is back; on time if finished before the deadline and sent within
+  `offlineSubmitMinutes` (default 60), shown as "Sent after the internet came back" (`sent_late`). The old rule
+  (void after the reconnect window) is still a choice.
 - **Copy/paste/right-click** blocked (option). Answer keys never reach the browser; grading, time limits and locked
   answers are checked on the server.
 - **Devices**: hardware check that "desktop site" mode can't hide: main pointer is touch and can't hover → phone

@@ -505,6 +505,12 @@
           <div class="row" style="gap:6px;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="oRandSnap"${o.randomSnapshots ? ' checked' : ''}> Take random snapshots:</label>
             <input type="number" id="oSnapHour" min="1" max="30" value="${o.snapshotsPerHour || 6}" style="width:70px" aria-label="Random snapshots per hour"> <span>per hour</span></div>
           <div class="hint" id="randSnapHint">Small pictures at random times, as an extra check (camera exams monitored throughout). Students are told on the rules screen. Deleted when you archive the exam or class, or 30 days after the exam closes.</div>
+          <div class="field" style="margin-top:10px"><label for="oOffline">If the internet drops during the exam</label>
+            <select id="oOffline">${opt('KEEP', o.keepGoingOffline === false ? 'VOID' : 'KEEP', 'Keep going: answers are sent when the internet is back (recommended)')}${opt('VOID', o.keepGoingOffline === false ? 'VOID' : 'KEEP', 'Void the exam after the reconnect window')}</select>
+            <div class="row" id="offlineMinRow" style="gap:6px;align-items:center;margin-top:6px"><span class="small">Accept answers finished in time but sent up to</span>
+              <input type="number" id="oOfflineMin" min="0" max="1440" value="${o.offlineSubmitMinutes === undefined ? 60 : o.offlineSubmitMinutes}" style="width:80px" aria-label="Minutes after the deadline">
+              <span class="small">minutes after the deadline</span></div>
+            <div class="hint">The exam page keeps checking tabs, windows and the camera while offline. Closing or reloading the page still follows the reconnect rules below.</div></div>
           <details><summary class="small" style="cursor:pointer;margin:6px 0">Advanced settings</summary>
             <div class="grid2" style="margin-top:8px">
               <div class="field"><label for="oFocusWarn">Tab/window warnings</label><input type="number" id="oFocusWarn" min="0" max="10" value="${o.focusWarnings || 0}"><div class="hint">Warnings for switching tabs or apps before the exam is voided. 0 = void at once</div></div>
@@ -616,11 +622,12 @@
       if (!one) $('#eBack').checked = true; if (perQ) $('#eBack').checked = false;
       $('#ePrev').disabled = $('#eFace').value !== 'ALWAYS';
       $('#oRandSnap').disabled = $('#eFace').value !== 'ALWAYS';
+      $('#offlineMinRow').hidden = $('#oOffline').value !== 'KEEP';
       $('#oSnapHour').disabled = $('#eFace').value !== 'ALWAYS' || !$('#oRandSnap').checked;
     }
     ['pSearch', 'pType', 'pTopic', 'pFolder'].forEach((i) => $('#' + i).addEventListener('input', drawPicker));
     $('#pAll').onchange = (e) => { visible().filter((q) => !q.problems.length).forEach((q) => toggle(q.id, e.target.checked)); drawPicker(); };
-    ['eMode', 'eQsec', 'eFace', 'oRandSnap'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
+    ['eMode', 'eQsec', 'eFace', 'oRandSnap', 'oOffline'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
     $('#ePick').addEventListener('input', drawSum);
     $('#ePtsMode').addEventListener('input', (e) => { pr.mode = e.target.value; drawPts(); drawSum(); });
     drawPicker(); syncMode();
@@ -637,6 +644,7 @@
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
         typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
         randomSnapshots: $('#oRandSnap').checked && $('#eFace').value === 'ALWAYS', snapshotsPerHour: $('#oSnapHour').value,
+        keepGoingOffline: $('#oOffline').value === 'KEEP', offlineSubmitMinutes: $('#oOfflineMin').value,
         pointsRule: { mode: pr.mode, all: pr.all, byType: pr.byType, byTopic: pr.byTopic } },
     });
     async function save() {
@@ -710,7 +718,7 @@
         <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
           ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}${a.to_check ? '<div class="small" style="color:var(--warn)" title="Close spelling, a number just outside the range, or a different unit: open Answers to decide">⚠ ' + a.to_check + ' to check</div>' : ''}</td>
         <td data-label="Time" class="small"><div class="nowrap">${esc(App.fmtDate(a.started_at))}</div>${a.submitted_at ? '<div class="muted nowrap">→ ' + esc(endText) + ' · ' + mins + ' min</div>' : ''}</td>
-        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
+        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}${Number(a.offline_ms) >= 60000 ? '<div title="The internet was down; the exam page stayed open and kept checking">📶 Offline ' + Math.round(a.offline_ms / 60000) + ' min</div>' : ''}${a.sent_late ? '<div style="color:var(--warn)" title="Finished while offline; the answers were sent when the internet came back. See Answers → Events.">⏳ Sent after the internet came back</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
         <td class="actions"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
           ${a.status !== 'IN_PROGRESS' ? `<label class="check small" title="Let this student take the exam again"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`;
       }).join('')

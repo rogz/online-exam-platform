@@ -565,6 +565,62 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const away = await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [awayExam]);
   ok(away.status === 'VOIDED', 'staying away from the exam for more than 1 minute voids it, even with warnings left');
 
+  // ── Unstable internet: the exam keeps going offline, answers are sent when the internet is back ──
+  const netExam = await mkExam('Unstable internet quiz', {});
+  await student.goto(BASE + '/exam?id=' + netExam);
+  await student.waitForSelector('#screen-rules:not([hidden])');
+  ok((await student.textContent('#ruleReload')).includes('If the internet drops, keep this page open'), 'rules screen explains what to do when the internet drops');
+  await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  await student.click('#questions .question label:has-text("True")');
+  await student.context().setOffline(true);
+  await student.waitForSelector('#connBanner.offline:not([hidden])', { timeout: 10000 });
+  await shot(student, '18-offline-banner');
+  const offBanner = await student.textContent('#connBanner'), offSave = await student.textContent('#saveState');
+  // pretend the internet was gone for 5 minutes (longer than the 60 s reconnect window)
+  await db.query(`UPDATE attempts SET last_seen = now() - interval '5 minutes' WHERE exam_id = $1`, [netExam]);
+  await student.click('#submitBtn'); await student.click('#confirmYes');
+  await student.waitForSelector('#screen-pending:not([hidden])', { timeout: 20000 });
+  await shot(student, '19-offline-finished');
+  ok(offBanner.includes('No internet') && offSave.includes('Saved on this device'), 'offline: "No internet… keep answering" banner and "Saved on this device"');
+  const stillOpen = await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [netExam]);
+  ok(stillOpen.status === 'IN_PROGRESS', 'finishing offline shows "Your exam is finished… keep this page open" and nothing is voided');
+  // the answers waited 2 minutes on the device
+  await student.evaluate((id) => { const k = 'exam-pending:' + id; const p = JSON.parse(localStorage.getItem(k)); p.finishedAt -= 120000; localStorage.setItem(k, JSON.stringify(p)); }, netExam);
+  // let a try that is already on its way fail first, so the next one carries the changed answers
+  const pendBefore = await student.textContent('#pendingStatus');
+  await student.waitForFunction((b) => { const t = document.querySelector('#pendingStatus').textContent; return t !== b && t.includes('Still no internet'); }, pendBefore, { timeout: 20000 });
+  await student.context().setOffline(false); // the page notices and sends by itself
+  await student.waitForSelector('#screen-result:not([hidden])', { timeout: 15000 });
+  const netRow = await dbOne('SELECT status, score, sent_late, late, offline_ms FROM attempts WHERE exam_id = $1', [netExam]);
+  const netEv = (await db.many(`SELECT event FROM violations v JOIN attempts a ON a.id = v.attempt_id WHERE a.exam_id = $1`, [netExam])).map((r) => r.event).join();
+  ok(netRow.status === 'SUBMITTED' && netRow.sent_late === true && netRow.late === false && Number(netRow.offline_ms) > 200000 && netEv.includes('OFFLINE') && netEv.includes('SENT_LATE'),
+    'back online: answers sent, not voided, logged as offline and "sent after the internet came back" (' + netEv + ' ' + JSON.stringify(netRow) + ')');
+  await teacher.goto(BASE + '/teacher#results/' + netExam); await teacher.waitForSelector('[data-answers]');
+  const netNotes = await teacher.textContent('#aRows');
+  ok(netNotes.includes('Offline 5 min') && netNotes.includes('Sent after the internet came back'), 'results show "Offline 5 min" and "Sent after the internet came back"');
+  // the same exam with "void after the reconnect window" keeps the old rule
+  const strictExam = await mkExam('Strict internet quiz', { keepGoingOffline: false });
+  await student.goto(BASE + '/exam?id=' + strictExam);
+  await student.waitForSelector('#screen-rules:not([hidden])'); await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  await db.query(`UPDATE attempts SET last_seen = now() - interval '5 minutes' WHERE exam_id = $1`, [strictExam]);
+  await student.click('#submitBtn'); await student.click('#confirmYes');
+  await student.waitForSelector('#voidModal:not([hidden])', { timeout: 15000 });
+  ok((await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [strictExam])).status === 'VOIDED', '"void after the reconnect window" still voids a long gap');
+  // answers are kept on the server while the exam runs (draft)
+  const draftExam = await mkExam('Draft quiz', {});
+  await student.goto(BASE + '/exam?id=' + draftExam);
+  await student.waitForSelector('#screen-rules:not([hidden])'); await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  await student.click('#questions .question label:has-text("False")');
+  await student.evaluate(() => window.dispatchEvent(new Event('online')));
+  await student.waitForSelector('#saveState.ok', { timeout: 10000 });
+  const draft = await dbOne('SELECT draft_answers FROM attempts WHERE exam_id = $1', [draftExam]);
+  ok(draft.draft_answers && Object.values(draft.draft_answers).length === 1, 'answers so far are saved on the server too ("✓ Saved")');
+  await student.click('#submitBtn'); await student.click('#confirmYes');
+  await student.waitForSelector('#screen-result:not([hidden])');
+
   // A phone in "desktop site" mode is still a phone (touch-only, small screen)
   const deskPhoneCtx = await browser.newContext({ viewport: { width: 980, height: 1800 }, screen: { width: 412, height: 915 }, hasTouch: true, isMobile: true,
     userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36' });

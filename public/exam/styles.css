@@ -133,6 +133,11 @@ textarea.essay { min-height: 160px; resize: vertical; }
 .pager-mid { text-align: center; }
 .q-timer { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--border); font-weight: 700; font-variant-numeric: tabular-nums; }
 .q-timer.low { color: var(--danger); border-color: var(--danger); }
+.save-state { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.save-state.ok { color: #1a7f37; }
+.save-state.wait { color: #9a6700; font-weight: 600; }
+.big-icon.warn { color: #9a6700; }
+.conn-banner.offline { background: #fff4dc; border-color: #ecd59e; color: #5c4200; }
 .conn-banner { position: sticky; top: 64px; z-index: 5; font-weight: 600; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
 .palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .palette button {

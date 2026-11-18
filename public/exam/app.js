@@ -34,7 +34,16 @@
     index: 0,            // current question in one-at-a-time mode
     locked: new Set(),   // questions that can no longer be changed
     cam: { required: false, continuous: false, warnings: 0, warningOpen: false, offenseArmed: true },
+    pageToken: newToken(), // this open page; lets the server tell "internet dropped" from "page was closed"
+    answersVer: 0,         // changes each time an answer changes
+    savedVer: 0,           // the version the server has
   };
+
+  function newToken() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    const h = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(1);
+    return h() + h() + '-' + h() + '-4' + h().slice(1) + '-a' + h().slice(1) + '-' + h() + h() + h();
+  }
 
   // ───────── API ─────────
 
@@ -78,7 +87,7 @@
   // ───────── Screens ─────────
 
   function show(screen) {
-    ['loading', 'error', 'rules', 'exam', 'result'].forEach((s) => { $('screen-' + s).hidden = s !== screen; });
+    ['loading', 'error', 'rules', 'exam', 'pending', 'result'].forEach((s) => { $('screen-' + s).hidden = s !== screen; });
     $('examBar').hidden = screen !== 'exam';
     window.scrollTo(0, 0);
   }
@@ -387,7 +396,12 @@
       $('camHelp').textContent = 'Turn on your camera so we can check that your face is visible. The camera turns off when the exam starts.';
     }
     const rs = rules.reconnectSeconds || 0;
-    if (rs > 0) {
+    if (rules.keepGoingOffline !== false) {
+      $('ruleReload').innerHTML = '<b>If the internet drops, keep this page open and keep answering.</b> Your answers are saved on this device and sent automatically when the internet is back; ' +
+        'if time runs out while offline, they are sent as soon as you are back online. ' +
+        (rs > 0 ? 'If the page itself is closed or reloaded, reopen the same exam link within <b>' + fmtDuration(rs) + '</b> (up to ' + rules.maxReconnects + ' time' + (rules.maxReconnects === 1 ? '' : 's') + '), or your exam is voided. '
+          : 'Closing or reloading the page voids your exam. ') + '<b>Do not close or reload this page.</b>';
+    } else if (rs > 0) {
       $('ruleReload').innerHTML = '<b>If your internet drops or the page reloads</b>, reopen the same exam link within <b>' + fmtDuration(rs) +
         '</b> to continue (up to ' + rules.maxReconnects + ' time' + (rules.maxReconnects === 1 ? '' : 's') + '). Your timer keeps running. ' +
         'Taking longer voids your exam. <b>Do not close or reload this page on purpose.</b>';
@@ -424,6 +438,7 @@
     try {
       const r = await api('start', {
         examId: state.examId,
+        pageToken: state.pageToken,
         password: $('examPassword').value.trim(),
         env: {
           userAgent: navigator.userAgent,
@@ -462,6 +477,7 @@
     state.answers = {};
     if (r.resumed) {
       try { state.answers = JSON.parse(localStorage.getItem(storageKey()) || '{}') || {}; } catch (e) { state.answers = {}; }
+      if (r.draftAnswers && typeof r.draftAnswers === 'object') state.answers = Object.assign({}, r.draftAnswers, state.answers);
     }
     state.endAt = r.remainingMs === null || r.remainingMs === undefined ? null : Date.now() + r.remainingMs;
     // Skip warnings longer than the time available (no "5 minutes left" on a 3-minute exam)
@@ -496,7 +512,8 @@
     tick();
     state.timerId = setInterval(tick, 250);
     state.lastOkAt = Date.now();
-    if (state.rules.reconnectSeconds > 0) state.pingId = setInterval(ping, 20000);
+    if (state.rules.reconnectSeconds > 0 || keepGoing()) state.pingId = setInterval(ping, 20000);
+    paintSaveState();
     if (r.resumed && state.rules.reconnectSeconds > 0) {
       const w = $('timeWarning');
       w.hidden = false; w.className = 'notice';
@@ -684,8 +701,22 @@
 
   function setAnswer(id, value) {
     state.answers[id] = value;
+    state.answersVer++;
     saveLocal();
     updateProgress();
+    paintSaveState();
+  }
+
+  /** "✓ Saved" when the server has the latest answers; "Saved on this device" while offline or not sent yet. */
+  function paintSaveState() {
+    const el = $('saveState');
+    if (!keepGoing() || !state.active) { el.hidden = true; return; }
+    el.hidden = false;
+    const offline = state.offlineSince !== null;
+    const synced = state.savedVer >= state.answersVer;
+    el.className = 'save-state ' + (offline ? 'wait' : synced ? 'ok' : '');
+    el.textContent = offline ? '💾 Saved on this device' : synced ? '✓ Saved' : 'Saving…';
+    el.title = offline ? 'No internet: your answers are kept on this device and sent when the internet is back.' : '';
   }
 
   function isAnswered(id) {
@@ -852,22 +883,29 @@
 
   // ───────── Connection & reconnect ─────────
 
+  const keepGoing = () => state.rules.keepGoingOffline !== false;
+
   function markOnline() {
     state.lastOkAt = Date.now();
     if (state.offlineSince !== null) {
       state.offlineSince = null;
       $('connBanner').hidden = true;
+      $('connBanner').classList.remove('offline');
     }
+    paintSaveState();
   }
 
   function markOffline(since) {
     if (state.offlineSince === null) state.offlineSince = since || Date.now();
+    paintSaveState();
   }
 
   async function ping() {
-    if (!state.active || !(state.rules.reconnectSeconds > 0)) return;
+    if (!state.active || !(state.rules.reconnectSeconds > 0 || keepGoing())) return;
+    const ver = state.answersVer;
     try {
-      const r = await api('ping', { attemptId: state.attemptId });
+      const r = await api('ping', { attemptId: state.attemptId, pageToken: state.pageToken, answers: keepGoing() && ver > state.savedVer ? state.answers : undefined });
+      if (r.saved) state.savedVer = Math.max(state.savedVer, ver);
       markOnline();
       if (r.status === 'VOIDED') showVoid(null, 'Your exam was voided: ' + (r.reason || 'exam rules were broken') + '. Please inform your instructor.');
     } catch (e) {
@@ -875,10 +913,22 @@
     }
   }
 
-  /** Shows the "connection lost" banner and voids the exam if the limit passes. */
+  /**
+   * Shows the "connection lost" banner. With "keep going offline" (the default) the exam simply continues: answers stay
+   * on this device and are sent when the internet is back. Otherwise the exam is voided when the reconnect limit passes.
+   */
   function tickConnection() {
+    if (state.offlineSince === null) return;
+    if (keepGoing()) {
+      const b = $('connBanner');
+      b.hidden = false; b.classList.add('offline');
+      b.textContent = '📶 No internet for ' + fmtTime(Date.now() - state.offlineSince) + '. Keep this page open and keep answering: ' +
+        'your answers are saved on this device and will be sent automatically when the internet is back.';
+      if (Date.now() - (state.lastRetryAt || 0) > 5000) { state.lastRetryAt = Date.now(); ping(); }
+      return;
+    }
     const rs = state.rules.reconnectSeconds || 0;
-    if (!(rs > 0) || state.offlineSince === null) return;
+    if (!(rs > 0)) return;
     const left = rs * 1000 - (Date.now() - state.offlineSince);
     const b = $('connBanner');
     b.hidden = false;
@@ -888,14 +938,14 @@
     if (left <= 0 && !state.submitting) voidExam('CONNECTION_LOST', 'Offline for more than ' + rs + ' s.');
   }
 
-  /** Sends now, or keeps retrying every 5 s while offline (up to 10 minutes). */
+  /** Sends now, or keeps retrying every 5 s while offline (as long as the page is open when "keep going offline" is on). */
   function sendReliably(action, payload) {
     let tries = 0;
     const attempt = () => api(action, payload).then((r) => { markOnline(); return r; }).catch((e) => {
       if (e.code === 'VOIDED') { showVoid(null, e.message); return; }
       if (e.code !== 'NETWORK') return;
       markOffline(state.lastOkAt);
-      if (++tries < 120) setTimeout(attempt, 5000);
+      if (++tries < (keepGoing() ? 100000 : 120)) setTimeout(attempt, 5000);
       else beacon(action, payload);
     });
     attempt();
@@ -917,8 +967,9 @@
     $('confirmModal').hidden = true;
     $('submitBtn').disabled = true;
     busy(true, auto ? 'Time is up — submitting your answers…' : 'Submitting your answers…');
+    const finishedAt = Date.now() + state.serverOffset;
     try {
-      const r = await api('submit', { attemptId: state.attemptId, answers: state.answers, violations: state.violations }, 4);
+      const r = await api('submit', { attemptId: state.attemptId, answers: state.answers, violations: state.violations, pageToken: state.pageToken, finishedAt }, 4);
       finishExam();
       busy(false);
       showResult(r);
@@ -927,6 +978,7 @@
       state.submitting = false;
       if (e.code === 'VOIDED') { showVoid(null, e.message); return; }
       if (e.code === 'ALREADY_SUBMITTED') { finishExam(); showResult({ showScore: false }); return; }
+      if (e.code === 'NETWORK' && keepGoing()) { finishOffline(finishedAt); return; }
       $('submitBtn').disabled = false;
       const warn = $('timeWarning');
       warn.hidden = false; warn.className = 'notice bad';
@@ -934,6 +986,46 @@
       window.scrollTo(0, 0);
       if (auto) setTimeout(() => submitExam(true), 5000);
     }
+  }
+
+  // ── Finished without internet: the answers are frozen and sent when the internet is back ──
+  const pendingKey = () => 'exam-pending:' + state.examId;
+
+  function finishOffline(finishedAt) {
+    const pending = { attemptId: state.attemptId, pageToken: state.pageToken, answers: state.answers, violations: state.violations, finishedAt, name: state.student && state.student.name };
+    try { localStorage.setItem(pendingKey(), JSON.stringify(pending)); } catch (e) { /* ignore */ }
+    finishExam();
+    show('pending');
+    sendPending(pending);
+  }
+
+  async function sendPending(pending) {
+    if (state.sendingPending) return;
+    state.sendingPending = true;
+    $('pendingStatus').textContent = 'Sending your answers…';
+    try {
+      const r = await api('submit', { attemptId: pending.attemptId, answers: pending.answers, violations: pending.violations, pageToken: pending.pageToken, finishedAt: pending.finishedAt }, 2);
+      try { localStorage.removeItem(pendingKey()); } catch (e) { /* ignore */ }
+      state.sendingPending = false;
+      if (!state.student && pending.name) state.student = { name: pending.name };
+      showResult(r);
+    } catch (e) {
+      state.sendingPending = false;
+      if (e.code === 'NETWORK') {
+        $('pendingStatus').textContent = 'Still no internet (last try ' + new Date().toLocaleTimeString() + '). Trying again every few seconds…';
+        clearTimeout(state.pendingTimer);
+        state.pendingTimer = setTimeout(() => sendPending(pendingFromStorage() || pending), 5000);
+        return;
+      }
+      try { localStorage.removeItem(pendingKey()); } catch (err) { /* ignore */ }
+      if (e.code === 'ALREADY_SUBMITTED') { showResult({ showScore: false }); return; }
+      if (e.code === 'VOIDED') { showVoid(null, e.message); return; }
+      showError(e.message);
+    }
+  }
+
+  function pendingFromStorage() {
+    try { const p = JSON.parse(localStorage.getItem(pendingKey()) || 'null'); return p && p.attemptId ? p : null; } catch (e) { return null; }
   }
 
   function finishExam() {
@@ -1141,8 +1233,13 @@
       if (reconnectOn()) { onLeaving(); return; } // reload allowed: reconnect within the time limit
       e.preventDefault(); e.returnValue = '';
     });
-    window.addEventListener('offline', () => { if (state.active && reconnectOn()) markOffline(Date.now()); });
-    window.addEventListener('online', () => { if (state.active) ping(); });
+    window.addEventListener('offline', () => { if (state.active && (reconnectOn() || keepGoing())) markOffline(Date.now()); });
+    window.addEventListener('online', () => {
+      if (state.active) ping();
+      const p = !$('screen-pending').hidden && pendingFromStorage();
+      if (p) { clearTimeout(state.pendingTimer); sendPending(p); }
+    });
+    $('pendingRetry').addEventListener('click', () => { const p = pendingFromStorage(); if (p) { clearTimeout(state.pendingTimer); sendPending(p); } });
     if (window.screen && typeof window.screen.addEventListener === 'function') {
       window.screen.addEventListener('change', () => { checkMonitorDuringExam(); if (!state.attemptId && state.info) refreshStartButton(); });
     }
@@ -1172,6 +1269,8 @@
       showError('This link has no exam in it. Go back to My Exams and choose the exam there.');
       return;
     }
+    const left = pendingFromStorage();
+    if (left) { show('pending'); sendPending(left); return; } // finished earlier without internet: send those answers first
     try {
       state.info = await api('getExam', { examId: state.examId }, 3);
       state.serverOffset = state.info.exam.serverNow - Date.now();

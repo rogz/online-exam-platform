@@ -180,7 +180,7 @@
     <figcaption><ol><li><b>All on one page</b>, or <b>One question at a time</b>.</li><li>One at a time: untick to stop students from <b>going back</b>.</li><li>One at a time: an optional time limit <b>per question</b>, in seconds.</li></ol></figcaption></figure>
   <h3>Step 5: security</h3>
   <figure class="mid"><img src="/manual/img/13b-editor-security.webp" alt="Exam editor: security">
-    <figcaption><ol><li><b>Allowed devices</b>: computers only, computers and tablets, or any device. Phones are blocked even in "desktop site" mode.</li><li><b>Camera</b>: not required, check the face at the start only, or monitor during the whole exam.</li><li>Show students a small preview of their camera.</li><li><b>Tab/window warnings</b> (click <i>Advanced settings</i> to see these): how many times a student may switch tabs or apps before the exam is voided. 0 = voided the first time. 1–2 is a good choice.</li><li><b>Focus grace</b>: seconds a student may be away before it counts.</li><li><b>Camera warnings</b>: how many camera problems (phone seen, no face, covered camera, another person) before the exam is voided.</li><li><b>Camera grace</b>: seconds a camera problem must last before it counts (default 3).</li></ol></figcaption></figure>
+    <figcaption><ol><li><b>Allowed devices</b>: computers only, computers and tablets, or any device. Phones are blocked even in "desktop site" mode.</li><li><b>Camera</b>: not required, check the face at the start only, or monitor during the whole exam.</li><li>Show students a small preview of their camera.</li><li><b>Take random snapshots</b> (optional): small pictures at random times, <b>6 per hour</b> unless you change the number. Only for exams with the camera monitored throughout.</li><li><b>Tab/window warnings</b> (click <i>Advanced settings</i> to see these): how many times a student may switch tabs or apps before the exam is voided. 0 = voided the first time. 1–2 is a good choice.</li><li><b>Focus grace</b>: seconds a student may be away before it counts.</li><li><b>Camera warnings</b>: how many camera problems (phone seen, no face, covered camera, another person) before the exam is voided.</li><li><b>Camera grace</b>: seconds a camera problem must last before it counts (default 3).</li></ol></figcaption></figure>
   <table>
     <tr><th>Advanced setting</th><th>What it does</th><th>Default</th></tr>
     <tr><td>Reconnect window / Max reconnects</td><td>If the internet drops or the page reloads, the student can continue within this many seconds, this many times.</td><td>60 s / 3</td></tr>
@@ -191,6 +191,14 @@
     <tr><td>Save a small snapshot as proof</td><td>Camera exams: a small picture is saved when the camera flags something.</td><td>On</td></tr>
     <tr><td>Block copy, paste and right-click</td><td>During the exam.</td><td>On</td></tr>
   </table>
+  <h3>Random snapshots (optional)</h3>
+  <p>As an extra check, the camera can take small pictures at <b>random times</b> during the exam. Tick <b>Take random snapshots</b> under the camera setting and choose how many per hour (6 by default). The hour is split into equal parts (6 per hour = every 10 minutes) and one picture is taken at a random moment in each part, so students cannot predict them.</p>
+  <ul>
+    <li>Students are told automatically on the rules screen before they start (you may also mention it in your instructions).</li>
+    <li>The pictures are small and gray (about 4 KB each), enough to see who is taking the exam and what is on the desk. No video is recorded.</li>
+    <li>You see them in <b>Results → Answers</b>, marked <b>Random check</b>.</li>
+    <li>They are <b>deleted permanently</b> when you archive the exam or the class, and in any case <b>30 days after the exam closes</b>. Look at them (or save one) before that.</li>
+  </ul>
   <h3>Step 6: save</h3>
   <figure class="narrow"><img src="/manual/img/13c-editor-save.webp" alt="Save and Save &amp; publish buttons">
     <figcaption><ol><li><b>Save</b> keeps it as a <b>draft</b>: students cannot see it yet.</li><li><b>Save &amp; publish</b> makes it visible to the class (see <a href="#publish">section 7</a>). On a published exam this button becomes <b>Unpublish</b>.</li></ol></figcaption></figure>
@@ -223,7 +231,7 @@
     <figcaption><ol><li><b>Find a student</b> by name, student number or email.</li><li>Show only <b>Submitted</b>, <b>Voided</b>, <b>In progress</b> or <b>Not submitted</b>.</li><li><b>Sort</b> by name, start time, finish time, time taken or score (or click a column title).</li><li><b>Answers</b> opens the student's answers, events and camera snapshots.</li><li><b>Allow retake</b>: tick it and the student can open the exam again (e.g. after an exam voided by accident).</li></ol></figcaption></figure>
   <h3>A student's answers, events and snapshots</h3>
   <figure class="mid"><img src="/manual/img/19-answers.webp" alt="Answers window">
-    <figcaption><ol><li><b>Events</b>: every warning and the reason an exam was voided, with the time.</li><li><b>Camera snapshots</b>: a small picture taken when the camera flagged something. Click it to enlarge. Look at it before deciding: a calculator held up can look like a phone.</li></ol></figcaption></figure>
+    <figcaption><ol><li><b>Events</b>: every warning and the reason an exam was voided, with the time.</li><li><b>Camera snapshots</b>: a small picture taken when the camera flagged something, and the <b>Random check</b> pictures if you turned them on. Click one to enlarge. Look at it before deciding: a calculator held up can look like a phone.</li></ol></figcaption></figure>
   <h3>Answers to check (close spellings, numbers, units)</h3>
   <p>When a fill-in-the-blank answer is almost right, the student's row shows <b>⚠ to check</b>.</p>
   <figure><img src="/manual/img/18b-results-check.webp" alt="Results with answers to check">
@@ -244,8 +252,9 @@
   <figure><img src="/manual/img/20-archive.webp" alt="Archive buttons">
     <figcaption><ol><li><b>Archive closed exams</b> moves every exam that has closed to the Archived list, in one click.</li><li><b>Archive</b> moves one exam.</li><li><b>Copy link</b> (for sharing, see section 7).</li></ol></figcaption></figure>
   <ul>
-    <li><b>Archiving an exam</b> only tidies your list. Nothing is deleted, results are kept and students still see their own scores. Open <b>Archived</b> below the list and click <b>Restore</b> to bring one back.</li>
+    <li><b>Archiving an exam</b> tidies your list. Results are kept and students still see their own scores. Open <b>Archived</b> below the list and click <b>Restore</b> to bring one back.</li>
     <li><b>Archiving a class</b> (Classes page) hides the class and its exams from students, and its code stops working. Use it at the end of a semester. <b>Restore</b> brings it back.</li>
+    <li><b>Camera snapshots are deleted</b> when you archive an exam or a class, to free space. You are told how many before you confirm; restoring does not bring them back. Snapshots are also deleted 30 days after an exam closes.</li>
     <li><b>Duplicate</b> (in the exam editor) copies an exam, e.g. to give the same quiz to another class.</li>
   </ul>
 

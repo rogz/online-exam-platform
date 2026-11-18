@@ -241,6 +241,11 @@ CREATE TABLE IF NOT EXISTS attempt_snapshots (
   at         timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS attempt_snapshots_attempt ON attempt_snapshots (attempt_id, at);
+-- kind: 'flag' (camera flagged something) or 'random' (random check). New pictures are files on the server's disk (file);
+-- data is only used when the disk can't be written. See src/snapshots.js.
+ALTER TABLE attempt_snapshots ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'flag';
+ALTER TABLE attempt_snapshots ADD COLUMN IF NOT EXISTS file text;
+ALTER TABLE attempt_snapshots ALTER COLUMN data DROP NOT NULL;
 
 -- Tab/window switch warnings used in this attempt (the exam's focusWarnings option sets how many are allowed).
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS focus_warnings integer NOT NULL DEFAULT 0;

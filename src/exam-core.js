@@ -35,6 +35,8 @@ const DEFAULT_OPTIONS = {
   phoneDetection: true,
   headDetection: true,     // a lowered head (writing, solving) counts as present, not 'no face'
   cameraSnapshots: true,   // save a small still picture when the camera flags something
+  randomSnapshots: false,  // also take small pictures at random times (camera exams monitored throughout)
+  snapshotsPerHour: 6,     // how many random pictures per hour (one at a random moment in each part of the hour)
   openCountdown: true,
   timeWarnings: [5, 1],
   reconnectSeconds: 60,
@@ -59,6 +61,8 @@ function examOptions(raw) {
     phoneDetection: o.phoneDetection !== false,
     headDetection: o.headDetection !== false,
     cameraSnapshots: o.cameraSnapshots !== false,
+    randomSnapshots: o.randomSnapshots === true,
+    snapshotsPerHour: Math.min(30, Math.max(1, Math.round(num(o.snapshotsPerHour, 6, 1)))),
     openCountdown: o.openCountdown !== false,
     timeWarnings: (Array.isArray(o.timeWarnings) ? o.timeWarnings : String(o.timeWarnings || '').split(/[,;\s]+/))
       .map(Number).filter((n) => n > 0).sort((a, b) => b - a),

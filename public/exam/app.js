@@ -250,6 +250,29 @@
     if (dataUrl) api('snapshot', { attemptId: state.attemptId, event, dataUrl }, 2).catch(() => {});
   }
 
+  /**
+   * Random snapshots: the hour is split into equal parts (e.g. 6 parts of 10 minutes) and one small picture is taken
+   * at a random moment in each part, so students can't predict them and there are no long gaps.
+   */
+  function startRandomSnapshots() {
+    const per = state.rules.randomSnapshots ? Number(state.rules.snapshotsPerHour) || 6 : 0;
+    if (!per || state.randomSnapTimer || !state.attemptId) return;
+    const part = 3600000 / per;
+    let partStart = Date.now();
+    const plan = () => {
+      const at = partStart + Math.max(20000, Math.random() * part);
+      state.randomSnapTimer = setTimeout(() => {
+        if (!state.active) { state.randomSnapTimer = null; return; }
+        let dataUrl = null;
+        try { dataUrl = window.ExamCamera.snapshot('Random check', { small: true }); } catch (e) { dataUrl = null; }
+        if (dataUrl) api('snapshot', { attemptId: state.attemptId, event: 'RANDOM', dataUrl }, 2).catch(() => {});
+        partStart += part;
+        plan();
+      }, Math.max(1000, at - Date.now()));
+    };
+    plan();
+  }
+
   function cameraOffense(event, detail) {
     sendSnapshot(event);
     state.cam.offenseArmed = false;
@@ -353,7 +376,9 @@
       $('ruleCamera').innerHTML = '📷 <b>Your camera will be monitored throughout the exam.</b> Keep your face clearly visible' +
         (state.rules.headDetection !== false ? ' (looking down at your paper is fine, as long as your head stays in view)' : '') + '. ' +
         'If your face is hidden, the camera is covered, another person appears, or a phone is seen, ' + camRuleText() +
-        (state.rules.cameraSnapshots ? ' When the camera flags something, a small still picture is saved for your teacher as proof. No video is recorded.' : '');
+        (state.rules.cameraSnapshots ? ' When the camera flags something, a small still picture is saved for your teacher as proof.' : '') +
+        (state.rules.randomSnapshots ? ' <b>Your camera will also take about ' + (Number(state.rules.snapshotsPerHour) || 6) + ' small pictures per hour at random times.</b> Only your teacher can see them, and they are deleted when the exam is archived (at the latest 30 days after it closes).' : '') +
+        (state.rules.cameraSnapshots || state.rules.randomSnapshots ? ' No video is recorded.' : '');
       const n = camAllowed();
       $('agreeText').textContent = 'I have read the rules. I understand that ' + (focusAllowed() ? 'leaving the exam page (after my warnings) ' : 'switching tabs or windows ') + 'or using a second monitor will void my exam, ' +
         'and that my camera is monitored: ' + (n === 0 ? 'any camera problem will void my exam.' : 'I get ' + (n === 1 ? 'one warning' : n + ' warnings') + ', and the next camera problem will void my exam.');
@@ -466,6 +491,7 @@
       $('camFloat').classList.toggle('preview-off', !preview);
       $('camIndicator').hidden = preview;
       window.ExamCamera.resume();
+      startRandomSnapshots();
     }
     tick();
     state.timerId = setInterval(tick, 250);

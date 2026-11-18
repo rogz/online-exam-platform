@@ -3,6 +3,7 @@
 process.env.ADMIN_EMAIL = 'admin@test.local';
 process.env.ADMIN_PASSWORD = 'admin-pass-1';
 const os = require('os'), path = require('path'), fs = require('fs');
+process.env.SNAPSHOT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'snapshots-')); // camera snapshots go here during the test
 const { chromium } = require('playwright');
 const db = require('../src/db');
 const { createApp, ensureAdmin } = require('../server');
@@ -434,7 +435,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await student.waitForSelector('#screen-rules:not([hidden])');
   const factQ = (await student.textContent('#factQuestions')).trim();
   const examInfo = await student.evaluate(async (id) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'getExam', examId: id }) })).json(), randExam.id);
-  ok(factQ === '3' && examInfo.exam.poolSize === undefined && !JSON.stringify(examInfo).includes('random'), 'random set: student sees "' + factQ + '" questions, not the bank size (' + randExam.pool + ')');
+  ok(factQ === '3' && examInfo.exam.poolSize === undefined && !JSON.stringify(examInfo).replace(/randomSnapshots/g, '').includes('random'), 'random set: student sees "' + factQ + '" questions, not the bank size (' + randExam.pool + ')');
 
   // ── Pick per question type (1 multiple choice + 1 true/false per student) ──
   const typeExam = await teacher.evaluate(async () => {
@@ -614,6 +615,46 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(await teacher.evaluate(async () => { const i = document.querySelector('.snap img'); await i.decode(); return i.naturalWidth === 320; }), 'snapshot shows under "Camera snapshots"');
   await shot(teacher, '15-teacher-snapshot');
   await teacher.keyboard.press('Escape');
+  ok(fs.readdirSync(process.env.SNAPSHOT_DIR).length === 1, 'the snapshot is a file on the server disk, not in the database');
+
+  // ── Random snapshots (6 per hour): told on the rules screen, limited per hour, deleted on archive and after 30 days ──
+  const randExamId = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const q = (await (await fetch('/api/teacher/questions')).json()).questions.find((x) => x.type === 'TF');
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Random snapshot quiz', questionIds: [q.id], faceMode: 'ALWAYS', options: { randomSnapshots: true, snapshotsPerHour: 6 },
+      timeLimitMinutes: 10, startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  });
+  await teacher.goto(BASE + '/teacher#exam/' + randExamId); await teacher.waitForSelector('#oRandSnap');
+  ok((await teacher.isChecked('#oRandSnap')) && (await teacher.inputValue('#oSnapHour')) === '6', 'exam editor shows random snapshots: 6 per hour');
+  await student.goto(BASE + '/exam?id=' + randExamId); await student.waitForSelector('#screen-rules:not([hidden])');
+  ok((await student.textContent('#ruleCamera')).includes('6 small pictures per hour at random times'), 'students are told about random snapshots on the rules screen');
+  const rnd = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId, env: { monitorCheck: 'supported', camera: 'ok', userAgent: navigator.userAgent } });
+    const c = document.createElement('canvas'); c.width = 240; c.height = 180; const g = c.getContext('2d'); g.fillStyle = '#777'; g.fillRect(0, 0, 240, 180);
+    const dataUrl = c.toDataURL('image/jpeg', 0.35);
+    const a = await post({ action: 'snapshot', attemptId: st.attemptId, event: 'RANDOM', dataUrl });
+    const b = await post({ action: 'snapshot', attemptId: st.attemptId, event: 'RANDOM', dataUrl });
+    return { first: a.saved, second: b.saved, attemptId: st.attemptId };
+  }, randExamId);
+  ok(rnd.first === true && rnd.second === false, 'random snapshot saved; a second one right away is refused (limit per hour)');
+  const rndSeen = await teacher.evaluate(async ([examId, aid]) => (await (await fetch('/api/teacher/exams/' + examId + '/attempts/' + aid)).json()).snapshots.map((s) => s.kind + ':' + s.event).join(), [randExamId, rnd.attemptId]);
+  ok(rndSeen === 'random:RANDOM', 'teacher sees the random snapshot (' + rndSeen + ')');
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector(`[data-archive="${randExamId}"]`);
+  await teacher.click(`[data-archive="${randExamId}"]`);
+  ok((await teacher.textContent('.dialog')).includes('1 camera snapshot is permanently deleted'), 'archiving warns that the snapshots are deleted');
+  await teacher.click('.dialog .btn.primary');
+  ok(await toastSays(teacher, '1 snapshot deleted'), 'archiving deletes the exam\'s snapshots');
+  const snapLeft = await dbOne(`SELECT count(*)::int AS n FROM attempt_snapshots s JOIN attempts a ON a.id = s.attempt_id WHERE a.exam_id = $1`, [randExamId]);
+  ok(snapLeft.n === 0 && fs.readdirSync(process.env.SNAPSHOT_DIR).length === 1, 'the snapshot row and file are gone; other exams keep theirs');
+  await db.query(`UPDATE exams SET end_at = now() - interval '31 days' WHERE id = $1`, [camExam]);
+  await require('../src/snapshots').cleanup();
+  const left2 = await dbOne(`SELECT count(*)::int AS n FROM attempt_snapshots`);
+  ok(left2.n === 0 && fs.readdirSync(process.env.SNAPSHOT_DIR).length === 0, 'snapshots are deleted 30 days after the exam closes');
+  await db.query(`UPDATE exams SET end_at = now() + interval '1 hour' WHERE id = $1`, [camExam]);
   const strikes = await student.evaluate(async (aid) => {
     const out = [];
     for (let i = 0; i < 3; i++) out.push(await (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
@@ -670,11 +711,12 @@ fs.mkdirSync(SHOTS, { recursive: true });
   // ── Archive: exams (teacher's list only) and classes (hidden from students) ──
   await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector('#activeExams [data-archive]');
   const activeBefore = await teacher.$$eval('#activeExams tbody tr', (r) => r.length);
+  const archivedBefore = await teacher.$$eval('#archivedExams tbody tr', (r) => r.filter((x) => !x.querySelector('.empty')).length);
   await teacher.click('#activeExams [data-archive]');
   if (await teacher.isVisible('.dialog .btn.primary').catch(() => false)) await teacher.click('.dialog .btn.primary');
   ok(await toastSays(teacher, 'Moved to Archived'), 'an exam can be archived');
   await teacher.waitForSelector('#archivedPanel:not([hidden])');
-  ok((await teacher.$$eval('#activeExams tbody tr', (r) => r.length)) === activeBefore - 1 && (await teacher.$$eval('#archivedExams tbody tr', (r) => r.length)) === 1, 'archived exam moves to the Archived list');
+  ok((await teacher.$$eval('#activeExams tbody tr', (r) => r.length)) === activeBefore - 1 && (await teacher.$$eval('#archivedExams tbody tr', (r) => r.length)) === archivedBefore + 1, 'archived exam moves to the Archived list');
   await teacher.click('#archivedPanel > summary'); await teacher.click('#archivedExams [data-restore]');
   ok(await toastSays(teacher, 'Moved back to Exams'), 'an archived exam can be restored');
   await teacher.waitForFunction((n) => document.querySelectorAll('#activeExams tbody tr').length === n, activeBefore);

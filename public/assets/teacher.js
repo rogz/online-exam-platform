@@ -76,9 +76,10 @@
     $$('[data-edit]').forEach((b) => b.onclick = () => classDialog(classes.find((c) => c.id === b.dataset.edit)));
     $$('[data-carchive]').forEach((b) => b.onclick = async () => {
       const c = classes.find((x) => x.id === b.dataset.carchive), to = b.dataset.to === '1';
-      if (to && !(await App.confirmBox('Archive ' + c.name + '?', 'Students will no longer see this class or its exams, and its class code stops working. Results are kept. You can restore it any time.', 'Archive'))) return;
+      const sn = to && c.snapshot_count ? ' Its ' + c.snapshot_count + ' camera snapshot' + (c.snapshot_count === 1 ? ' is' : 's are') + ' permanently deleted.' : '';
+      if (to && !(await App.confirmBox('Archive ' + c.name + '?', 'Students will no longer see this class or its exams, and its class code stops working. Results are kept. You can restore it any time.' + sn, 'Archive'))) return;
       await api('/teacher/classes/' + c.id, { archived: to }); cache.classes = null;
-      toast(to ? 'Class archived' : 'Class restored'); viewClasses();
+      toast(to ? 'Class archived' + (sn ? '; snapshots deleted' : '') : 'Class restored'); viewClasses();
     });
     $$('[data-students]').forEach((b) => b.onclick = () => studentsDialog(classes.find((c) => c.id === b.dataset.students)));
   }
@@ -429,14 +430,21 @@
       ${table(archived, 'Nothing archived.', 'archivedExams')}</details></div>`;
     $$('[data-copylink]').forEach((btn) => { btn.onclick = () => App.copyText(location.origin + '/exam?id=' + btn.dataset.copylink); });
     $$('[data-archive]').forEach((btn) => { btn.onclick = async () => {
-      if (btn.dataset.open === '1' && !(await App.confirmBox('Archive an open exam?', 'This exam is still open or scheduled. Students can still take it; it only moves to your Archived list.', 'Archive'))) return;
-      await api('/teacher/exams/' + btn.dataset.archive, { archive: true }); toast('Moved to Archived'); viewExams();
+      const ex = r.exams.find((e) => e.id === btn.dataset.archive) || {}, n = ex.snapshot_count || 0;
+      const sn = n ? ' Its ' + n + ' camera snapshot' + (n === 1 ? ' is' : 's are') + ' permanently deleted; results are kept.' : '';
+      if (btn.dataset.open === '1' && !(await App.confirmBox('Archive an open exam?', 'This exam is still open or scheduled. Students can still take it; it only moves to your Archived list.' + sn, 'Archive'))) return;
+      if (btn.dataset.open !== '1' && n && !(await App.confirmBox('Archive this exam?', 'It moves to your Archived list.' + sn, 'Archive'))) return;
+      const res = await api('/teacher/exams/' + btn.dataset.archive, { archive: true });
+      toast('Moved to Archived' + (res.deletedSnapshots ? '; ' + res.deletedSnapshots + ' snapshot' + (res.deletedSnapshots === 1 ? '' : 's') + ' deleted' : '')); viewExams();
     }; });
     $$('[data-restore]').forEach((btn) => { btn.onclick = async () => { await api('/teacher/exams/' + btn.dataset.restore, { archive: false }); toast('Moved back to Exams'); viewExams(); }; });
     if ($('#archiveClosed')) $('#archiveClosed').onclick = async () => {
       const n = closed.length;
-      if (!(await App.confirmBox('Archive closed exams?', 'Move ' + n + ' closed exam' + (n === 1 ? '' : 's') + ' to the Archived list? Nothing is deleted, and you can restore them any time.', 'Archive'))) return;
-      const res = await api('/teacher/exams-archive-closed', {}); toast(res.archived + ' exam' + (res.archived === 1 ? '' : 's') + ' archived'); viewExams();
+      const sn = closed.reduce((s, e) => s + (e.snapshot_count || 0), 0);
+      if (!(await App.confirmBox('Archive closed exams?', 'Move ' + n + ' closed exam' + (n === 1 ? '' : 's') + ' to the Archived list? Results are kept, and you can restore them any time.' +
+        (sn ? ' Their ' + sn + ' camera snapshot' + (sn === 1 ? ' is' : 's are') + ' permanently deleted.' : ''), 'Archive'))) return;
+      const res = await api('/teacher/exams-archive-closed', {});
+      toast(res.archived + ' exam' + (res.archived === 1 ? '' : 's') + ' archived' + (res.deletedSnapshots ? '; ' + res.deletedSnapshots + ' snapshots deleted' : '')); viewExams();
     };
   }
 
@@ -494,6 +502,9 @@
           <div class="field"><label for="eDev">Allowed devices</label><select id="eDev">${opt('COMPUTER', v('allowed_devices', 'COMPUTER'), 'Computers only')}${opt('TABLET', v('allowed_devices', 'COMPUTER'), 'Computers and tablets')}${opt('ANY', v('allowed_devices', 'COMPUTER'), 'Any device, including phones')}</select></div>
           <div class="field"><label for="eFace">Camera / face check</label><select id="eFace">${opt('OFF', v('face_mode', 'OFF'), 'Not required')}${opt('START', v('face_mode', 'OFF'), 'Check face at the start only')}${opt('ALWAYS', v('face_mode', 'OFF'), 'Monitor during the whole exam (warnings, then void)')}</select></div>
           <label class="check"><input type="checkbox" id="ePrev"${v('camera_preview', true) ? ' checked' : ''}> Show students their camera preview</label>
+          <div class="row" style="gap:6px;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="oRandSnap"${o.randomSnapshots ? ' checked' : ''}> Take random snapshots:</label>
+            <input type="number" id="oSnapHour" min="1" max="30" value="${o.snapshotsPerHour || 6}" style="width:70px" aria-label="Random snapshots per hour"> <span>per hour</span></div>
+          <div class="hint" id="randSnapHint">Small pictures at random times, as an extra check (camera exams monitored throughout). Students are told on the rules screen. Deleted when you archive the exam or class, or 30 days after the exam closes.</div>
           <details><summary class="small" style="cursor:pointer;margin:6px 0">Advanced settings</summary>
             <div class="grid2" style="margin-top:8px">
               <div class="field"><label for="oFocusWarn">Tab/window warnings</label><input type="number" id="oFocusWarn" min="0" max="10" value="${o.focusWarnings || 0}"><div class="hint">Warnings for switching tabs or apps before the exam is voided. 0 = void at once</div></div>
@@ -604,10 +615,12 @@
       $('#eBack').disabled = !one || perQ; $('#eQsec').disabled = !one;
       if (!one) $('#eBack').checked = true; if (perQ) $('#eBack').checked = false;
       $('#ePrev').disabled = $('#eFace').value !== 'ALWAYS';
+      $('#oRandSnap').disabled = $('#eFace').value !== 'ALWAYS';
+      $('#oSnapHour').disabled = $('#eFace').value !== 'ALWAYS' || !$('#oRandSnap').checked;
     }
     ['pSearch', 'pType', 'pTopic', 'pFolder'].forEach((i) => $('#' + i).addEventListener('input', drawPicker));
     $('#pAll').onchange = (e) => { visible().filter((q) => !q.problems.length).forEach((q) => toggle(q.id, e.target.checked)); drawPicker(); };
-    ['eMode', 'eQsec', 'eFace'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
+    ['eMode', 'eQsec', 'eFace', 'oRandSnap'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
     $('#ePick').addEventListener('input', drawSum);
     $('#ePtsMode').addEventListener('input', (e) => { pr.mode = e.target.value; drawPts(); drawSum(); });
     drawPicker(); syncMode();
@@ -623,6 +636,7 @@
       options: { focusWarnings: $('#oFocusWarn').value, blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
         typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
+        randomSnapshots: $('#oRandSnap').checked && $('#eFace').value === 'ALWAYS', snapshotsPerHour: $('#oSnapHour').value,
         pointsRule: { mode: pr.mode, all: pr.all, byType: pr.byType, byTopic: pr.byTopic } },
     });
     async function save() {
@@ -763,7 +777,7 @@
       <h3 style="margin-top:14px">Events</h3>${r.events.length ? '<table class="list"><tbody>' + r.events.map((e) => `<tr><td class="nowrap small">${esc(App.fmtDate(e.at))}</td><td><b>${esc(e.event)}</b><div class="small muted">${esc(e.detail)}</div></td></tr>`).join('') + '</tbody></table>' : '<p class="muted small">No events.</p>'}
       ${(r.snapshots || []).length ? '<h3 style="margin-top:14px">Camera snapshots</h3><div class="snaps">' + r.snapshots.map((sn) => {
         const u = '/api/teacher/exams/' + examId + '/attempts/' + attemptId + '/snapshots/' + sn.id;
-        return `<a href="${u}" target="_blank" rel="noopener" class="snap"><img src="${u}" alt="Camera snapshot" loading="lazy"><span><b>${esc(sn.event)}</b><br>${esc(App.fmtDate(sn.at))}</span></a>`;
+        return `<a href="${u}" target="_blank" rel="noopener" class="snap${sn.kind === 'random' ? ' random' : ''}"><img src="${u}" alt="Camera snapshot" loading="lazy"><span><b>${sn.kind === 'random' ? 'Random check' : esc(sn.event)}</b><br>${esc(App.fmtDate(sn.at))}</span></a>`;
       }).join('') + '</div>' : ''}`, {
       wide: true,
       buttons: r.responses.length ? [{ label: 'Close' }, { label: 'Save points', primary: true, onClick: async (ov) => {

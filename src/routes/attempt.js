@@ -7,6 +7,7 @@ const auth = require('../auth');
 const core = require('../exam-core');
 const { getSettings, fmtDate } = require('../settings');
 const { fail, str, isUuid } = require('../util');
+const snapshots = require('../snapshots');
 
 const { STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS } = core;
 const router = express.Router();
@@ -266,24 +267,32 @@ const actions = {
     });
   },
 
-  /** A small JPEG from the camera at the moment it flagged something. Kept as proof for the teacher. */
+  /**
+   * A small JPEG from the camera: at the moment it flagged something (kept as proof), or a random check (event RANDOM)
+   * when the exam takes random snapshots. Random ones are limited to the exam's number per hour.
+   */
   async snapshot(req) {
     const b = req.body;
     if (!isUuid(b.attemptId)) throw fail(404, 'NO_ATTEMPT', 'This exam session was not found.');
     const a = await db.one('SELECT * FROM attempts WHERE id = $1 AND student_id = $2', [b.attemptId, req.user.id]);
     if (!a) throw fail(404, 'NO_ATTEMPT', 'This exam session was not found.');
     const exam = await examOfAttempt((sql, p) => db.query(sql, p), a);
-    if (exam.faceMode !== 'ALWAYS' || !exam.options.cameraSnapshots) return { saved: false };
+    const random = b.event === 'RANDOM';
+    if (exam.faceMode !== 'ALWAYS' || !(random ? exam.options.randomSnapshots : exam.options.cameraSnapshots)) return { saved: false };
+    if (random && a.status !== STATUS.IN_PROGRESS) return { saved: false };
     const recentlyVoided = a.status === STATUS.VOIDED && a.voided_at && Date.now() - new Date(a.voided_at).getTime() < 5 * 60000;
     if (a.status !== STATUS.IN_PROGRESS && !recentlyVoided) return { saved: false };
     const m = String(b.dataUrl || '').match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
     if (!m) throw fail(400, 'BAD_INPUT', 'Bad picture.');
     const bytes = Buffer.from(m[1], 'base64');
     if (bytes.length > 100 * 1024) throw fail(413, 'TOO_LARGE', 'Picture too large.');
-    const n = await db.one('SELECT count(*)::int AS n FROM attempt_snapshots WHERE attempt_id = $1', [a.id]);
-    if (n.n >= 10) return { saved: false };
-    const event = VIOLATION_LABELS[b.event] ? b.event : 'CAMERA';
-    await db.query('INSERT INTO attempt_snapshots (attempt_id, event, mime, bytes, data) VALUES ($1, $2, $3, $4, $5)', [a.id, event, 'image/jpeg', bytes.length, bytes]);
+    const kind = random ? 'random' : 'flag';
+    const n = (await db.one('SELECT count(*)::int AS n FROM attempt_snapshots WHERE attempt_id = $1 AND kind = $2', [a.id, kind])).n;
+    // random: at most (pictures per hour × hours since the start) + 1, so a page can't send more than the exam allows
+    const cap = random ? Math.floor(exam.options.snapshotsPerHour * (Date.now() - new Date(a.started_at).getTime()) / 3600000) + 1 : 10;
+    if (n >= cap) return { saved: false };
+    const event = random ? 'RANDOM' : VIOLATION_LABELS[b.event] ? b.event : 'CAMERA';
+    await snapshots.save(a.id, event, kind, bytes);
     return { saved: true };
   },
 

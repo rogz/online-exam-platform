@@ -36,7 +36,7 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   (below). **Preview** (try it as a student, check answers against the key, problems flagged, Edit links),
   **Copy link**, Duplicate, Delete.
 - **Exams list**: Results / Edit / Copy link / Preview; scrollable; **Archive**, "Archive closed exams (N)",
-  Archived list with Restore (archiving an exam only tidies the teacher's list).
+  Archived list with Restore (archiving an exam tidies the teacher's list and deletes its camera snapshots; results stay).
 - **Fill-in-the-blank checks**: close spellings ("Feranti"), numbers just outside the range and a different unit
   ("kV" for "V") are flagged as **to check** in Results (the number decides correct/wrong; spellings stay wrong) with a
   one-click **Give full points**. Notes are for the teacher only.
@@ -62,8 +62,15 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Camera** (MediaPipe in the browser; nothing is streamed or recorded): face present, camera covered, more than
   one person, **phone visible**; a lowered head (writing) counts as present. **Camera grace** (seconds a problem must
   last, default 3) and **Camera warnings** (default 1) per exam. A small **snapshot** (≈5–15 KB JPEG, max 10 per
-  attempt) is saved when the camera flags something. Rules screen reminds students to keep calculators flat
-  (a calculator held up can look like a phone).
+  attempt) is saved when the camera flags something. Optional **random snapshots** (per exam, default 6 per hour when
+  turned on; one at a random moment in each part of the hour; 240 px grayscale ≈3–5 KB; the server refuses more
+  than the hourly number). Students are told on the rules screen. Rules screen reminds students to keep calculators
+  flat (a calculator held up can look like a phone).
+- **Snapshot storage and deletion** (`src/snapshots.js`): picture files on the server disk (`SNAPSHOT_DIR`, default
+  `~/exam-wizard/snapshots`, outside the app folder), one database row each (picture in the row only if the disk
+  fails). Deleted permanently when the exam or its class is archived (the teacher is warned with the count), and
+  30 days after the exam closes; clean-up runs at most twice a day when a teacher opens the exam list (never wakes
+  the database by itself) and also removes files of deleted exams/students.
 - Students are **not told** the bank size or that sets are random; they only see their own question count.
 
 ### Accounts
@@ -102,7 +109,8 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - Students never see correct answers (only the total score, if allowed): keys stay on the server.
 - No audio monitoring (can't tell who is talking; false alarms in labs; privacy). No video recording; only small
   snapshots when flagged, disclosed on the rules screen (Philippine Data Privacy Act).
-- Archiving an exam doesn't change what students see; archiving a class hides it from them.
+- Archiving an exam doesn't change what students see; archiving a class hides it from them. Both delete the camera
+  snapshots (to save space and keep personal data no longer than needed).
 - Sign-up has no captcha yet (being observed); plan if bots appear: per-network sign-up limit + hidden honeypot,
   then Cloudflare Turnstile.
 

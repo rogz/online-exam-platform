@@ -122,16 +122,23 @@ window.ExamCamera = (function () {
 
   /** Shows the same camera picture in another <video> (e.g. inside the warning box). */
   /** A small, heavily compressed JPEG of the current camera frame with a label and the time burned in. */
-  function snapshot(label) {
+  /** A small JPEG of the camera image with a label and the time. opts.small: 240 px wide, grayscale, more compressed (≈3–5 KB). */
+  function snapshot(label, opts) {
     if (!video || !video.videoWidth) return null;
+    const small = !!(opts && opts.small), w = small ? 240 : 320;
     const c = document.createElement('canvas');
-    c.width = 320; c.height = Math.round(320 * video.videoHeight / video.videoWidth) || 240;
+    c.width = w; c.height = Math.round(w * video.videoHeight / video.videoWidth) || Math.round(w * 0.75);
     const g = c.getContext('2d');
     g.drawImage(video, 0, 0, c.width, c.height);
-    g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(0, c.height - 18, c.width, 18);
-    g.fillStyle = '#fff'; g.font = '11px sans-serif';
-    g.fillText(String(label || '').slice(0, 30) + '  ' + new Date().toLocaleString(), 5, c.height - 5);
-    return c.toDataURL('image/jpeg', 0.4);
+    if (small) {
+      const img = g.getImageData(0, 0, c.width, c.height), d = img.data;
+      for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = y; }
+      g.putImageData(img, 0, 0);
+    }
+    g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(0, c.height - 16, c.width, 16);
+    g.fillStyle = '#fff'; g.font = (small ? '10' : '11') + 'px sans-serif';
+    g.fillText(String(label || '').slice(0, 30) + '  ' + new Date().toLocaleString(), 4, c.height - 4);
+    return c.toDataURL('image/jpeg', small ? 0.35 : 0.4);
   }
 
   function mirrorTo(otherVideo) {

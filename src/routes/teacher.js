@@ -2,6 +2,7 @@
 const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
+const snapshots = require('../snapshots');
 const core = require('../exam-core');
 const { getSettings, parsePackages } = require('../settings');
 const paypal = require('../paypal');
@@ -156,7 +157,8 @@ async function newJoinCode() {
 router.get('/classes', async (req, res) => {
   res.json({ ok: true, classes: await db.many(
     `SELECT c.*, (SELECT count(*) FROM enrollments e WHERE e.class_id = c.id)::int AS student_count,
-            (SELECT count(*) FROM exams x WHERE x.class_id = c.id)::int AS exam_count
+            (SELECT count(*) FROM exams x WHERE x.class_id = c.id)::int AS exam_count,
+            (SELECT count(*) FROM attempt_snapshots s JOIN attempts a ON a.id = s.attempt_id JOIN exams x ON x.id = a.exam_id WHERE x.class_id = c.id)::int AS snapshot_count
        FROM classes c WHERE c.teacher_id = $1 ORDER BY c.archived, c.created_at DESC`, [req.user.id]) });
 });
 
@@ -176,6 +178,9 @@ router.post('/classes/:id', async (req, res) => {
     if (n.n) throw fail(409, 'IN_USE', 'This class has exams. Archive it instead, or delete its exams first.');
     await db.query('DELETE FROM classes WHERE id = $1', [c.id]);
     return res.json({ ok: true, deleted: true });
+  }
+  if (b.archived === true && !c.archived) {
+    await snapshots.purgeExams((await db.many('SELECT id FROM exams WHERE class_id = $1', [c.id])).map((x) => x.id));
   }
   await db.query('UPDATE classes SET name = $1, section = $2, archived = $3, join_code = $4 WHERE id = $5',
     [str(b.name, 120) || c.name, b.section === undefined ? c.section : str(b.section, 120) || null,
@@ -476,8 +481,10 @@ router.get('/exams', async (req, res) => {
             jsonb_array_length(x.question_ids) AS question_count, x.pick_count, x.topic_counts, x.published, x.face_mode, x.display_mode,
             x.allowed_devices, x.updated_at, x.archived,
             (SELECT count(*) FROM attempts a WHERE a.exam_id = x.id)::int AS attempt_count,
-            (SELECT count(*) FROM attempts a WHERE a.exam_id = x.id AND a.status = 'SUBMITTED')::int AS submitted_count
+            (SELECT count(*) FROM attempts a WHERE a.exam_id = x.id AND a.status = 'SUBMITTED')::int AS submitted_count,
+            (SELECT count(*) FROM attempt_snapshots s JOIN attempts a ON a.id = s.attempt_id WHERE a.exam_id = x.id)::int AS snapshot_count
        FROM exams x JOIN classes c ON c.id = x.class_id WHERE x.teacher_id = $1 ORDER BY x.created_at DESC`, [req.user.id]) });
+  snapshots.maybeCleanup();
 });
 
 router.get('/exams/:id', async (req, res) => {
@@ -497,7 +504,8 @@ router.post('/exams', async (req, res) => {
 // Archive every exam that has closed (end time passed), in one click.
 router.post('/exams-archive-closed', async (req, res) => {
   const r = await db.many('UPDATE exams SET archived = true WHERE teacher_id = $1 AND NOT archived AND end_at IS NOT NULL AND end_at < now() RETURNING id', [req.user.id]);
-  res.json({ ok: true, archived: r.length });
+  const deletedSnapshots = await snapshots.purgeExams(r.map((x) => x.id));
+  res.json({ ok: true, archived: r.length, deletedSnapshots });
 });
 
 router.post('/exams/:id', async (req, res) => {
@@ -505,7 +513,8 @@ router.post('/exams/:id', async (req, res) => {
   const b = req.body || {};
   if (typeof b.archive === 'boolean' && Object.keys(b).length === 1) {
     await db.query('UPDATE exams SET archived = $1 WHERE id = $2', [b.archive, x.id]);
-    return res.json({ ok: true, archived: b.archive });
+    const deletedSnapshots = b.archive ? await snapshots.purgeExams([x.id]) : 0;
+    return res.json({ ok: true, archived: b.archive, deletedSnapshots });
   }
   if (b.delete) {
     const n = await db.one('SELECT count(*)::int AS n FROM attempts WHERE exam_id = $1', [x.id]);
@@ -633,17 +642,18 @@ router.get('/exams/:id/attempts/:aid', async (req, res) => {
     ok: true, attempt: a,
     responses: await db.many('SELECT * FROM responses WHERE attempt_id = $1 ORDER BY position', [a.id]),
     events: await db.many('SELECT * FROM violations WHERE attempt_id = $1 ORDER BY at', [a.id]),
-    snapshots: await db.many('SELECT id, event, bytes, at FROM attempt_snapshots WHERE attempt_id = $1 ORDER BY at', [a.id]),
+    snapshots: await db.many('SELECT id, event, kind, bytes, at FROM attempt_snapshots WHERE attempt_id = $1 ORDER BY at', [a.id]),
   });
 });
 
 router.get('/exams/:id/attempts/:aid/snapshots/:sid', async (req, res) => {
   const x = await mine('exams', req.params.id, req.user.id, 'Exam');
   if (!isUuid(req.params.aid) || !isUuid(req.params.sid)) throw fail(404, 'NOT_FOUND', 'Picture not found.');
-  const img = await db.one(`SELECT s.mime, s.data FROM attempt_snapshots s JOIN attempts a ON a.id = s.attempt_id
+  const img = await db.one(`SELECT s.mime, s.data, s.file FROM attempt_snapshots s JOIN attempts a ON a.id = s.attempt_id
                              WHERE s.id = $1 AND a.id = $2 AND a.exam_id = $3`, [req.params.sid, req.params.aid, x.id]);
-  if (!img) throw fail(404, 'NOT_FOUND', 'Picture not found.');
-  res.set('Content-Type', img.mime).set('Cache-Control', 'private, max-age=86400').send(Buffer.from(img.data));
+  const bytes = img && await snapshots.read(img);
+  if (!bytes) throw fail(404, 'NOT_FOUND', 'Picture not found.');
+  res.set('Content-Type', img.mime).set('Cache-Control', 'private, max-age=86400').send(bytes);
 });
 
 router.post('/exams/:id/attempts/:aid', async (req, res) => {

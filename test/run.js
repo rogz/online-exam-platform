@@ -726,15 +726,17 @@ fs.mkdirSync(SHOTS, { recursive: true });
 
   // ── Passwords: admin reset (forgiving temporary code), forced new password, forgot-password email ──
   const pwUser = await newUser();
+  // the page may move to the sign-in page by itself at the same moment (after signing out): that is fine
+  const goHome = async () => { try { await pwUser.goto(BASE + '/'); } catch (e) { if (!/ERR_ABORTED|interrupted/.test(e.message)) throw e; await pwUser.waitForLoadState(); } };
   await pwUser.goto(BASE + '/#signup');
   await pwUser.fill('#upName', 'Lea Cruz'); await pwUser.fill('#upEmail', 'lea@student.edu'); await pwUser.fill('#upPass', 'student-pass-9');
   await pwUser.click('#signUp button[type=submit]'); await pwUser.waitForURL(/\/student/);
   await pwUser.evaluate(() => fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } }));
-  await pwUser.goto(BASE + '/'); await pwUser.waitForSelector('#signIn');
+  await goHome(); await pwUser.waitForSelector('#signIn');
   for (let i = 0; i < 10; i++) await pwUser.evaluate((i) => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ email: 'lea@student.edu', password: 'guess-' + i }) }), i);
   const leaId = (await dbOne(`SELECT id FROM users WHERE email = 'lea@student.edu'`)).id;
   const leaTemp = await admin.evaluate(async (id) => (await (await fetch('/api/admin/users/' + id + '/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()).tempPassword, leaId);
-  await pwUser.goto(BASE + '/');
+  await goHome();
   await pwUser.fill('#inEmail', 'lea@student.edu'); await pwUser.fill('#inPass', leaTemp.toLowerCase() + ' '); await pwUser.press('#inPass', 'Enter');
   await pwUser.waitForURL(/\/student/);
   ok(true, 'temporary password works in small letters with a space, even after 10 earlier wrong tries');
@@ -745,7 +747,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok((await dbOne(`SELECT must_change_password FROM users WHERE id = $1`, [leaId])).must_change_password === false, 'the "must change password" flag is cleared');
   // Forgot password by email
   await pwUser.evaluate(() => fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } }));
-  await pwUser.goto(BASE + '/');
+  await goHome();
   await pwUser.fill('#inEmail', 'lea@student.edu');
   await pwUser.click('#forgotLink');
   await pwUser.waitForSelector('#fpEmail');

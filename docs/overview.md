@@ -24,7 +24,7 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Classes**: 6-character join code, **Copy join link** (`/join/CODE`, signs in or signs up, then joins), student
   list with profile pictures, archive/restore (an archived class is hidden from students).
 - **Question bank**: types MC, TF, FIB (accepted answers separated by `|`; numbers as a range `122.1-122.9 V`,
-  `122.5 ± 0.4` or `122.5 ± 1%`), ESSAY; points; topic; pictures
+  `122.5 ± 0.4` or `122.5 ± 1%`), ESSAY; points; topic; **symbol buttons** (± Ω ° μ π √ ² …) in the question editor; pictures
   (upload ≤ 2 MB, or a link incl. Google Drive/Dropbox); **folders and subfolders**; CSV import/export with a
   built-in format guide and sample file; IDs (re-import with the same ID updates the question).
 - **Exam editor**: class, title, instructions, open/close time, time limit, password; random set per student

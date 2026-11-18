@@ -233,6 +233,11 @@ table.exams .actgrid .span2 { grid-column: 1 / -1; }
 .archivepanel[open] > summary h3::before { content: '▾ '; }
 @media (max-width: 760px) { table.exams .actgrid .span2 { grid-column: auto; } .examscroll { max-height: none; } }
 
+/* question editor: symbol buttons */
+.symbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -4px 0 14px; }
+.symbar .sym { min-width: 30px; height: 30px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-alt); font-size: 15px; cursor: pointer; color: inherit; }
+.symbar .sym:hover { border-color: var(--accent, #2f7bd1); background: #fff; }
+
 /* exam editor: small pick/points tables must fit the narrow settings panel */
 fieldset { min-width: 0; }
 .fit-table { overflow-x: auto; max-width: 100%; }

@@ -263,6 +263,7 @@
       <div class="field"><label for="qeText">Question</label><textarea id="qeText" rows="3">${esc(q ? q.text : '')}</textarea>
         <div class="hint" id="qeTextHint"></div></div>
       <div id="qeAnswer"></div>
+      <div class="symbar" id="qeSyms" aria-label="Insert a symbol"><span class="small muted">Insert a symbol:</span><button type="button" class="sym" data-sym="±" title="Insert ±">±</button><button type="button" class="sym" data-sym="Ω" title="Insert Ω">Ω</button><button type="button" class="sym" data-sym="°" title="Insert °">°</button><button type="button" class="sym" data-sym="μ" title="Insert μ">μ</button><button type="button" class="sym" data-sym="π" title="Insert π">π</button><button type="button" class="sym" data-sym="√" title="Insert √">√</button><button type="button" class="sym" data-sym="×" title="Insert ×">×</button><button type="button" class="sym" data-sym="÷" title="Insert ÷">÷</button><button type="button" class="sym" data-sym="²" title="Insert ²">²</button><button type="button" class="sym" data-sym="³" title="Insert ³">³</button><button type="button" class="sym" data-sym="⁻" title="Insert ⁻">⁻</button><button type="button" class="sym" data-sym="∠" title="Insert ∠">∠</button><button type="button" class="sym" data-sym="≈" title="Insert ≈">≈</button><button type="button" class="sym" data-sym="θ" title="Insert θ">θ</button><button type="button" class="sym" data-sym="φ" title="Insert φ">φ</button><button type="button" class="sym" data-sym="Δ" title="Insert Δ">Δ</button><button type="button" class="sym" data-sym="ε" title="Insert ε">ε</button><button type="button" class="sym" data-sym="ρ" title="Insert ρ">ρ</button><button type="button" class="sym" data-sym="λ" title="Insert λ">λ</button><button type="button" class="sym" data-sym="∞" title="Insert ∞">∞</button><span class="small muted">(goes where your cursor is)</span></div>
       <div class="field"><label for="qeFolder">Folder</label><select id="qeFolder">${folderOptions(cache.folders || [], q ? q.folderId : (currentFolder !== 'all' && currentFolder !== 'none' ? currentFolder : null), '<option value="">Not in a folder</option>')}</select></div>
       <div class="field"><label for="qeTopic">Topic <span class="muted">(optional, for filtering and per-topic picking)</span></label><input type="text" id="qeTopic" list="qeTopics" value="${esc(q ? q.topic : '')}">
         <datalist id="qeTopics">${topics.map((t) => `<option value="${esc(t)}">`).join('')}</datalist></div>
@@ -312,7 +313,7 @@
       } else if (st.type === 'FIB') {
         box.innerHTML = `<div class="field"><label for="qeFib">Accepted answers</label><input type="text" id="qeFib" value="${esc(q && q.type === 'FIB' ? q.answer : '')}" placeholder="e.g. ohm | ohms | Ω   or   122.5 ± 1% V">
           <div class="hint">Separate several accepted answers with |. Capital letters and extra spaces are ignored.<br>
-          Numbers: <b>122.1-122.9 V</b> (a range), <b>122.5 ± 0.4 V</b> or <b>122.5 ± 1% V</b> (+- also works). Any number inside counts; the unit is optional.
+          Numbers: <b>122.1-122.9 V</b> (a range), <b>122.5 ± 0.4 V</b> or <b>122.5 ± 1% V</b> (type <b>+-</b> if ± is hard to type: it works the same). Any number inside counts; the unit is optional.
           Close spellings, numbers just outside, and a different unit are flagged in Results for you to decide.</div></div>`;
       } else {
         box.innerHTML = `<div class="field"><label for="qeModel">Model answer <span class="muted">(optional, only you see it)</span></label><textarea id="qeModel" rows="3">${esc(q && q.type === 'ESSAY' ? q.answer : '')}</textarea>
@@ -330,6 +331,20 @@
       $('#qePic', ov).innerHTML = src ? `<img class="imgprev" alt="Question picture" src="${esc(src)}">` : '';
     }
     $('#qeType', ov).onchange = (e) => { st.type = e.target.value; drawAnswer(); };
+    // Symbol buttons insert into the text box last used (question, choices, accepted answers or model answer).
+    let symTarget = null;
+    ov.addEventListener('focusin', (e) => { if (e.target.matches('#qeText, #qeFib, #qeModel, #chs input[type=text]')) symTarget = e.target; });
+    $$('#qeSyms .sym', ov).forEach((b) => {
+      b.onmousedown = (e) => e.preventDefault(); // keep the cursor in the text box
+      b.onclick = () => {
+        let t = symTarget && symTarget.isConnected ? symTarget : null;
+        if (!t) t = $('#qeFib', ov) || $('#qeText', ov);
+        const a = t.selectionStart ?? t.value.length, z = t.selectionEnd ?? t.value.length;
+        t.setRangeText(b.dataset.sym, a, z, 'end');
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+        t.focus(); symTarget = t;
+      };
+    });
     $('#qeFile', ov).onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
       try { const r = await App.pictureToDataUrl(f); st.newImage = r.dataUrl; $('#qePicNote', ov).textContent = r.note; $('#qeUrl', ov).value = ''; drawPic(); }

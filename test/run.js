@@ -480,6 +480,17 @@ fs.mkdirSync(SHOTS, { recursive: true });
   }, ptsExam);
   ok(ptsInfo.points === 'MC2,TF3' && ptsInfo.max === 5, 'points per type: every student out of 5 (' + JSON.stringify(ptsInfo) + ')');
 
+  // ── Symbol buttons in the question editor ──
+  await teacher.goto(BASE + '/teacher#questions'); await teacher.waitForSelector('#addQ');
+  await teacher.click('#addQ'); await teacher.waitForSelector('.dialog #qeType');
+  await teacher.selectOption('#qeType', 'FIB'); await teacher.waitForSelector('#qeFib');
+  await teacher.fill('#qeFib', '122.5  1% V'); await teacher.focus('#qeFib');
+  await teacher.evaluate(() => { const i = document.querySelector('#qeFib'); i.setSelectionRange(6, 6); });
+  await teacher.click('#qeSyms [data-sym="±"]');
+  await teacher.click('#qeText'); await teacher.click('#qeSyms [data-sym="Ω"]');
+  ok((await teacher.inputValue('#qeFib')) === '122.5 ± 1% V' && (await teacher.inputValue('#qeText')) === 'Ω', 'symbol buttons insert ± and Ω where the cursor is');
+  await teacher.keyboard.press('Escape');
+
   // ── Fill in the blank: number ranges, units, close numbers and close spellings ──
   const fibExam = await teacher.evaluate(async () => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();

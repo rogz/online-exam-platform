@@ -24,6 +24,7 @@ The first row holds the column names. Column order doesn't matter. `*` = require
 
 - Save as **CSV UTF-8** (Excel: *File → Save As → CSV UTF-8*; Google Sheets: *File → Download → Comma-separated values*). UTF-8 keeps symbols like Ω, ρ, μ, ε₀, ×, ², ⁻⁸.
 - Any field that contains a **comma** or a **double quote** must be wrapped in double quotes; double quotes inside it are written twice (`""`). Excel and Google Sheets do this automatically.
+- `±` can be written `+-` (e.g. `122.5 +- 1%`); it works the same.
 - Don't use `|` inside a choice or an accepted answer (it separates them).
 - Rows with a problem are listed after importing; the other rows are still added.
 

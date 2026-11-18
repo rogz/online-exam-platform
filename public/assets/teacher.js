@@ -505,6 +505,11 @@
           <div class="row" style="gap:6px;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="oRandSnap"${o.randomSnapshots ? ' checked' : ''}> Take random snapshots:</label>
             <input type="number" id="oSnapHour" min="1" max="30" value="${o.snapshotsPerHour || 6}" style="width:70px" aria-label="Random snapshots per hour"> <span>per hour</span></div>
           <div class="hint" id="randSnapHint">Small pictures at random times, as an extra check (camera exams monitored throughout). Students are told on the rules screen. Deleted when you archive the exam or class, or 30 days after the exam closes.</div>
+          <div class="offlinebox"><label class="check" style="margin:0"><input type="checkbox" id="oOfflineMode"${o.offlineMode ? ' checked' : ''}> <b>Offline exam</b>: students download it before (with internet) and take it without internet</label>
+            <div id="offlineMore"${o.offlineMode ? '' : ' hidden'}>
+              <div class="hint">The download is locked with the <b>exam password</b> (above, under When). Give the password in the room when the exam starts. Students hand in by going online afterwards and get a receipt code when they finish.</div>
+              <button type="button" class="btn small" id="genPass">🔑 Make a strong password</button> <span class="small" id="passShow"></span>
+              ${x && x.offline_downloads ? `<div class="note warn small" style="margin-top:6px">${x.offline_downloads} student${x.offline_downloads === 1 ? ' has' : 's have'} already downloaded this exam. Changes to the questions or the password do not reach them unless they download it again.</div>` : ''}</div></div>
           <div class="field" style="margin-top:10px"><label for="oOffline">If the internet drops during the exam</label>
             <select id="oOffline">${opt('KEEP', o.keepGoingOffline === false ? 'VOID' : 'KEEP', 'Keep going: answers are sent when the internet is back (recommended)')}${opt('VOID', o.keepGoingOffline === false ? 'VOID' : 'KEEP', 'Void the exam after the reconnect window')}</select>
             <div class="row" id="offlineMinRow" style="gap:6px;align-items:center;margin-top:6px"><span class="small">Accept answers finished in time but sent up to</span>
@@ -630,6 +635,15 @@
     ['eMode', 'eQsec', 'eFace', 'oRandSnap', 'oOffline'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
     $('#ePick').addEventListener('input', drawSum);
     $('#ePtsMode').addEventListener('input', (e) => { pr.mode = e.target.value; drawPts(); drawSum(); });
+    const showPass = () => { const p = $('#ePass').value.trim(); $('#passShow').innerHTML = p ? 'Password: <b style="letter-spacing:1px">' + esc(p) + '</b>' + (p.replace(/[\s-]/g, '').length < 8 ? ' <span style="color:var(--bad)">(too short for offline: 8+ letters or numbers)</span>' : '') : '<span style="color:var(--bad)">No password yet</span>'; };
+    $('#oOfflineMode').addEventListener('change', () => {
+      $('#offlineMore').hidden = !$('#oOfflineMode').checked;
+      if ($('#oOfflineMode').checked && $('#ePass').value.replace(/[\s-]/g, '').length < 8) $('#genPass').click();
+      showPass();
+    });
+    $('#ePass').addEventListener('input', showPass);
+    $('#genPass').onclick = async () => { $('#ePass').value = (await api('/teacher/new-offline-password')).password; showPass(); };
+    showPass();
     drawPicker(); syncMode();
     const a = me.user.access || {};
     $('#pubHint').textContent = me.user.role === 'admin' || a.timeOk ? 'Publishing is included in your access.' : x && x.credit_spent ? 'Already paid for: publishing again is free.' : 'Publishing uses 1 credit (you have ' + (a.credits || 0) + ').';
@@ -644,7 +658,7 @@
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
         typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
         randomSnapshots: $('#oRandSnap').checked && $('#eFace').value === 'ALWAYS', snapshotsPerHour: $('#oSnapHour').value,
-        keepGoingOffline: $('#oOffline').value === 'KEEP', offlineSubmitMinutes: $('#oOfflineMin').value,
+        keepGoingOffline: $('#oOffline').value === 'KEEP', offlineSubmitMinutes: $('#oOfflineMin').value, offlineMode: $('#oOfflineMode').checked,
         pointsRule: { mode: pr.mode, all: pr.all, byType: pr.byType, byTopic: pr.byTopic } },
     });
     async function save() {
@@ -699,6 +713,7 @@
         <div class="stat"><b>${r.attempts.filter((a) => a.status === 'VOIDED').length}</b><span>Voided</span></div>
         <div class="stat"><b>${r.notStarted.length}</b><span>Not started</span></div>
         <div class="stat"><b>${sub.reduce((s, a) => s + (a.pending_essays || 0), 0)}</b><span>Essays to grade</span></div>${sub.some((a) => a.to_check) ? `<div class="stat"><b>${sub.reduce((s, a) => s + (a.to_check || 0), 0)}</b><span>Answers to check</span></div>` : ''}</div>
+      ${r.offline ? offlinePanel(r.offline) : ''}
       <div class="panel"><div class="hd"><h3>Attempts <span class="muted small">(${r.attempts.length})</span></h3>
         ${r.attempts.length > 1 ? `<div class="toolbar">${r.attempts.length > 5 ? `<input type="search" id="aFind" placeholder="Find a student…" aria-label="Find a student" style="width:200px">
           <select id="aStatus" aria-label="Show"><option value="">All</option><option value="SUBMITTED">Submitted</option><option value="VOIDED">Voided</option><option value="IN_PROGRESS">In progress</option><option value="EXPIRED">Not submitted</option></select>` : ''}
@@ -715,10 +730,10 @@
         const startMs = new Date(a.started_at).getTime(), endMs = a.submitted_at ? new Date(a.submitted_at).getTime() : '';
         return `<tr data-status="${esc(a.status)}" data-name="${esc(a.student_name.toLowerCase())}" data-start="${startMs}" data-end="${endMs}" data-dur="${endMs ? endMs - startMs : ''}" data-score="${a.percent === null || a.percent === undefined ? '' : a.percent}" data-find="${esc((a.student_name + ' ' + (a.student_no || '') + ' ' + (a.student_email || '')).toLowerCase())}">
         <td data-label="Student"><span class="person">${App.avatarHtml({ name: a.student_name, avatarUrl: a.avatarUrl }, 32)}<span><b>${esc(a.student_name)}</b><div class="small muted">${esc(a.student_no || a.student_email)}</div></span></span></td>
-        <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
+        <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.offline ? ' <span class="tag grey" title="Taken without internet from the downloaded copy">Offline</span>' : ''}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
           ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}${a.to_check ? '<div class="small" style="color:var(--warn)" title="Close spelling, a number just outside the range, or a different unit: open Answers to decide">⚠ ' + a.to_check + ' to check</div>' : ''}</td>
         <td data-label="Time" class="small"><div class="nowrap">${esc(App.fmtDate(a.started_at))}</div>${a.submitted_at ? '<div class="muted nowrap">→ ' + esc(endText) + ' · ' + mins + ' min</div>' : ''}</td>
-        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}${Number(a.offline_ms) >= 60000 ? '<div title="The internet was down; the exam page stayed open and kept checking">📶 Offline ' + Math.round(a.offline_ms / 60000) + ' min</div>' : ''}${a.page_errors ? '<div style="color:var(--warn)" title="The exam page had an unexpected problem; see Answers → Events (PAGE_ERROR)">⚠ Page problem (' + a.page_errors + ')</div>' : ''}${a.sent_late ? '<div style="color:var(--warn)" title="Finished while offline; the answers were sent when the internet came back. See Answers → Events.">⏳ Sent after the internet came back</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
+        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}${Number(a.offline_ms) >= 60000 ? '<div title="The internet was down; the exam page stayed open and kept checking">📶 Offline ' + Math.round(a.offline_ms / 60000) + ' min</div>' : ''}${Array.isArray(a.review) && a.review.length ? '<div style="color:var(--bad)" title="' + esc(a.review.join('\n')) + '">⚠ Check: ' + esc(a.review[0]) + (a.review.length > 1 ? ' (+' + (a.review.length - 1) + ' more)' : '') + '</div>' : ''}${a.receipt ? '<div class="muted">Receipt ' + esc(a.receipt) + '</div>' : ''}${a.page_errors ? '<div style="color:var(--warn)" title="The exam page had an unexpected problem; see Answers → Events (PAGE_ERROR)">⚠ Page problem (' + a.page_errors + ')</div>' : ''}${a.sent_late ? '<div style="color:var(--warn)" title="Finished while offline; the answers were sent when the internet came back. See Answers → Events.">⏳ Sent after the internet came back</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
         <td class="actions"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
           ${a.status !== 'IN_PROGRESS' ? `<label class="check small" title="Let this student take the exam again"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`;
       }).join('')
@@ -732,6 +747,17 @@
       toast(c.checked ? 'Retake allowed: the student can open the exam again.' : 'Retake turned off');
     });
     $$('[data-answers]').forEach((b) => b.onclick = () => attemptDialog(id, b.dataset.answers));
+    const off = $('[data-offfile]');
+    if (off) off.onchange = async () => {
+      const f = off.files[0]; if (!f) return;
+      let file;
+      try { file = JSON.parse(await f.text()); } catch (err) { toast('That is not an answer file from Exam Wizard.', true); off.value = ''; return; }
+      try {
+        const res = await api('/teacher/exams/' + id + '/offline-answers', { file });
+        toast((file.student && file.student.name ? file.student.name + ': ' : '') + (res.result.status === 'VOIDED' ? 'received (voided)' : 'received' + (res.result.score !== undefined ? ', score ' + res.result.score + ' / ' + res.result.maxScore : '')));
+        viewResults(id);
+      } catch (err) { toast(err.message, true); off.value = ''; }
+    };
     const filterRows = () => {
       const q = ($('#aFind').value || '').trim().toLowerCase(), st = $('#aStatus').value;
       let shown = 0;
@@ -767,6 +793,20 @@
     }; });
   }
 
+  /** Offline exam: who has downloaded their copy, who has sent their answers, who still needs to. */
+  function offlinePanel(o) {
+    const names = (list) => list.map((s) => esc(s.name) + (s.studentNo ? ' <span class="muted">(' + esc(s.studentNo) + ')</span>' : '')).join(', ');
+    return `<div class="panel" style="margin-bottom:16px"><div class="hd"><h3>📥 Offline copies</h3></div><div class="bd">
+      <div class="statgrid" style="margin-bottom:8px"><div class="stat"><b>${o.downloaded} / ${o.enrolled}</b><span>Downloaded</span></div>
+        <div class="stat"><b>${o.sent}</b><span>Answers received</span></div><div class="stat"><b>${o.waiting.length}</b><span>Downloaded, not sent yet</span></div></div>
+      ${o.notDownloaded.length ? `<details><summary class="small" style="cursor:pointer"><b>Not downloaded yet (${o.notDownloaded.length})</b>: remind them to open the exam link with internet and click <i>Download for offline</i></summary><p class="small">${names(o.notDownloaded)}</p></details>` : '<p class="small" style="color:var(--ok)">✓ Every student in the class has downloaded it.</p>'}
+      ${o.outdated.length ? `<div class="note warn small" style="margin-top:6px">${o.outdated.length} student${o.outdated.length === 1 ? '' : 's'} downloaded it before you changed the password and must download it again: ${names(o.outdated)}</div>` : ''}
+      ${o.waiting.length ? `<details style="margin-top:6px"><summary class="small" style="cursor:pointer"><b>Downloaded, answers not received yet (${o.waiting.length})</b></summary><p class="small">${names(o.waiting)}</p></details>` : ''}
+      <div class="row" style="gap:6px;align-items:center;margin-top:8px"><label class="btn small" style="margin:0">Upload an answer file<input type="file" accept=".json,application/json" data-offfile hidden></label>
+        <span class="small muted">for a student who finished offline and cannot get internet (their "Save a copy of my answers" file)</span></div>
+    </div></div>`;
+  }
+
   /** "Help this student": extra time / let them continue, submit saved answers, upload an answer file, count as on time. */
   function helpPanel(a) {
     if (a.status === 'SUBMITTED') {
@@ -791,6 +831,8 @@
     const d = dialog(a.student_name + ' — answers', `<div class="row small" style="margin-bottom:10px">${STATUS_TAG[a.status] || ''} ${a.score !== null ? '<b>' + a.score + ' / ' + a.max_score + ' (' + a.percent + '%)</b>' : ''}
         <span class="muted">Started ${esc(App.fmtDate(a.started_at))}${a.submitted_at ? ' · submitted ' + esc(App.fmtDate(a.submitted_at)) : ''}</span></div>
       ${a.void_reason ? '<div class="note bad" style="margin-bottom:10px">Voided: ' + esc(a.void_reason) + '</div>' : ''}
+      ${Array.isArray(a.review) && a.review.length ? '<div class="note bad small" style="margin-bottom:10px"><b>Please check (offline exam):</b><ul style="margin:4px 0 0 18px">' + a.review.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul></div>' : ''}
+      ${a.receipt ? '<div class="small" style="margin-bottom:8px">Receipt code shown to the student: <b style="letter-spacing:1px">' + esc(a.receipt) + '</b> (compare with your attendance sheet)</div>' : ''}
       ${helpPanel(a)}
       ${r.responses.length ? r.responses.map((x, i) => `<div class="resp"><div class="row" style="justify-content:space-between"><b>Question ${i + 1}</b><span class="tag">${TYPE_SHORT[x.type]}</span></div>
         <div class="q">${esc(x.question_text)}</div>

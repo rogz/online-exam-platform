@@ -206,6 +206,9 @@ window.ExamCamera = (function () {
 
   return {
     start, restart, stop, mirrorTo, resume, snapshot,
+    /** Files the camera checker loads from the internet (kept in the browser for offline exams). */
+    files: [MP_BASE + '/vision_bundle.mjs', MP_BASE + '/wasm/vision_wasm_internal.js', MP_BASE + '/wasm/vision_wasm_internal.wasm',
+      MP_BASE + '/wasm/vision_wasm_nosimd_internal.js', MP_BASE + '/wasm/vision_wasm_nosimd_internal.wasm', FACE_MODEL, PHONE_MODEL],
     /** During the exam, accept a visible head (looking down) as present. Before starting, a face is required. */
     allowHead(on) { headOk = !!on; },
     status: () => status,

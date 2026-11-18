@@ -8,6 +8,7 @@ const core = require('../exam-core');
 const { getSettings, fmtDate } = require('../settings');
 const { fail, str, isUuid } = require('../util');
 const snapshots = require('../snapshots');
+const offline = require('../offline');
 
 const { STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS } = core;
 const router = express.Router();
@@ -103,8 +104,15 @@ function resultFor(a, exam) {
  * Grades the answers and marks the attempt submitted (used by the student's submit, and by the teacher's
  * "submit the saved answers" / "upload an answer file" for a student whose device failed).
  */
+async function questionsOfAttempt(q, exam, a) {
+  if (!Array.isArray(a.fixed_question_ids)) return core.attemptQuestions(exam, await loadPool(q, exam), a.id);
+  const rows = (await q('SELECT * FROM questions WHERE teacher_id = $1 AND id = ANY($2::uuid[])', [exam.teacherId, a.fixed_question_ids])).rows;
+  const byId = new Map(core.applyPoints(exam, rows.map(core.questionFromRow)).map((x) => [x.id, x]));
+  return a.fixed_question_ids.map((id) => byId.get(id)).filter(Boolean);
+}
+
 async function gradeAttempt(q, a, exam, rawAnswers, o) {
-  const questions = core.attemptQuestions(exam, await loadPool(q, exam), a.id);
+  const questions = await questionsOfAttempt(q, exam, a);
   const answers = Object.assign({}, rawAnswers && typeof rawAnswers === 'object' && !Array.isArray(rawAnswers) ? rawAnswers : {});
   if (!exam.allowBack) {
     (await q('SELECT question_id, answer FROM locked_answers WHERE attempt_id = $1', [a.id])).rows.forEach((r) => { answers[r.question_id] = r.answer; });
@@ -126,6 +134,77 @@ async function gradeAttempt(q, a, exam, rawAnswers, o) {
   Object.assign(a, { status: STATUS.SUBMITTED, score, max_score: max, percent, pending_essays: pending });
   return { score, max, percent, pending, answered: Object.keys(answers).length };
 }
+
+/**
+ * The answers of an offline exam arrive: from the student's device, an answer file the teacher uploads, or a QR code
+ * scanned by the teacher or a helper. o.studentId (the student's own device) or o.examId (teacher / helper) limits
+ * which copy can be used. Checks the receipt and the times, then grades it like a submit.
+ */
+async function receiveOffline(b, o) {
+    const out = await db.tx(async (t) => {
+      const q = t.query;
+      const pkg = (await q('SELECT * FROM offline_packages WHERE id = $1 FOR UPDATE', [b.packageId])).rows[0];
+      if (pkg && o.studentId && pkg.student_id !== o.studentId) throw fail(404, 'NO_ATTEMPT', 'This exam copy was not found. It may have been downloaded under another account.');
+      if (pkg && o.examId && pkg.exam_id !== o.examId) throw fail(404, 'NO_ATTEMPT', 'These answers are for a different exam.');
+      if (!pkg) throw fail(404, 'NO_ATTEMPT', 'This exam copy was not found. It may have been downloaded under another account.');
+      const x = (await q('SELECT * FROM exams WHERE id = $1', [pkg.exam_id])).rows[0];
+      const exam = core.examConfig(x);
+      const done = (await q('SELECT * FROM attempts WHERE id = $1', [pkg.id])).rows[0];
+      const finishedAt = Math.round(Number(b.finishedAt)), startedAt = Math.round(Number(b.startedAt));
+      const expect = offline.receiptOf(pkg.receipt_key, pkg.id, finishedAt, b.answers);
+      if (done) {
+        if (done.receipt && b.receipt && b.receipt !== done.receipt) await logEvent(q, done.id, 'SECOND_COPY', 'Another copy with different answers arrived (receipt ' + str(b.receipt, 10) + '); it was not used.');
+        return { result: Object.assign(resultFor(done, exam), { receipt: done.receipt }) };
+      }
+      const now = new Date();
+      const review = [];
+      const okTime = (ms) => Number.isFinite(ms) && ms > new Date(pkg.downloaded_at).getTime() - 3600000 && ms <= now.getTime() + 120000;
+      const start = okTime(startedAt) ? startedAt : new Date(pkg.downloaded_at).getTime();
+      const finish = okTime(finishedAt) && finishedAt >= start ? finishedAt : now.getTime();
+      if (!okTime(startedAt) || !okTime(finishedAt)) review.push('The device clock looked wrong (start or finish time not possible).');
+      if (exam.start && start < exam.start.getTime() - 15 * 60000) review.push('Started before the exam opened (' + new Date(start).toISOString() + ').');
+      if (exam.end && start > exam.end.getTime()) review.push('Started after the exam closed.');
+      if (b.receipt !== expect) review.push('The receipt code (' + str(b.receipt, 10) + ') does not match these answers: they may have been changed after finishing.');
+      const events = (Array.isArray(b.events) ? b.events : []).slice(0, 300);
+      if (events.some((e) => e && e.event === 'CLOCK_CHANGED')) review.push('The device clock was changed during the exam.');
+      const graceMs = exam.options.submitGraceSeconds * 1000;
+      let deadline = exam.limitMin > 0 ? start + exam.limitMin * 60000 : null;
+      if (exam.end && (!deadline || exam.end.getTime() < deadline)) deadline = exam.end.getTime();
+      const late = deadline !== null && finish > deadline + graceMs;
+      if (late) review.push('Finished ' + fmtGap(finish - deadline) + ' after the time was up.');
+      const closeMs = exam.end ? exam.end.getTime() : deadline;
+      const sentLate = closeMs !== null && now.getTime() > closeMs + exam.options.offlineSubmitMinutes * 60000;
+      if (sentLate) review.push('The answers arrived ' + fmtGap(now.getTime() - closeMs) + ' after the exam closed.');
+      const others = (await q('SELECT count(*)::int AS n FROM attempts WHERE exam_id = $1 AND student_id = $2', [exam.id, pkg.student_id])).rows[0].n;
+      if (others) review.push('This student also has ' + others + ' other attempt' + (others === 1 ? '' : 's') + ' at this exam (e.g. online).');
+      const env = b.env || {};
+      const a = (await q(`INSERT INTO attempts (id, exam_id, student_id, status, started_at, deadline, user_agent, device, last_seen, offline, fixed_question_ids,
+            warnings, focus_warnings, reconnects, receipt, review)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now(), true, $9, $10, $11, $12, $13, $14) RETURNING *`,
+        [pkg.id, exam.id, pkg.student_id, STATUS.IN_PROGRESS, new Date(start), deadline ? new Date(deadline) : null, str(env.userAgent, 300), str(env.device, 20) || null,
+          JSON.stringify(pkg.question_ids), Math.max(0, Math.round(Number(b.cameraWarnings) || 0)), Math.max(0, Math.round(Number(b.focusWarnings) || 0)),
+          Math.max(0, Math.round(Number(b.reloads) || 0)), str(b.receipt, 10), review.length ? JSON.stringify(review) : null])).rows[0];
+      await logEvent(q, a.id, 'OFFLINE_EXAM', 'Taken offline from the downloaded copy; answers received from ' + o.source + ' ' + fmtGap(now.getTime() - finish) + ' after finishing.');
+      for (const e of events) {
+        if (!e || typeof e.event !== 'string') continue;
+        await logEvent(q, a.id, str(e.event, 40).replace(/[^A-Z_]/g, '') || 'EVENT', (e.at ? new Date(Number(e.at)).toISOString() + ' ' : '') + str(e.detail, 300));
+      }
+      await q('UPDATE offline_packages SET synced_at = now() WHERE id = $1', [pkg.id]);
+      const v = b.voided && typeof b.voided === 'object' ? b.voided : null;
+      if (v) {
+        const event = VIOLATION_LABELS[v.event] ? v.event : 'TAB_SWITCH';
+        await q('UPDATE attempts SET draft_answers = $1, draft_at = now() WHERE id = $2', [JSON.stringify(b.answers || {}), a.id]);
+        await logEvent(q, a.id, event, 'VOIDED (offline): ' + str(v.detail, 300));
+        await voidAttempt(q, a, event);
+        return { voided: true, reason: a.void_reason };
+      }
+      await gradeAttempt(q, a, exam, b.answers, { now, late, sentLate, finishedAt: new Date(finish) });
+      return { result: Object.assign(resultFor(a, exam), { receipt: str(b.receipt, 10), receiptOk: b.receipt === expect }) };
+    });
+    if (out.voided) return { status: STATUS.VOIDED, reason: out.reason };
+    return out.result;
+}
+
 
 // ───────── actions ─────────
 
@@ -263,6 +342,67 @@ const actions = {
     return out.result;
   },
 
+  /** Offline exams: the student's locked copy (their questions, no answer key), for taking the exam without internet. */
+  async download(req) {
+    const x = await loadExam((sql, p) => db.query(sql, p), req.body.examId, req.user.id);
+    const exam = core.examConfig(x);
+    if (!exam.options.offlineMode) throw fail(409, 'NOT_OFFLINE', 'Your teacher has not made this exam available offline.');
+    if (offline.normPassword(exam.password).length < 8) throw fail(409, 'CONFIG', 'This exam is not ready for offline use yet. Please tell your teacher.');
+    const now = new Date();
+    if (exam.end && now > exam.end) throw fail(409, 'CLOSED', 'This exam has closed.');
+    const s = await getSettings();
+    const mine = await db.many('SELECT * FROM attempts WHERE exam_id = $1 AND student_id = $2 ORDER BY started_at', [exam.id, req.user.id]);
+    const last = mine[mine.length - 1];
+    let pkg = await db.one('SELECT * FROM offline_packages WHERE exam_id = $1 AND student_id = $2', [exam.id, req.user.id]);
+    if (last && !(last.allow_retake && last.status !== STATUS.IN_PROGRESS)) {
+      if (!pkg || pkg.synced_at || last.id !== pkg.id) {
+        throw fail(409, 'ALREADY_STARTED', last.status === STATUS.SUBMITTED ? 'You have already submitted this exam.' : 'You already started this exam online. Continue it online.');
+      }
+    }
+    if (pkg && pkg.synced_at) { await db.query('DELETE FROM offline_packages WHERE id = $1', [pkg.id]); pkg = null; } // a retake: a new copy
+    const pool = await loadPool((sql, p) => db.query(sql, p), exam);
+    if (!pkg) {
+      const id = crypto.randomUUID();
+      const ids = core.attemptQuestions(exam, pool, id).map((qq) => qq.id);
+      pkg = await db.one(`INSERT INTO offline_packages (id, exam_id, student_id, question_ids, receipt_key, pw_fp) VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (exam_id, student_id) DO UPDATE SET downloads = offline_packages.downloads + 1 RETURNING *`,
+        [id, exam.id, req.user.id, JSON.stringify(ids), crypto.randomBytes(32).toString('base64'), offline.fingerprint(exam.password)]);
+    } else {
+      pkg = await db.one('UPDATE offline_packages SET downloads = downloads + 1, downloaded_at = now(), pw_fp = $1 WHERE id = $2 RETURNING *', [offline.fingerprint(exam.password), pkg.id]);
+    }
+    const byId = new Map(pool.map((qq) => [qq.id, qq]));
+    const qs = pkg.question_ids.map((id) => byId.get(id)).filter(Boolean);
+    let total = 0;
+    const questions = [];
+    for (const qq of qs) {
+      const pq = core.publicQuestion(qq, exam, pkg.id);
+      if (qq.imageId) {
+        const img = await db.one('SELECT mime, data FROM images WHERE id = $1', [qq.imageId]);
+        if (img) { total += img.data.length; pq.image = { src: 'data:' + img.mime + ';base64,' + Buffer.from(img.data).toString('base64') }; }
+      }
+      questions.push(pq);
+    }
+    if (total > 25 * 1024 * 1024) throw fail(413, 'TOO_LARGE', 'The pictures in this exam are too large to download (over 25 MB). Please tell your teacher.');
+    const meta = {
+      id: exam.id, title: exam.title, instructions: exam.instructions, className: x.class_name + (x.class_section ? ' — ' + x.class_section : ''),
+      questionCount: questions.length, totalPoints: questions.reduce((t, qq) => t + qq.points, 0), timeLimitMinutes: exam.limitMin,
+      startMs: exam.start ? exam.start.getTime() : null, endMs: exam.end ? exam.end.getTime() : null,
+      startText: fmtDate(exam.start, s.timeZone), endText: fmtDate(exam.end, s.timeZone), timeZone: s.timeZone,
+      displayMode: exam.displayMode, allowBack: exam.allowBack, questionSeconds: exam.questionSeconds,
+      faceMode: exam.faceMode, cameraPreview: exam.cameraPreview, allowedDevices: exam.allowedDevices, requiresPassword: true, offline: true,
+    };
+    const student = { name: req.user.name, id: req.user.student_no || req.user.email };
+    const locked = offline.encrypt({ v: 1, packageId: pkg.id, receiptKey: pkg.receipt_key, exam: meta, rules: exam.options, student, questions, issuedAt: now.getTime() }, exam.password);
+    const external = questions.map((qq) => qq.image && qq.image.src).filter((u) => u && /^https?:/i.test(u));
+    return { packageId: pkg.id, locked, meta: Object.assign({}, meta, { instructions: undefined }), student, serverNow: now.getTime(), externalImages: external };
+  },
+
+  /** Offline exams: the answers (and what happened) arrive when the student is back online. Graded like a submit. */
+  async offlineSubmit(req) {
+    if (!isUuid(req.body.packageId)) throw fail(404, 'NO_ATTEMPT', 'This exam copy was not found.');
+    return receiveOffline(req.body, { studentId: req.user.id, source: 'the student\'s device' });
+  },
+
   /** An unexpected error on the exam page (a bug): logged for the teacher. At most 5 per attempt. */
   async clientError(req) {
     if (!isUuid(req.body.attemptId)) return { logged: false };
@@ -346,9 +486,10 @@ const actions = {
     const exam = await examOfAttempt((sql, p) => db.query(sql, p), a);
     const random = b.event === 'RANDOM';
     if (exam.faceMode !== 'ALWAYS' || !(random ? exam.options.randomSnapshots : exam.options.cameraSnapshots)) return { saved: false };
-    if (random && a.status !== STATUS.IN_PROGRESS) return { saved: false };
+    const offlineLater = a.offline && a.last_seen && Date.now() - new Date(a.last_seen).getTime() < 24 * 3600000;
+    if (random && a.status !== STATUS.IN_PROGRESS && !offlineLater) return { saved: false };
     const recentlyVoided = a.status === STATUS.VOIDED && a.voided_at && Date.now() - new Date(a.voided_at).getTime() < 5 * 60000;
-    if (a.status !== STATUS.IN_PROGRESS && !recentlyVoided) return { saved: false };
+    if (a.status !== STATUS.IN_PROGRESS && !recentlyVoided && !offlineLater) return { saved: false };
     const m = String(b.dataUrl || '').match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
     if (!m) throw fail(400, 'BAD_INPUT', 'Bad picture.');
     const bytes = Buffer.from(m[1], 'base64');
@@ -356,7 +497,8 @@ const actions = {
     const kind = random ? 'random' : 'flag';
     const n = (await db.one('SELECT count(*)::int AS n FROM attempt_snapshots WHERE attempt_id = $1 AND kind = $2', [a.id, kind])).n;
     // random: at most (pictures per hour × hours since the start) + 1, so a page can't send more than the exam allows
-    const cap = random ? Math.floor(exam.options.snapshotsPerHour * (Date.now() - new Date(a.started_at).getTime()) / 3600000) + 1 : 10;
+    const until = a.offline && a.submitted_at ? new Date(a.submitted_at).getTime() : Date.now();
+    const cap = random ? Math.floor(exam.options.snapshotsPerHour * Math.max(0, until - new Date(a.started_at).getTime()) / 3600000) + 1 : 10;
     if (n >= cap) return { saved: false };
     const event = random ? 'RANDOM' : VIOLATION_LABELS[b.event] ? b.event : 'CAMERA';
     await snapshots.save(a.id, event, kind, bytes);
@@ -444,5 +586,6 @@ router.get('/:attemptId/image/:questionId', async (req, res) => {
 
 module.exports = router;
 module.exports.gradeAttempt = gradeAttempt;
+module.exports.receiveOffline = receiveOffline;
 module.exports.examOfAttempt = examOfAttempt;
 module.exports.logEvent = logEvent;

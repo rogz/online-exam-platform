@@ -47,7 +47,12 @@
 
   // ───────── API ─────────
 
+  /** While an offline exam runs (or was voided and is not being sent yet), the page's server actions are handled on the device. */
+  const useLocal = (action) => !!(state.offline && state.offline.st && LOCAL_ACTIONS.includes(action) &&
+    (state.offline.st.status === 'IN_PROGRESS' || (state.offline.st.status === 'VOIDED' && !state.offline.syncing)));
+
   async function api(action, payload, tries = 1) {
+    if (useLocal(action)) return localApi(action, payload || {});
     let lastErr;
     for (let i = 0; i < tries; i++) {
       try {
@@ -78,6 +83,7 @@
   }
 
   function beacon(action, payload) {
+    if (useLocal(action)) { localApi(action, payload || {}); return true; }
     try {
       const body = new Blob([JSON.stringify(Object.assign({ action }, payload))], { type: 'text/plain;charset=UTF-8' });
       return navigator.sendBeacon && navigator.sendBeacon(API_URL, body);
@@ -317,6 +323,7 @@
   }
 
   function windowStatusNow() {
+    if (state.offline) return 'OPEN'; // offline: the password the teacher gives in the room opens the exam
     const now = Date.now() + state.serverOffset;
     const e = state.info.exam;
     if (e.startMs && now < e.startMs) return 'NOT_YET_OPEN';
@@ -432,6 +439,12 @@
       return;
     }
     if (!preChecksPass()) return;
+    if (state.offline) {
+      $('startBtn').disabled = true;
+      busy(true, state.offline.st ? 'Continuing…' : 'Unlocking the exam…');
+      try { await startOffline(); } catch (e) { err.textContent = e.message; err.hidden = false; } finally { busy(false); refreshStartButton(); }
+      return;
+    }
     const m = monitorStatus();
     $('startBtn').disabled = true;
     busy(true, 'Starting exam…');
@@ -460,11 +473,294 @@
     }
   }
 
+  // ───────── Offline exams (downloaded before, taken without internet) ─────────
+  // The download (a locked copy of this student's questions) is kept in IndexedDB; the exam page itself is kept by the
+  // offline helper (/sw.js). While an offline exam runs, the actions the page would send to the server are handled here
+  // on the device (localApi) and sent together when the student is back online (offlineSubmit).
+
+  const B32 = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const normPw = (p) => String(p || '').toUpperCase().replace(/[\s-]+/g, '');
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const nowEst = () => Date.now() + state.serverOffset; // the site's time, as far as this device knows
+
+  let dbPromise = null;
+  function idb() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('no IndexedDB')); return; }
+        const r = indexedDB.open('exam-wizard', 1);
+        r.onupgradeneeded = () => {
+          const d = r.result;
+          if (!d.objectStoreNames.contains('packages')) d.createObjectStore('packages');
+          if (!d.objectStoreNames.contains('snaps')) d.createObjectStore('snaps', { autoIncrement: true });
+        };
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+      });
+    }
+    return dbPromise;
+  }
+  async function idbDo(store, mode, fn) {
+    const d = await idb();
+    return new Promise((resolve, reject) => {
+      const t = d.transaction(store, mode);
+      const req = fn(t.objectStore(store));
+      t.oncomplete = () => resolve(req ? req.result : undefined);
+      t.onerror = () => reject(t.error);
+    });
+  }
+  const pkgGet = (key) => idbDo('packages', 'readonly', (s) => s.get(key)).catch(() => null);
+  const pkgPut = (key, v) => idbDo('packages', 'readwrite', (s) => s.put(v, key));
+  const pkgDel = (key) => idbDo('packages', 'readwrite', (s) => s.delete(key)).catch(() => {});
+
+  const offKey = (id) => 'exam-offline:' + id;
+  function offLoad(id) { try { return JSON.parse(localStorage.getItem(offKey(id)) || 'null'); } catch (e) { return null; } }
+  function offSave() {
+    const o = state.offline;
+    if (!o || !o.st) return;
+    o.st.answers = state.answers;
+    o.st.cameraWarnings = state.cam.warnings || 0;
+    o.st.focusWarnings = state.focusWarnings || 0;
+    o.st.locked = Array.from(state.locked || []);
+    o.st.lastWall = Date.now();
+    try { localStorage.setItem(offKey(o.pkg.packageId), JSON.stringify(o.st)); } catch (e) { /* storage full: answers still in memory */ }
+  }
+  function offEvent(event, detail) {
+    const o = state.offline;
+    if (!o || !o.st) return;
+    o.st.events = o.st.events || [];
+    if (o.st.events.length < 300) o.st.events.push({ event, detail: String(detail || '').slice(0, 300), at: nowEst() });
+    offSave();
+  }
+
+  /** The unlocked copy: questions and all. Wrong password → the browser can't decrypt it. */
+  async function unlockPackage(locked, password) {
+    const enc = new TextEncoder();
+    const base = await crypto.subtle.importKey('raw', enc.encode(normPw(password)), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: fromB64(locked.salt), iterations: locked.iterations, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(locked.iv) }, key, fromB64(locked.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  /** Same as receiptOf() in src/offline.js. */
+  function canonAnswers(a) {
+    return Object.keys(a || {}).filter((k) => a[k] !== undefined && a[k] !== null && String(a[k]) !== '').sort().map((k) => k + '=' + String(a[k])).join('\n');
+  }
+  async function receiptOf(keyB64, packageId, finishedAt, answers) {
+    const key = await crypto.subtle.importKey('raw', fromB64(keyB64), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(packageId + '|' + Math.round(finishedAt) + '|' + canonAnswers(answers))));
+    let s = '';
+    for (let i = 0; i < 6; i++) s += B32[mac[i] % 32];
+    return s.slice(0, 3) + '-' + s.slice(3);
+  }
+
+  /** What the server would do, done on the device while the exam is offline. */
+  const LOCAL_ACTIONS = ['violation', 'disconnect', 'snapshot', 'ping', 'lockAnswer', 'clientError'];
+  async function localApi(action, p) {
+    const o = state.offline, st = o.st;
+    if (action === 'ping') return { ok: true, status: st.status };
+    if (action === 'violation') {
+      offEvent(p.event, (p.final ? 'VOIDED: ' : 'WARNING: ') + (p.detail || ''));
+      if (p.final && st.status === 'IN_PROGRESS') { st.status = 'VOIDED'; st.voided = { event: p.event, detail: p.detail || '' }; st.finishedAt = nowEst(); offSave(); }
+      return { ok: true, status: st.status === 'VOIDED' ? 'IN_PROGRESS' : st.status, warned: true }; // the page already shows the void itself
+    }
+    if (action === 'disconnect') { offEvent('DISCONNECTED', 'Page closed or reloaded (offline)'); return { ok: true }; }
+    if (action === 'clientError') { offEvent('PAGE_ERROR', p.message + (p.where ? ' @ ' + p.where : '')); return { ok: true }; }
+    if (action === 'lockAnswer') { offSave(); return { ok: true, locked: true }; }
+    if (action === 'snapshot') {
+      const random = p.event === 'RANDOM';
+      st.snapCount = st.snapCount || { flag: 0, random: 0 };
+      const kind = random ? 'random' : 'flag';
+      const cap = random ? Math.floor((Number(state.rules.snapshotsPerHour) || 6) * (nowEst() - st.startedAt) / 3600000) + 1 : 10;
+      if (st.snapCount[kind] >= cap) return { ok: true, saved: false };
+      st.snapCount[kind]++;
+      offSave();
+      await idbDo('snaps', 'readwrite', (s) => s.add({ packageId: o.pkg.packageId, event: p.event, dataUrl: p.dataUrl, at: nowEst() })).catch(() => {});
+      return { ok: true, saved: true };
+    }
+    return { ok: true };
+  }
+
+  /** Shown on the rules screen (with internet) when the teacher made the exam available offline. */
+  async function renderOfflineCard() {
+    const card = $('offlineCard');
+    if (!state.info || !state.info.rules.offlineMode) { card.hidden = true; return; }
+    const pk = await pkgGet(state.examId);
+    card.hidden = false;
+    card.className = 'offline-card' + (pk ? ' ready' : '');
+    card.innerHTML = pk
+      ? '<b>✓ Downloaded on this device</b> (' + new Date(pk.downloadedAt).toLocaleString() + '). On exam day you can open this page <b>without internet</b>: ' +
+        'use this same browser and the same link (or <a href="/offline">Downloaded exams</a>). Your teacher gives you the password in the room.' +
+        '<div><button type="button" class="btn" id="dlBtn">Download again</button> <span class="small muted" id="dlStatus"></span></div>'
+      : '<b>📥 This exam can be taken without internet.</b> Download it now, while you have internet (on the device you will use for the exam). ' +
+        'It stays locked until your teacher gives the password.<div><button type="button" class="btn primary" id="dlBtn">Download for offline</button> <span class="small muted" id="dlStatus"></span></div>';
+    $('dlBtn').onclick = downloadForOffline;
+  }
+
+  async function downloadForOffline() {
+    const status = $('dlStatus'), btn = $('dlBtn');
+    btn.disabled = true;
+    status.textContent = 'Downloading…';
+    try {
+      if (!window.crypto || !crypto.subtle || !window.indexedDB) throw new Error('This browser cannot keep exams offline. Use an up-to-date Chrome, Edge or Safari.');
+      const r = await api('download', { examId: state.examId }, 2);
+      await pkgPut(state.examId, { packageId: r.packageId, locked: r.locked, meta: r.meta, rules: state.info.rules, student: r.student,
+        serverOffset: r.serverNow - Date.now(), downloadedAt: Date.now(), externalImages: r.externalImages });
+      status.textContent = 'Saving the exam page…';
+      const kept = await keepForOffline(r.externalImages || []);
+      await renderOfflineCard();
+      const bad = kept.filter((k) => !k.ok);
+      const camBad = bad.some((k) => window.ExamCamera.files.includes(k.url));
+      $('dlStatus').innerHTML = (bad.length
+        ? '<span style="color:#9a6700">Downloaded, but ' + bad.length + ' file' + (bad.length === 1 ? '' : 's') + ' could not be saved' + (camBad ? ' (camera checker)' : '') + '. Click "Download again" with a better connection.</span>'
+        : '<span style="color:#1a7f37">✓ Ready offline</span>');
+    } catch (e) {
+      btn.disabled = false;
+      status.textContent = e.message;
+    }
+  }
+
+  /** Asks the offline helper to keep the exam page, the camera checker and the pictures. */
+  async function keepForOffline(images) {
+    if (!('serviceWorker' in navigator)) return [{ url: 'offline helper', ok: false }];
+    await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    const reg = await navigator.serviceWorker.ready;
+    const items = [];
+    if (state.info.exam.faceMode !== 'OFF') window.ExamCamera.files.forEach((u) => items.push({ url: u }));
+    images.forEach((u) => items.push({ url: u, noCors: true }));
+    return new Promise((resolve) => {
+      const ch = new MessageChannel();
+      const t = setTimeout(() => resolve([{ url: 'offline helper', ok: false }]), 120000);
+      ch.port1.onmessage = (e) => { clearTimeout(t); resolve((e.data && e.data.results) || []); };
+      (reg.active || navigator.serviceWorker.controller).postMessage({ type: 'keep', items }, [ch.port2]);
+    });
+  }
+
+  /** No internet, but this exam was downloaded: show the rules screen from the downloaded details. */
+  function renderOfflineRules(pk) {
+    const st = offLoad(pk.packageId);
+    state.offline = { pkg: pk, st: st && st.status === 'IN_PROGRESS' ? st : null };
+    state.serverOffset = pk.serverOffset || 0;
+    state.info = { exam: Object.assign({}, pk.meta, { requiresPassword: !state.offline.st, windowStatus: 'OPEN' }), rules: pk.rules, student: pk.student };
+    renderRules();
+    const n = $('offlineCard');
+    n.hidden = false; n.className = 'offline-card';
+    n.innerHTML = state.offline.st
+      ? '<b>📴 Offline exam in progress.</b> Click <i>Continue exam</i> to go on. Your answers so far are kept on this device.'
+      : '<b>📴 Offline exam</b> (no internet needed). Enter the password your teacher gives you in the room, then start. When you finish, you get a <b>receipt code</b>; your answers are sent when this device is online again.';
+    if (state.offline.st) $('startBtn').textContent = 'Continue exam';
+    refreshStartButton();
+  }
+
+  /** Start (or continue after a reload) an offline exam. */
+  async function startOffline() {
+    const o = state.offline, err = $('startError');
+    let open = await pkgGet('open:' + o.pkg.packageId);
+    if (o.st) {
+      // continuing after the page was closed: the same rules as the server's reconnect window
+      const rs = state.rules.reconnectSeconds || 0, gap = Date.now() - (o.st.lastWall || Date.now());
+      o.st.reloads = (o.st.reloads || 0) + 1;
+      const tooLong = !(rs > 0) || gap > rs * 1000 + 30000, tooMany = o.st.reloads > (state.rules.maxReconnects || 0);
+      if (!open || tooLong || tooMany) {
+        const ev = !open ? 'PAGE_CLOSED' : tooMany ? 'TOO_MANY_RECONNECTS' : rs > 0 ? 'CONNECTION_LOST' : 'PAGE_CLOSED';
+        offEvent(ev, !open ? 'The unlocked copy was missing' : tooMany ? 'Reopened ' + o.st.reloads + ' times' : 'Came back after ' + Math.round(gap / 1000) + ' s');
+        o.st.status = 'VOIDED'; o.st.voided = { event: ev, detail: 'offline reload' }; o.st.finishedAt = nowEst(); offSave();
+        state.attemptId = o.pkg.packageId;
+        state.student = { name: o.pkg.student.name, id: o.pkg.student.id };
+        showVoid(ev === 'TOO_MANY_RECONNECTS' ? 'PAGE_CLOSED' : ev);
+        return;
+      }
+      offEvent('RECONNECTED', 'Continued offline after ' + Math.round(gap / 1000) + ' s (reopen ' + o.st.reloads + ' of ' + state.rules.maxReconnects + ')');
+    } else {
+      const pw = $('examPassword').value.trim();
+      try { open = await unlockPackage(o.pkg.locked, pw); } catch (e) {
+        err.textContent = pw ? 'That password is not right. Check it with your teacher (capital letters and dashes don\'t matter).' : 'Enter the exam password from your teacher.';
+        err.hidden = false; refreshStartButton(); return;
+      }
+      await pkgPut('open:' + o.pkg.packageId, open);
+      const limitMs = (open.exam.timeLimitMinutes || 0) * 60000;
+      const endEst = open.exam.endMs && (!limitMs || open.exam.endMs < nowEst() + limitMs) && open.exam.endMs > nowEst() ? open.exam.endMs : null;
+      o.st = { status: 'IN_PROGRESS', startedAt: nowEst(), endAt: limitMs ? Date.now() + limitMs : endEst ? Date.now() + (endEst - nowEst()) : null,
+        answers: {}, events: [], reloads: 0, locked: [], device: deviceType() };
+      offEvent('OFFLINE_START', 'Unlocked with the password and started offline');
+    }
+    state.unlocked = open;
+    const r = {
+      attemptId: o.pkg.packageId, studentId: open.student.id, studentName: open.student.name, questions: open.questions,
+      remainingMs: o.st.endAt === null ? null : Math.max(0, o.st.endAt - Date.now()), resumed: (o.st.reloads || 0) > 0, reconnects: o.st.reloads || 0,
+      cameraWarningsUsed: o.st.cameraWarnings || 0, focusWarningsUsed: o.st.focusWarnings || 0, lockedIds: o.st.locked || [], draftAnswers: o.st.answers || {},
+    };
+    beginExam(r);
+    offSave();
+  }
+
+  /** Finished (or voided) offline: receipt code, then send whenever there is internet. */
+  async function finishPackageExam() {
+    const o = state.offline;
+    o.st.finishedAt = nowEst();
+    o.st.answers = state.answers;
+    o.st.receipt = await receiptOf(state.unlocked.receiptKey, o.pkg.packageId, o.st.finishedAt, o.st.answers);
+    o.st.status = 'FINISHED';
+    offSave();
+    finishExam();
+    showOfflineFinished();
+  }
+
+  function showOfflineFinished() {
+    const st = state.offline.st;
+    show('pending');
+    $('pendingReceipt').hidden = !st.receipt;
+    $('pendingReceipt').innerHTML = 'Your receipt code<b>' + (st.receipt || '') + '</b><span class="small">Show it to your teacher (or write it on the attendance sheet).</span>';
+    $('pendingKeep').innerHTML = '<b>Your answers stay on this device</b>, even if you close this page. To send them, keep this page open until you have internet, ' +
+      'or open this exam link again later (in this same browser) when you are online.';
+    syncOffline();
+  }
+
+  async function syncOffline() {
+    const o = state.offline;
+    if (!o || !o.st || o.syncing || !['FINISHED', 'VOIDED'].includes(o.st.status)) return;
+    o.syncing = true;
+    if (!$('screen-pending').hidden) $('pendingStatus').textContent = 'Sending your answers…';
+    const st = o.st;
+    try {
+      const r = await api('offlineSubmit', {
+        packageId: o.pkg.packageId, answers: st.answers || {}, startedAt: st.startedAt, finishedAt: st.finishedAt, receipt: st.receipt || '',
+        events: st.events || [], voided: st.voided || null, reloads: st.reloads || 0, cameraWarnings: st.cameraWarnings || 0, focusWarnings: st.focusWarnings || 0,
+        env: { userAgent: navigator.userAgent, device: st.device || deviceType() },
+      }, 2);
+      // the pictures the camera took offline follow the answers
+      const snaps = await idbDo('snaps', 'readonly', (s) => s.getAll()).catch(() => []);
+      const keys = await idbDo('snaps', 'readonly', (s) => s.getAllKeys()).catch(() => []);
+      for (let i = 0; i < snaps.length; i++) {
+        if (snaps[i].packageId !== o.pkg.packageId) continue;
+        try { await api('snapshot', { attemptId: o.pkg.packageId, event: snaps[i].event, dataUrl: snaps[i].dataUrl }, 2); } catch (e) { if (e.code === 'NETWORK') throw e; }
+        await idbDo('snaps', 'readwrite', (s) => s.delete(keys[i])).catch(() => {});
+      }
+      st.status = 'SENT'; st.sentAt = Date.now(); offSave();
+      await pkgDel('open:' + o.pkg.packageId);
+      o.syncing = false;
+      if (r.status === 'VOIDED') { $('voidOffline').hidden = true; return; }
+      showResult(r);
+      if (st.receipt) $('resultNote').textContent = ($('resultNote').textContent ? $('resultNote').textContent + ' ' : '') + 'Receipt code: ' + st.receipt + '.';
+    } catch (e) {
+      o.syncing = false;
+      if (e.code === 'NETWORK') {
+        if (!$('screen-pending').hidden) $('pendingStatus').textContent = 'No internet yet (last try ' + new Date().toLocaleTimeString() + '). Your answers will be sent when this device is online.';
+        clearTimeout(o.syncTimer);
+        o.syncTimer = setTimeout(syncOffline, 10000);
+        return;
+      }
+      if (!$('screen-pending').hidden) $('pendingStatus').textContent = 'Could not send: ' + e.message + ' Please show this screen to your teacher.';
+    }
+  }
+
   // ───────── Exam ─────────
 
   function storageKey() { return 'exam-answers:' + state.attemptId; }
 
   function saveLocal() {
+    if (state.offline) offSave();
     try { localStorage.setItem(storageKey(), JSON.stringify(state.answers)); } catch (e) { /* ignore */ }
   }
 
@@ -712,6 +1008,7 @@
     const el = $('saveState');
     if (!keepGoing() || !state.active) { el.hidden = true; return; }
     el.hidden = false;
+    if (state.offline) { el.hidden = false; el.className = 'save-state wait'; el.textContent = '📴 Offline exam · saved on this device'; return; }
     const offline = state.offlineSince !== null;
     const synced = state.savedVer >= state.answersVer;
     el.className = 'save-state ' + (offline ? 'wait' : synced ? 'ok' : '');
@@ -853,6 +1150,12 @@
 
   function tick() {
     if (!state.active) return;
+    if (state.offline && state.offline.st) {
+      const n = Date.now();
+      if (state.lastTickWall && n < state.lastTickWall - 60000) offEvent('CLOCK_CHANGED', 'The device clock went back ' + Math.round((state.lastTickWall - n) / 60000) + ' min');
+      state.lastTickWall = n;
+      if (!state.lastOffSave || n - state.lastOffSave > 5000) { state.lastOffSave = n; offSave(); }
+    }
     tickConnection();
     if (!state.active) return;
     if (state.qEndAt !== null) {
@@ -896,6 +1199,7 @@
   }
 
   function markOffline(since) {
+    if (state.offline) return; // an offline exam needs no internet
     if (state.offlineSince === null) state.offlineSince = since || Date.now();
     paintSaveState();
   }
@@ -976,6 +1280,7 @@
     state.submitting = true;
     $('confirmModal').hidden = true;
     $('submitBtn').disabled = true;
+    if (state.offline) { await finishPackageExam(); state.submitting = false; return; }
     busy(true, auto ? 'Time is up — submitting your answers…' : 'Submitting your answers…');
     const finishedAt = Date.now() + state.serverOffset;
     try {
@@ -1036,10 +1341,12 @@
 
   /** A copy of the finished answers as a file, for the teacher to upload (Results → Answers → Upload an answer file). */
   function saveAnswerFile() {
-    const p = pendingFromStorage();
+    const o = state.offline;
+    const p = pendingFromStorage() || (o && o.st ? { attemptId: o.pkg.packageId, answers: o.st.answers || {}, finishedAt: o.st.finishedAt || nowEst(), name: o.pkg.student.name, receipt: o.st.receipt } : null);
     if (!p) return;
     const file = { kind: 'exam-wizard-answers', version: 1, examId: state.examId, examTitle: state.info ? state.info.exam.title : '', attemptId: p.attemptId,
-      student: state.student || { name: p.name }, answers: p.answers, finishedAt: new Date(p.finishedAt).toISOString(), savedAt: new Date(Date.now() + state.serverOffset).toISOString() };
+      student: state.student || { name: p.name }, answers: p.answers, finishedAt: new Date(p.finishedAt).toISOString(), finishedMs: p.finishedAt, receipt: p.receipt || null,
+      offline: !!o, savedAt: new Date(Date.now() + state.serverOffset).toISOString() };
     const blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
     const who = String((state.student && (state.student.id || state.student.name)) || 'student').replace(/[^\w.-]+/g, '_');
@@ -1136,6 +1443,7 @@
     $('questions').textContent = ''; // hide the questions
     closeZoom();
     $('voidModal').hidden = false;
+    if (state.offline && state.offline.st) { $('voidOffline').hidden = false; syncOffline(); }
   }
 
   let blurTimer = null;
@@ -1268,11 +1576,13 @@
     });
     window.addEventListener('offline', () => { if (state.active && (reconnectOn() || keepGoing())) markOffline(Date.now()); });
     window.addEventListener('online', () => {
+      if (state.offline && state.offline.st && ['FINISHED', 'VOIDED'].includes(state.offline.st.status)) { clearTimeout(state.offline.syncTimer); syncOffline(); }
       if (state.active) ping();
       const p = !$('screen-pending').hidden && pendingFromStorage();
       if (p) { clearTimeout(state.pendingTimer); sendPending(p); }
     });
     $('pendingFile').addEventListener('click', saveAnswerFile);
+    $('pendingRetry').addEventListener('click', () => { if (state.offline) syncOffline(); });
     $('pendingRetry').addEventListener('click', () => { const p = pendingFromStorage(); if (p) { clearTimeout(state.pendingTimer); sendPending(p); } });
     if (window.screen && typeof window.screen.addEventListener === 'function') {
       window.screen.addEventListener('change', () => { checkMonitorDuringExam(); if (!state.attemptId && state.info) refreshStartButton(); });
@@ -1305,11 +1615,27 @@
     }
     const left = pendingFromStorage();
     if (left) { show('pending'); sendPending(left); return; } // finished earlier without internet: send those answers first
+    const pk = await pkgGet(state.examId);
+    const pst = pk && offLoad(pk.packageId);
+    if (pk && pst && pst.status === 'IN_PROGRESS') { renderOfflineRules(pk); return; } // an offline exam is in progress here
+    if (pk && pst && (pst.status === 'FINISHED' || pst.status === 'VOIDED')) {
+      // finished offline earlier: send it now (or keep trying)
+      state.offline = { pkg: pk, st: pst };
+      state.serverOffset = pk.serverOffset || 0;
+      state.attemptId = pk.packageId;
+      state.student = pk.student;
+      if (pst.status === 'VOIDED') showVoid(pst.voided && REASONS[pst.voided.event] ? pst.voided.event : null, 'Your offline exam was voided.');
+      else showOfflineFinished();
+      return;
+    }
     try {
       state.info = await api('getExam', { examId: state.examId }, 3);
       state.serverOffset = state.info.exam.serverNow - Date.now();
       renderRules();
+      renderOfflineCard().catch(() => {});
     } catch (e) {
+      if (e.code === 'NETWORK' && pk && !(pst && pst.status === 'SENT')) { renderOfflineRules(pk); return; }
+      if (e.code === 'NETWORK') { showError('No internet connection.' + (pk ? ' Your answers for this exam were already sent.' : ' This exam was not downloaded on this device, so it needs internet.')); return; }
       showError(e.message);
     }
   }

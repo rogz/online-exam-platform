@@ -40,6 +40,19 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Fill-in-the-blank checks**: close spellings ("Feranti"), numbers just outside the range and a different unit
   ("kV" for "V") are flagged as **to check** in Results (the number decides correct/wrong; spellings stay wrong) with a
   one-click **Give full points**. Notes are for the teacher only.
+- **Offline exams** (exam editor → Security → "Offline exam"; needs an exam password of 8+ letters/numbers, "Make a
+  strong password" gives e.g. `K7M-Q2X-9PD`): students open the exam link with internet before and click **Download
+  for offline** (their own question set, uploaded pictures inside; external pictures and the camera checker are kept
+  by the offline helper `public/sw.js`; no answer key). The copy is AES-GCM encrypted with the password
+  (`src/offline.js`, PBKDF2 150k); the password is given in the room. On exam day the same link (or `/offline`, "Exams
+  downloaded on this device") opens without internet; tab/window/camera rules, reconnect rules, snapshots and the timer
+  run on the device (`localApi` in `public/exam/app.js`). Finishing shows a **receipt code** (HMAC of the answers with a
+  key from the copy); the answers are sent when online (`offlineSubmit`, or the teacher uploads the student's answer
+  file in Results → Offline copies) and graded with the questions fixed at download (`fixed_question_ids`). Results:
+  **Offline copies** panel (downloaded / received / not downloaded / must download again after a password change),
+  "Offline" tag, receipt code, and **⚠ Check** notes (receipt mismatch, device clock, started before opening, finished
+  after time, arrived late, two attempts). The receipt written on the attendance sheet is what proves the answers were
+  not changed later (a very technical student could re-make a matching code, but not the one on paper).
 - **Help this student** (Results → Answers, for an attempt not submitted): extra time / **Let them continue** after a
   void or a crash (same questions, the server's saved answers come back; the student reopens within 30 min,
   `resume_until`), **Submit these answers** (the draft saved on the server), **Upload an answer file** (the student's

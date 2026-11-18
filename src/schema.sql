@@ -257,6 +257,24 @@ ALTER TABLE attempts ADD COLUMN IF NOT EXISTS sent_late boolean NOT NULL DEFAULT
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS finished_at timestamptz;
 -- The teacher let the student continue (after a crash or a void): until then, reopening the exam is always allowed.
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS resume_until timestamptz;
+-- Offline exams (src/offline.js): one locked download per student and exam. Its id becomes the attempt id when the
+-- answers arrive; question_ids fixes the student's questions at download time.
+CREATE TABLE IF NOT EXISTS offline_packages (
+  id            uuid PRIMARY KEY,
+  exam_id       uuid NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  student_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  question_ids  jsonb NOT NULL,
+  receipt_key   text NOT NULL,
+  pw_fp         text,
+  downloads     integer NOT NULL DEFAULT 1,
+  downloaded_at timestamptz NOT NULL DEFAULT now(),
+  synced_at     timestamptz,
+  UNIQUE (exam_id, student_id)
+);
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS offline boolean NOT NULL DEFAULT false;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS fixed_question_ids jsonb;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS review jsonb;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS receipt text;
 -- Unexpected errors on the student's exam page (reported by the page, shown to the teacher).
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS page_errors integer NOT NULL DEFAULT 0;
 

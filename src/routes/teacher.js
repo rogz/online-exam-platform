@@ -453,6 +453,9 @@ async function examProblems(teacherId, e, forPublish) {
   if (!e.title) p.push('enter a title');
   if (!isUuid(e.classId) || !(await db.one('SELECT 1 FROM classes WHERE id = $1 AND teacher_id = $2', [e.classId, teacherId]))) p.push('choose a class');
   if (e.start && e.end && e.end <= e.start) p.push('the closing time must be after the opening time');
+  if (e.options.offlineMode && require('../offline').normPassword(e.password).length < 8) {
+    p.push('an offline exam needs an exam password of at least 8 letters or numbers (click "Make a strong password")');
+  }
   const qs = e.questionIds.length ? await db.many('SELECT * FROM questions WHERE teacher_id = $1 AND id = ANY($2::uuid[])', [teacherId, e.questionIds]) : [];
   if (qs.length !== e.questionIds.length) p.push('some selected questions no longer exist');
   if (forPublish) {
@@ -488,8 +491,21 @@ router.get('/exams', async (req, res) => {
 });
 
 router.get('/exams/:id', async (req, res) => {
-  res.json({ ok: true, exam: await mine('exams', req.params.id, req.user.id, 'Exam') });
+  const x = await mine('exams', req.params.id, req.user.id, 'Exam');
+  const d = await db.one('SELECT count(*)::int AS n FROM offline_packages WHERE exam_id = $1 AND synced_at IS NULL', [x.id]);
+  res.json({ ok: true, exam: Object.assign(x, { offline_downloads: d.n }) });
 });
+router.post('/exams/:id/offline-answers', async (req, res) => {
+  const x = await mine('exams', req.params.id, req.user.id, 'Exam');
+  const f = (req.body && req.body.file) || {};
+  if (f.kind !== 'exam-wizard-answers' || !isUuid(f.attemptId) || !f.answers || typeof f.answers !== 'object') {
+    throw fail(400, 'BAD_FILE', 'That is not an answer file from Exam Wizard.');
+  }
+  const r = await require('./attempt').receiveOffline({ packageId: f.attemptId, answers: f.answers, finishedAt: f.finishedMs || Date.parse(f.finishedAt),
+    startedAt: f.startedMs || null, receipt: f.receipt || '', events: [], voided: null }, { examId: x.id, source: 'an answer file uploaded by the teacher' });
+  res.json({ ok: true, result: r });
+});
+router.get('/new-offline-password', async (req, res) => res.json({ ok: true, password: require('../offline').newPassword() }));
 
 router.post('/exams', async (req, res) => {
   const e = examInput(req.body || {});
@@ -538,7 +554,7 @@ router.post('/exams/:id', async (req, res) => {
     const e = examInput({
       classId: x.class_id, title: x.title, instructions: x.instructions, questionIds: x.question_ids, startAt: x.start_at, endAt: x.end_at,
       timeLimitMinutes: x.time_limit_min, displayMode: x.display_mode, allowBack: x.allow_back, questionSeconds: x.question_seconds,
-      pickCount: x.pick_count, topicCounts: x.topic_counts, options: x.options,
+      pickCount: x.pick_count, topicCounts: x.topic_counts, options: x.options, password: x.password,
     });
     const p = await examProblems(req.user.id, e, true);
     if (p.length) throw fail(400, 'BAD_INPUT', 'Before publishing, please fix: ' + p.join('; ') + '.');
@@ -583,7 +599,21 @@ router.get('/exams/:id/results', async (req, res) => {
        FROM enrollments e JOIN users u ON u.id = e.student_id
       WHERE e.class_id = $1 AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.exam_id = $2 AND a.student_id = u.id) ORDER BY lower(u.name)`, [x.class_id, x.id]);
   notStarted.forEach((s) => { s.avatarUrl = auth.avatarUrl(s.id, s.avatar_updated); });
-  res.json({ ok: true, exam: { id: x.id, title: x.title, published: x.published, showScore: x.show_score }, attempts, notStarted });
+  let offlineInfo = null;
+  if (core.examOptions(x.options).offlineMode) {
+    const fp = require('../offline').fingerprint(x.password);
+    const pk = await db.many(`SELECT p.student_id, p.downloaded_at, p.synced_at, p.downloads, p.pw_fp, u.name, u.email, u.student_no
+        FROM offline_packages p JOIN users u ON u.id = p.student_id WHERE p.exam_id = $1 ORDER BY lower(u.name)`, [x.id]);
+    const enrolled = await db.many(`SELECT u.id, u.name, u.email, u.student_no FROM enrollments e JOIN users u ON u.id = e.student_id WHERE e.class_id = $1 ORDER BY lower(u.name)`, [x.class_id]);
+    const got = new Set(pk.map((p) => p.student_id));
+    offlineInfo = {
+      enrolled: enrolled.length, downloaded: pk.length, sent: pk.filter((p) => p.synced_at).length,
+      outdated: pk.filter((p) => !p.synced_at && p.pw_fp !== fp).map((p) => ({ name: p.name, email: p.email })),
+      waiting: pk.filter((p) => !p.synced_at).map((p) => ({ name: p.name, email: p.email, studentNo: p.student_no, downloadedAt: p.downloaded_at })),
+      notDownloaded: enrolled.filter((u) => !got.has(u.id)).map((u) => ({ name: u.name, email: u.email, studentNo: u.student_no })),
+    };
+  }
+  res.json({ ok: true, exam: { id: x.id, title: x.title, published: x.published, showScore: x.show_score }, attempts, notStarted, offline: offlineInfo });
 });
 
 // ───────── Preview: the teacher tries the exam as a student would. Nothing is saved. ─────────

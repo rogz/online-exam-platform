@@ -769,6 +769,85 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const testMail = await admin.evaluate(async () => (await (await fetch('/api/admin/test-email', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()));
   ok(testMail.ok && outbox[outbox.length - 1].to === 'admin@test.local', 'admin can send a test email');
 
+  // ── Offline exam: download, take it without internet, receipt code, send when back online ──
+  const offExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.type === 'TF').slice(0, 2).map((q) => q.id);
+    const weak = await post('/api/teacher/exams', { classId: cls.id, title: 'Offline weak', questionIds: ids, password: 'abc', options: { offlineMode: true } });
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Offline quiz', questionIds: ids, timeLimitMinutes: 10, password: 'K7M-Q2X-9PD', shuffleQuestions: false,
+      options: { offlineMode: true }, startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    const pub = await post('/api/teacher/exams/' + x.id, { publish: true });
+    return { id: x.id, weak: weak.error || '', pub: pub.ok ? '' : pub.error };
+  });
+  ok(offExam.weak.includes('at least 8'), 'an offline exam needs a strong password');
+  await teacher.goto(BASE + '/teacher#exam/' + offExam.id); await teacher.waitForSelector('#oOfflineMode');
+  ok((await teacher.isChecked('#oOfflineMode')) && (await teacher.textContent('#passShow')).includes('K7M-Q2X-9PD'), 'exam editor shows "Offline exam" and the password to announce');
+  await student.goto(BASE + '/exam?id=' + offExam.id);
+  await student.waitForSelector('#screen-rules:not([hidden]), #screen-error:not([hidden])', { timeout: 15000 }).catch(() => {});
+  await student.waitForTimeout(1500);
+  await student.waitForSelector('#offlineCard:not([hidden]) #dlBtn');
+  await student.click('#dlBtn');
+  await student.waitForFunction(() => /Ready offline|could not/.test(document.querySelector('#dlStatus') ? document.querySelector('#dlStatus').textContent : ''), null, { timeout: 60000 });
+  ok((await student.textContent('#dlStatus')).includes('Ready offline') && (await student.textContent('#offlineCard')).includes('Downloaded on this device'), 'student downloads the exam for offline: "Ready offline"');
+  await teacher.goto(BASE + '/teacher#results/' + offExam.id); await teacher.waitForSelector('.panel h3:has-text("Offline copies")');
+  ok((await teacher.locator('.panel', { hasText: 'Offline copies' }).locator('.statgrid').textContent()).includes('1 / '), 'Results show who has downloaded the offline copy');
+  await student.context().setOffline(true);
+  await student.goto(BASE + '/exam?id=' + offExam.id);
+  await student.waitForSelector('#screen-rules:not([hidden]) #offlineCard:not([hidden])', { timeout: 20000 });
+  ok((await student.textContent('#offlineCard')).includes('Offline exam'), 'without internet, the downloaded exam still opens');
+  await student.check('#agree');
+  await student.fill('#examPassword', 'WRONG-PASS-1'); await student.click('#startBtn');
+  await student.waitForSelector('#startError:not([hidden])');
+  ok((await student.textContent('#startError')).includes('not right'), 'a wrong password does not unlock it');
+  await student.fill('#examPassword', 'k7m q2x 9pd'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])', { timeout: 20000 });
+  await student.click('#questions .question:nth-child(1) label:has-text("True")');
+  ok((await student.textContent('#saveState')).includes('Offline exam'), 'the right password (any letter case) unlocks it; "Offline exam · saved on this device"');
+  await student.reload();
+  await student.waitForSelector('#screen-rules:not([hidden])', { timeout: 20000 });
+  ok((await student.textContent('#startBtn')).includes('Continue exam'), 'after a reload, the offline exam can be continued');
+  await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  ok(await student.isChecked('#questions .question:nth-child(1) input[value="TRUE"], #questions .question:nth-child(1) input:checked'), 'the answer given before the reload is still there');
+  await student.click('#questions .question:nth-child(2) label:has-text("False")');
+  await student.click('#submitBtn'); await student.click('#confirmYes');
+  await student.waitForSelector('#pendingReceipt:not([hidden])');
+  const offReceipt = (await student.textContent('#pendingReceipt b')).trim();
+  await shot(student, '20-offline-receipt');
+  ok(/^[A-Z2-9]{3}-[A-Z2-9]{3}$/.test(offReceipt), 'finishing offline shows a receipt code (' + offReceipt + ')');
+  await student.context().setOffline(false);
+  await student.waitForSelector('#screen-result:not([hidden])', { timeout: 30000 });
+  const offRow = await dbOne(`SELECT id, status, offline, receipt, review, score, max_score FROM attempts WHERE exam_id = $1`, [offExam.id]);
+  ok(offRow && offRow.status === 'SUBMITTED' && offRow.offline && offRow.receipt === offReceipt && !offRow.review && offRow.max_score === 2,
+    'back online: the answers are sent, graded and the receipt matches (' + JSON.stringify(offRow) + ')');
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#results/' + offExam.id); await teacher.waitForSelector('[data-answers]');
+  const offNotes = await teacher.textContent('#aRows');
+  ok(offNotes.includes('Offline') && offNotes.includes('Receipt ' + offReceipt), 'Results show "Offline" and the receipt code');
+  // changed answers don't match the receipt; an answer file can be uploaded by the teacher
+  const off2 = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.type === 'TF').slice(0, 1).map((q) => q.id);
+    const mk = async (title) => { const x = (await post('/api/teacher/exams', { classId: cls.id, title, questionIds: ids, timeLimitMinutes: 10, password: 'AAAA-BBBB-CC', options: { offlineMode: true },
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam; await post('/api/teacher/exams/' + x.id, { publish: true }); return x.id; };
+    return { a: await mk('Offline tamper'), b: await mk('Offline file') };
+  });
+  const tamper = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const d = await post({ action: 'download', examId });
+    return post({ action: 'offlineSubmit', packageId: d.packageId, answers: { x: 'TRUE' }, startedAt: Date.now() - 60000, finishedAt: Date.now() - 1000, receipt: 'AAA-AAA', events: [] });
+  }, off2.a);
+  const tRow = await dbOne(`SELECT review FROM attempts WHERE exam_id = $1`, [off2.a]);
+  ok(tamper.submitted && tRow.review && tRow.review.join(' ').includes('does not match'), 'answers changed after the receipt are flagged "Please check"');
+  const pkgB = await student.evaluate(async (examId) => (await (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'download', examId }) })).json()).packageId, off2.b);
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#results/' + off2.b); await teacher.waitForSelector('[data-offfile]', { state: 'attached' });
+  await teacher.setInputFiles('[data-offfile]', { name: 'answers.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ kind: 'exam-wizard-answers', attemptId: pkgB, answers: {}, finishedMs: Date.now() - 5000, student: { name: 'Juan Dela Cruz' } })) });
+  ok(await toastSays(teacher, 'Juan Dela Cruz: received'), 'teacher uploads the answer file of a student who finished offline');
+  const fRow = await dbOne(`SELECT status, offline FROM attempts WHERE exam_id = $1`, [off2.b]);
+  ok(fRow && fRow.status === 'SUBMITTED' && fRow.offline, 'the uploaded offline answers are graded');
+
   // ── Safeguards: backups, pausing updates, helping one student ──
   const backupLib = require('../src/backup');
   const bk = await backupLib.backupNow();

@@ -41,6 +41,7 @@ const DEFAULT_OPTIONS = {
   timeWarnings: [5, 1],
   reconnectSeconds: 60,
   maxReconnects: 3,
+  offlineMode: false,      // students may download the exam before and take it without internet (needs a strong password)
   keepGoingOffline: true,  // internet drops while the exam page stays open: keep going, send the answers when it's back
   offlineSubmitMinutes: 60, // answers finished in time but sent this many minutes after the deadline are still accepted
 };
@@ -70,6 +71,7 @@ function examOptions(raw) {
       .map(Number).filter((n) => n > 0).sort((a, b) => b - a),
     reconnectSeconds: Math.round(num(o.reconnectSeconds, 60, 0)),
     maxReconnects: Math.round(num(o.maxReconnects, 3, 0)),
+    offlineMode: o.offlineMode === true,
     keepGoingOffline: o.keepGoingOffline !== false,
     offlineSubmitMinutes: Math.min(24 * 60, Math.round(num(o.offlineSubmitMinutes, 60, 0))),
   };

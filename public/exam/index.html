@@ -46,6 +46,7 @@
         <div><dt>Available</dt><dd id="factWindow"></dd></div>
       </dl>
       <div id="windowNotice" class="notice" hidden></div>
+      <div id="offlineCard" class="offline-card" hidden></div>
 
       <div class="rules" role="alert">
         <h2>⚠ Read before you start</h2>
@@ -121,8 +122,9 @@
     <section id="screen-pending" class="card center" hidden>
       <div class="big-icon warn">⏳</div>
       <h1>Your exam is finished</h1>
+      <div id="pendingReceipt" class="receipt" hidden></div>
       <p><b>Your answers are saved on this device</b> and will be sent automatically when the internet is back.</p>
-      <p class="notice warn"><b>Keep this page open.</b> Do not close or reload it until you see "Exam submitted".</p>
+      <p class="notice warn" id="pendingKeep"><b>Keep this page open.</b> Do not close or reload it until you see "Exam submitted".</p>
       <p class="muted" id="pendingStatus">Waiting for the internet…</p>
       <button type="button" class="btn primary" id="pendingRetry">Try sending now</button>
       <p class="small muted" style="margin-top:14px">If the internet stays off for a long time, or your teacher asks for it:</p>
@@ -166,6 +168,7 @@
         <div><dt>Time</dt><dd id="voidTime"></dd></div>
         <div><dt>Reference</dt><dd id="voidRef"></dd></div>
       </dl>
+      <p class="notice warn" id="voidOffline" hidden>Offline exam: this will be sent to your teacher automatically when you are back online. Keep this page open, or open the exam link again later with internet.</p>
       <p style="margin-top:16px"><a class="btn" href="/student" id="voidBack">← Back to My Exams</a></p>
     </div>
   </div>

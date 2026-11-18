@@ -40,7 +40,10 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Fill-in-the-blank checks**: close spellings ("Feranti"), numbers just outside the range and a different unit
   ("kV" for "V") are flagged as **to check** in Results (the number decides correct/wrong; spellings stay wrong) with a
   one-click **Give full points**. Notes are for the teacher only.
-- **Offline exams** (exam editor → Security → "Offline exam"; needs an exam password of 8+ letters/numbers, "Make a
+- **Exam editor → "Internet where students take the exam"**: Good or unstable (online, keep going offline; default),
+  No internet or very weak (offline exam), Strict (void after the reconnect window). Results → Offline copies →
+  **Exam-day sheet** prints the password, the steps for the room and an attendance list with a receipt-code column.
+- **Offline exams** (exam editor → "No internet, or very weak"; needs an exam password of 8+ letters/numbers, "Make a
   strong password" gives e.g. `K7M-Q2X-9PD`): students open the exam link with internet before and click **Download
   for offline** (their own question set, uploaded pictures inside; external pictures and the camera checker are kept
   by the offline helper `public/sw.js`; no answer key). The copy is AES-GCM encrypted with the password

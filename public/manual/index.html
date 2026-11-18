@@ -61,8 +61,9 @@
     <a href="#archive">9. Archive old exams and classes</a>
     <a href="#access">10. Credits, access codes and your profile</a>
     <a href="#students">11. What your students see</a>
-    <a href="#voided">12. Why was an exam voided?</a>
-    <a href="#help">13. Common problems</a>
+    <a href="#offline">12. Weak or no internet</a>
+    <a href="#voided">13. Why was an exam voided?</a>
+    <a href="#help">14. Common problems</a>
   </nav>
 
   <h2 id="quick" class="first">Quick start: your first exam in 7 steps</h2>
@@ -245,6 +246,11 @@
     <tr><td>Different unit</td><td>Correct (the number decides); you can take the points back</td><td>"127 V" when the answer key is in kV</td></tr>
   </table>
   <p>Students never see these notes.</p>
+  <h3>Help one student</h3>
+  <p>If a student's device crashed, the internet failed or something went wrong, open their <b>Answers</b>. For an attempt that was not submitted you see <b>Help this student</b>:</p>
+  <figure><img src="/manual/img/30-help-student.webp" alt="Help this student">
+    <figcaption><ol><li>How many minutes.</li><li><b>Add time</b> (the student is still working), or <b>Let them continue</b> for an exam that was voided or ran out: same questions, and the answers saved so far come back. The student opens the exam link again within 30 minutes.</li><li><b>Upload an answer file</b> from the student's <i>Save a copy of my answers</i>.</li></ol></figcaption></figure>
+  <p>When the site has answers saved for the student, you also see <b>Submit these answers</b>. A submitted attempt marked Late has <b>Count as on time</b>. Everything you do here is written in the student's Events.</p>
   <p><b>Grading essays:</b> in the Answers window, type the points next to each essay and click <b>Save points</b>. The score is updated. You can also change the points of any other question there.</p>
   <p>Students who have not started are listed under <b>Not started</b> at the bottom of the page, with their email.</p>
 
@@ -275,7 +281,76 @@
     <li>After submitting, students see their score only if you allowed it, and never the correct answers.</li>
   </ul>
 
-  <h2 id="voided">12. Why was an exam voided?</h2>
+  <h2 id="offline">12. Weak or no internet</h2>
+  <p>In the exam editor, choose how the exam handles the internet in the room:</p>
+  <figure class="mid"><img src="/manual/img/13d-editor-internet.webp" alt="Internet where students take the exam">
+    <figcaption><ol><li><b>Good or unstable internet</b> (the normal choice): students take the exam online. If the internet drops, the exam simply keeps going.</li><li><b>No internet, or very weak</b>: an <b>offline exam</b>. Students download it before the exam day and take it without internet.</li><li><b>Make a strong password</b>: an offline exam is locked with the exam password until you say it in the room.</li><li>Answers finished in time but sent later (after the internet comes back) are still accepted for this many minutes after the deadline.</li></ol></figcaption></figure>
+  <p><b>Strict</b> is the old rule: the exam is voided if a student is offline longer than the reconnect window.</p>
+
+  <h3>Unstable internet (online exams)</h3>
+  <ul>
+    <li>When the internet drops, students see <b>"📶 No internet… keep answering"</b>. Their answers are kept on the device (<b>"Saved on this device"</b>) and also on the site whenever there is a connection (<b>"✓ Saved"</b>).</li>
+    <li>If time runs out while offline, the student sees <b>"Your exam is finished"</b> and the answers are sent by themselves when the internet is back. They count as on time if they were finished in time.</li>
+    <li>In Results you see notes like <b>📶 Offline 5 min</b> and <b>⏳ Sent after the internet came back</b>. Nothing is voided for being offline.</li>
+    <li>Closing or reloading the page still follows the reconnect rules (Advanced settings), so students should keep the page open.</li>
+  </ul>
+
+  <h3>Offline exam: before the exam day</h3>
+  <ol>
+    <li>In the exam editor choose <b>No internet, or very weak</b>, click <b>Make a strong password</b>, then <b>Save &amp; publish</b>.</li>
+    <li>Tell students to open the exam link <b>with internet</b>, on the device they will use in the room, and click <b>Download for offline</b>. They see <b>✓ Ready offline</b>.</li>
+  </ol>
+  <figure class="mid"><img src="/manual/img/24-student-download.webp" alt="Download for offline">
+    <figcaption><ol><li>The student's <b>Download for offline</b> button. The download stays locked until you give the password.</li></ol></figcaption></figure>
+  <ol start="3">
+    <li>Check who has downloaded: <b>Results → Offline copies</b>. Remind the others.</li>
+  </ol>
+  <figure><img src="/manual/img/27-results-offline.webp" alt="Offline copies in Results">
+    <figcaption><ol><li><b>Scan answers (QR)</b>: the scanner for your phone (see below).</li><li><b>Helper links</b>: a scanner link for a student assistant.</li><li><b>Exam-day sheet</b>: print it. It has the password, the steps for the room, and an attendance list with a column for receipt codes.</li><li>How many students downloaded it, and how many answers have arrived. Click the lines below to see the names.</li></ol></figcaption></figure>
+  <div class="warn">If you change the <b>questions or the password</b> after students downloaded the exam, they must download it again (the editor tells you how many already have). Try a short <b>practice quiz</b> in offline mode before a major exam, so students know the steps.</div>
+
+  <h3>Offline exam: in the room</h3>
+  <ol>
+    <li>Students open the exam: the same link, or <b>My Exams → Exams downloaded on this device</b>. No internet is needed (use the same browser they downloaded with).</li>
+    <li>When everyone is ready, say the password. They type it (capital letters and dashes don't matter), tick the rules box and click <b>Start exam</b>.</li>
+  </ol>
+  <figure class="mid"><img src="/manual/img/25-offline-start.webp" alt="Starting an offline exam">
+    <figcaption><ol><li>The <b>exam password</b> you say in the room.</li><li><b>Start exam</b>. The usual rules apply: tab and window warnings, the camera, the timer.</li></ol></figcaption></figure>
+
+  <h3>Finishing: receipt code and QR code</h3>
+  <figure class="mid"><img src="/manual/img/26-offline-finished.webp" alt="Finished offline: receipt code and QR code">
+    <figcaption><ol><li>The <b>receipt code</b>. Write it on your exam-day sheet: it proves which answers the student handed in.</li><li>The <b>QR code</b> (after the student taps <i>Hand in with a QR code</i>). Long answers need a few codes; they change by themselves every few seconds.</li></ol></figcaption></figure>
+  <p>The answers reach you in one of three ways:</p>
+  <ul>
+    <li><b>By themselves</b>, as soon as the student's device is online (the page can be closed; opening the exam link again with internet sends them).</li>
+    <li><b>QR code</b>: you or a helper scan it with a phone (below). This works even if the student never gets internet.</li>
+    <li><b>Answer file</b>: the student clicks <i>Save a copy of my answers</i> and gives you the file. Upload it in <b>Results → Offline copies → Upload an answer file</b>.</li>
+  </ul>
+
+  <h3>Collect answers with your phone</h3>
+  <ol>
+    <li>On your phone, open Results → Offline copies → <b>Scan answers (QR)</b>. Or make a <b>helper link</b> for an assistant: it opens only the scanner for this exam, shows no scores, and stops working at the time you choose.</li>
+    <li>Tap <b>Start scanning</b> and point the camera at the student's QR code. A beep and <b>✓ Received</b> mean it is done. Then the next student.</li>
+    <li>No internet on the phone? Keep scanning. The answers are kept on the phone and sent by themselves later. Keep the page open until "waiting" is 0.</li>
+  </ol>
+  <figure class="narrow"><img src="/manual/img/28-helper-links.webp" alt="Helper links">
+    <figcaption><ol><li>The helper's name (optional).</li><li>How long the link works.</li><li><b>Make a link</b>.</li><li><b>Copy</b> it and send it to your helper. You can turn a link off any time.</li></ol></figcaption></figure>
+  <figure class="narrow"><img src="/manual/img/29-collect.webp" alt="The scanner on a phone"><figcaption>The scanner on a helper's phone, after scanning one student.</figcaption></figure>
+
+  <h3>After the exam: check</h3>
+  <p>Open Results. <b>Offline copies</b> shows who has not sent answers yet. Each offline attempt shows an <b>Offline</b> tag and its <b>receipt code</b>: compare it with your sheet. Some attempts show <b>⚠ Check</b>:</p>
+  <table>
+    <tr><th>Note</th><th>What it means</th></tr>
+    <tr><td>The receipt code does not match</td><td>The answers may have been changed after the student finished. Compare with the code on your sheet.</td></tr>
+    <tr><td>The device clock was changed / looked wrong</td><td>The student's clock was moved during the exam, or its date was wrong.</td></tr>
+    <tr><td>Finished … after the time was up</td><td>The answers were finished after the time limit.</td></tr>
+    <tr><td>Arrived … after the exam closed</td><td>The answers were sent later than your limit (see the first picture of this section).</td></tr>
+    <tr><td>Also has another attempt</td><td>The student also took the exam online.</td></tr>
+  </table>
+  <div class="tip"><b>For the site owner</b>: in <b>Admin → Site settings → Safety</b>, tick <b>Pause site updates</b> during exam week, so nothing about the site changes during your exams. Updates also wait by themselves while students are taking an exam. A <b>backup</b> of everything is made every night; download one now and then.
+    <figure class="mid" style="margin-top:8px"><img src="/manual/img/31-site-safety.webp" alt="Safety settings"><figcaption><ol><li>Pause site updates.</li><li>The latest backups, with <b>Download</b>.</li><li>Make a backup now (e.g. right after a major exam).</li></ol></figcaption></figure></div>
+
+  <h2 id="voided">13. Why was an exam voided?</h2>
   <p>Open <b>Results → Answers</b> for the student and read <b>Events</b>.</p>
   <table>
     <tr><th>Event</th><th>What happened</th><th>Common innocent causes</th></tr>
@@ -287,7 +362,7 @@
   </table>
   <div class="tip">If you believe the student, tick <b>Allow retake</b>. To make an exam more forgiving, set <b>Tab/window warnings</b> and <b>Camera warnings</b> to 1 or 2 in the exam's Advanced settings.</div>
 
-  <h2 id="help">13. Common problems</h2>
+  <h2 id="help">14. Common problems</h2>
   <table>
     <tr><th>Problem</th><th>What to do</th></tr>
     <tr><td>A student cannot see the exam</td><td>Check that they joined the right class (Classes → Students), that the exam is <b>published</b>, and that the class is not archived. Ask them to click <i>Refresh the list</i>.</td></tr>
@@ -298,6 +373,11 @@
     <tr><td>A picture does not show</td><td>Use Preview. For Google Drive pictures, share the file as "Anyone with the link", or upload the picture in the question editor.</td></tr>
     <tr><td>Students have different totals (e.g. 34/34, 32/36) although each got 30 questions</td><td>Your questions are worth different points, and each student got a different random mix. Use <b>Points</b> in the exam editor (all the same, or per type or topic), or pick per question type or topic. See <a href="#exam">section 5</a>.</td></tr>
     <tr><td>A correct calculation was marked wrong</td><td>The answer key needs a range, e.g. <code>122.5 ± 1%</code> instead of <code>122.5</code> (Question bank → Edit). For students who already submitted, open <b>Answers</b> and give the points.</td></tr>
+    <tr><td>A student's internet dropped during the exam</td><td>Nothing to do: the exam keeps going and the answers are sent when the internet is back (Results shows "Offline … min").</td></tr>
+    <tr><td>A student's device crashed or the exam was voided by a problem</td><td>Results → Answers → <b>Help this student</b> → <b>Let them continue</b> (and some extra minutes). See section 8.</td></tr>
+    <tr><td>A student cannot download the offline exam</td><td>They need internet for the download, an up-to-date Chrome, Edge or Safari, and not a private (incognito) window. They can click <b>Download again</b>.</td></tr>
+    <tr><td>Offline exam: "That password is not right"</td><td>Capital letters, spaces and dashes don't matter. If you changed the password after they downloaded, they must download again (with internet).</td></tr>
+    <tr><td>A student finished offline and never got internet</td><td>Scan their QR code (Results → Offline copies → Scan answers), or upload their answer file there.</td></tr>
     <tr><td>I changed the exam but students see the old one</td><td>Click <b>Save</b> in the editor. Students who already started keep the questions they started with.</td></tr>
   </table>
 </div>

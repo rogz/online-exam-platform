@@ -650,6 +650,10 @@
       ? '<b>📴 Offline exam in progress.</b> Click <i>Continue exam</i> to go on. Your answers so far are kept on this device.'
       : '<b>📴 Offline exam</b> (no internet needed). Enter the password your teacher gives you in the room, then start. When you finish, you get a <b>receipt code</b>; your answers are sent when this device is online again.';
     if (state.offline.st) $('startBtn').textContent = 'Continue exam';
+    const rs = state.rules.reconnectSeconds || 0, mr = state.rules.maxReconnects || 0;
+    $('ruleReload').innerHTML = '<b>This is an offline exam: no internet is needed.</b> Your answers are kept on this device. ' +
+      (rs > 0 ? 'If the page is closed or reloaded, open the same exam link again within <b>' + fmtDuration(rs) + '</b> (up to ' + mr + ' time' + (mr === 1 ? '' : 's') + '), or your exam is voided. '
+        : 'Closing or reloading the page voids your exam. ') + '<b>Do not close or reload this page on purpose.</b>';
     refreshStartButton();
   }
 

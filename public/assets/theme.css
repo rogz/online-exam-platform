@@ -236,6 +236,11 @@ table.exams .actgrid .span2 { grid-column: 1 / -1; }
 /* exam editor: offline exam */
 .offlinebox { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-top: 10px; background: var(--panel-alt); }
 .offlinebox .btn { margin-top: 6px; }
+.netchoice { display: grid; gap: 6px; }
+.netopt { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; font-weight: normal; margin: 0; }
+.netopt input { margin-top: 3px; }
+.netopt .hint { display: block; margin-top: 2px; }
+.netopt:has(input:checked) { border-color: #2f7bd1; background: #eef5fd; }
 
 /* Answers window: help one student */
 .helpbox { border: 1px solid #b9d3f0; background: #eef5fd; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }

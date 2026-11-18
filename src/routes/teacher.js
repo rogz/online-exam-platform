@@ -629,6 +629,7 @@ router.get('/exams/:id/results', async (req, res) => {
       outdated: pk.filter((p) => !p.synced_at && p.pw_fp !== fp).map((p) => ({ name: p.name, email: p.email })),
       waiting: pk.filter((p) => !p.synced_at).map((p) => ({ name: p.name, email: p.email, studentNo: p.student_no, downloadedAt: p.downloaded_at })),
       notDownloaded: enrolled.filter((u) => !got.has(u.id)).map((u) => ({ name: u.name, email: u.email, studentNo: u.student_no })),
+      students: enrolled.map((u) => { const p = pk.find((k) => k.student_id === u.id); return { name: u.name, studentNo: u.student_no, downloaded: !!p, sent: !!(p && p.synced_at) }; }),
     };
   }
   res.json({ ok: true, exam: { id: x.id, title: x.title, published: x.published, showScore: x.show_score }, attempts, notStarted, offline: offlineInfo });

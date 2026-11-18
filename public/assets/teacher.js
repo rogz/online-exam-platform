@@ -462,6 +462,7 @@
     const order = x ? x.question_ids.slice() : [];
     const topicPick = {}; (x ? x.topic_counts : []).forEach((t) => { topicPick[t.topic] = t.count; });
     const typePick = {}; ((x && x.options && x.options.typePicks) || []).forEach((t) => { typePick[t.type] = t.count; });
+    const net = o.offlineMode ? 'OFFLINE' : o.keepGoingOffline === false ? 'STRICT' : 'ONLINE';
     const pr0 = (x && x.options && x.options.pointsRule) || {};
     const pr = { mode: pr0.mode || 'OFF', all: pr0.all || 1, byType: Object.assign({}, pr0.byType), byTopic: Object.assign({}, pr0.byTopic) };
     const TYPE_LONG = { MC: 'Multiple choice', TF: 'True/false', FIB: 'Fill in the blank', ESSAY: 'Essay' };
@@ -498,6 +499,22 @@
           <select id="eMode">${opt('ALL', v('display_mode', 'ALL'), 'All on one page (scroll)')}${opt('ONE', v('display_mode', 'ALL'), 'One question at a time')}</select>
           <label class="check"><input type="checkbox" id="eBack"${v('allow_back', true) ? ' checked' : ''}> Allow going back to previous questions</label>
           <div class="field"><label for="eQsec">Time limit per question (seconds, 0 = none)</label><input type="number" id="eQsec" min="0" value="${v('question_seconds', 0)}"></div></fieldset>
+        <fieldset><legend>Internet where students take the exam</legend>
+          <div class="netchoice">
+            <label class="netopt"><input type="radio" name="eNet" value="ONLINE"${net === 'ONLINE' ? ' checked' : ''}> <span><b>Good or unstable internet</b> <span class="muted">(recommended)</span>
+              <span class="hint">Students take it online. If the internet drops, the exam keeps going and the answers are sent when it is back.</span></span></label>
+            <label class="netopt"><input type="radio" name="eNet" value="OFFLINE"${net === 'OFFLINE' ? ' checked' : ''}> <span><b>No internet, or very weak</b>: offline exam
+              <span class="hint">Students download it before, with internet. In the room you give the password. They hand in with a receipt code: online later, or by QR code.</span></span></label>
+            <label class="netopt"><input type="radio" name="eNet" value="STRICT"${net === 'STRICT' ? ' checked' : ''}> <span><b>Strict</b>
+              <span class="hint">Void the exam if a student is offline longer than the reconnect window (Advanced settings).</span></span></label>
+          </div>
+          <div id="offlineMore" class="offlinebox"${net === 'OFFLINE' ? '' : ' hidden'}>
+            <div class="small">The download is locked with the <b>exam password</b> (under When). Give it in the room when the exam starts.</div>
+            <button type="button" class="btn small" id="genPass">🔑 Make a strong password</button> <span class="small" id="passShow"></span>
+            ${x && x.offline_downloads ? `<div class="note warn small" style="margin-top:6px">${x.offline_downloads} student${x.offline_downloads === 1 ? ' has' : 's have'} already downloaded this exam. Changes to the questions or the password do not reach them unless they download it again.</div>` : ''}</div>
+          <div class="row" id="offlineMinRow" style="gap:6px;align-items:center;margin-top:8px"${net === 'STRICT' ? ' hidden' : ''}><span class="small">Accept answers finished in time but sent up to</span>
+            <input type="number" id="oOfflineMin" min="0" max="1440" value="${o.offlineSubmitMinutes === undefined ? 60 : o.offlineSubmitMinutes}" style="width:80px" aria-label="Minutes after the deadline">
+            <span class="small">minutes after the deadline</span></div></fieldset>
         <fieldset><legend>Security</legend>
           <div class="field"><label for="eDev">Allowed devices</label><select id="eDev">${opt('COMPUTER', v('allowed_devices', 'COMPUTER'), 'Computers only')}${opt('TABLET', v('allowed_devices', 'COMPUTER'), 'Computers and tablets')}${opt('ANY', v('allowed_devices', 'COMPUTER'), 'Any device, including phones')}</select></div>
           <div class="field"><label for="eFace">Camera / face check</label><select id="eFace">${opt('OFF', v('face_mode', 'OFF'), 'Not required')}${opt('START', v('face_mode', 'OFF'), 'Check face at the start only')}${opt('ALWAYS', v('face_mode', 'OFF'), 'Monitor during the whole exam (warnings, then void)')}</select></div>
@@ -505,17 +522,6 @@
           <div class="row" style="gap:6px;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="oRandSnap"${o.randomSnapshots ? ' checked' : ''}> Take random snapshots:</label>
             <input type="number" id="oSnapHour" min="1" max="30" value="${o.snapshotsPerHour || 6}" style="width:70px" aria-label="Random snapshots per hour"> <span>per hour</span></div>
           <div class="hint" id="randSnapHint">Small pictures at random times, as an extra check (camera exams monitored throughout). Students are told on the rules screen. Deleted when you archive the exam or class, or 30 days after the exam closes.</div>
-          <div class="offlinebox"><label class="check" style="margin:0"><input type="checkbox" id="oOfflineMode"${o.offlineMode ? ' checked' : ''}> <b>Offline exam</b>: students download it before (with internet) and take it without internet</label>
-            <div id="offlineMore"${o.offlineMode ? '' : ' hidden'}>
-              <div class="hint">The download is locked with the <b>exam password</b> (above, under When). Give the password in the room when the exam starts. Students hand in by going online afterwards and get a receipt code when they finish.</div>
-              <button type="button" class="btn small" id="genPass">🔑 Make a strong password</button> <span class="small" id="passShow"></span>
-              ${x && x.offline_downloads ? `<div class="note warn small" style="margin-top:6px">${x.offline_downloads} student${x.offline_downloads === 1 ? ' has' : 's have'} already downloaded this exam. Changes to the questions or the password do not reach them unless they download it again.</div>` : ''}</div></div>
-          <div class="field" style="margin-top:10px"><label for="oOffline">If the internet drops during the exam</label>
-            <select id="oOffline">${opt('KEEP', o.keepGoingOffline === false ? 'VOID' : 'KEEP', 'Keep going: answers are sent when the internet is back (recommended)')}${opt('VOID', o.keepGoingOffline === false ? 'VOID' : 'KEEP', 'Void the exam after the reconnect window')}</select>
-            <div class="row" id="offlineMinRow" style="gap:6px;align-items:center;margin-top:6px"><span class="small">Accept answers finished in time but sent up to</span>
-              <input type="number" id="oOfflineMin" min="0" max="1440" value="${o.offlineSubmitMinutes === undefined ? 60 : o.offlineSubmitMinutes}" style="width:80px" aria-label="Minutes after the deadline">
-              <span class="small">minutes after the deadline</span></div>
-            <div class="hint">The exam page keeps checking tabs, windows and the camera while offline. Closing or reloading the page still follows the reconnect rules below.</div></div>
           <details><summary class="small" style="cursor:pointer;margin:6px 0">Advanced settings</summary>
             <div class="grid2" style="margin-top:8px">
               <div class="field"><label for="oFocusWarn">Tab/window warnings</label><input type="number" id="oFocusWarn" min="0" max="10" value="${o.focusWarnings || 0}"><div class="hint">Warnings for switching tabs or apps before the exam is voided. 0 = void at once</div></div>
@@ -627,20 +633,22 @@
       if (!one) $('#eBack').checked = true; if (perQ) $('#eBack').checked = false;
       $('#ePrev').disabled = $('#eFace').value !== 'ALWAYS';
       $('#oRandSnap').disabled = $('#eFace').value !== 'ALWAYS';
-      $('#offlineMinRow').hidden = $('#oOffline').value !== 'KEEP';
+      const netNow = ($('input[name=eNet]:checked') || {}).value || 'ONLINE';
+      $('#offlineMinRow').hidden = netNow === 'STRICT';
+      $('#offlineMore').hidden = netNow !== 'OFFLINE';
       $('#oSnapHour').disabled = $('#eFace').value !== 'ALWAYS' || !$('#oRandSnap').checked;
     }
     ['pSearch', 'pType', 'pTopic', 'pFolder'].forEach((i) => $('#' + i).addEventListener('input', drawPicker));
     $('#pAll').onchange = (e) => { visible().filter((q) => !q.problems.length).forEach((q) => toggle(q.id, e.target.checked)); drawPicker(); };
-    ['eMode', 'eQsec', 'eFace', 'oRandSnap', 'oOffline'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
+    ['eMode', 'eQsec', 'eFace', 'oRandSnap'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
     $('#ePick').addEventListener('input', drawSum);
     $('#ePtsMode').addEventListener('input', (e) => { pr.mode = e.target.value; drawPts(); drawSum(); });
     const showPass = () => { const p = $('#ePass').value.trim(); $('#passShow').innerHTML = p ? 'Password: <b style="letter-spacing:1px">' + esc(p) + '</b>' + (p.replace(/[\s-]/g, '').length < 8 ? ' <span style="color:var(--bad)">(too short for offline: 8+ letters or numbers)</span>' : '') : '<span style="color:var(--bad)">No password yet</span>'; };
-    $('#oOfflineMode').addEventListener('change', () => {
-      $('#offlineMore').hidden = !$('#oOfflineMode').checked;
-      if ($('#oOfflineMode').checked && $('#ePass').value.replace(/[\s-]/g, '').length < 8) $('#genPass').click();
+    $$('input[name=eNet]').forEach((r) => r.addEventListener('change', () => {
+      syncMode();
+      if (r.checked && r.value === 'OFFLINE' && $('#ePass').value.replace(/[\s-]/g, '').length < 8) $('#genPass').click();
       showPass();
-    });
+    }));
     $('#ePass').addEventListener('input', showPass);
     $('#genPass').onclick = async () => { $('#ePass').value = (await api('/teacher/new-offline-password')).password; showPass(); };
     showPass();
@@ -658,7 +666,8 @@
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
         typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
         randomSnapshots: $('#oRandSnap').checked && $('#eFace').value === 'ALWAYS', snapshotsPerHour: $('#oSnapHour').value,
-        keepGoingOffline: $('#oOffline').value === 'KEEP', offlineSubmitMinutes: $('#oOfflineMin').value, offlineMode: $('#oOfflineMode').checked,
+        keepGoingOffline: ($('input[name=eNet]:checked') || {}).value !== 'STRICT', offlineSubmitMinutes: $('#oOfflineMin').value,
+        offlineMode: ($('input[name=eNet]:checked') || {}).value === 'OFFLINE',
         pointsRule: { mode: pr.mode, all: pr.all, byType: pr.byType, byTopic: pr.byTopic } },
     });
     async function save() {
@@ -748,6 +757,7 @@
     });
     $$('[data-answers]').forEach((b) => b.onclick = () => attemptDialog(id, b.dataset.answers));
     if ($('#helperLinks')) $('#helperLinks').onclick = () => helperLinksDialog(id);
+    if ($('#examDaySheet')) $('#examDaySheet').onclick = () => examDaySheet(id, r.offline);
     const off = $('[data-offfile]');
     if (off) off.onchange = async () => {
       const f = off.files[0]; if (!f) return;
@@ -799,7 +809,8 @@
     const names = (list) => list.map((s) => esc(s.name) + (s.studentNo ? ' <span class="muted">(' + esc(s.studentNo) + ')</span>' : '')).join(', ');
     return `<div class="panel" style="margin-bottom:16px"><div class="hd"><h3>📥 Offline copies</h3>
       <div class="toolbar"><a class="btn small primary" href="/collect?exam=${examId}" target="_blank" rel="noopener" title="Open the scanner on your phone: scan the QR code on each student's screen">📷 Scan answers (QR)</a>
-        <button type="button" class="btn small" id="helperLinks" title="A link for student assistants: they can only scan answers for this exam">👥 Helper links</button></div></div><div class="bd">
+        <button type="button" class="btn small" id="helperLinks" title="A link for student assistants: they can only scan answers for this exam">👥 Helper links</button>
+        <button type="button" class="btn small" id="examDaySheet" title="Print: the password, the steps for the room, and an attendance sheet with a column for receipt codes">🖨 Exam-day sheet</button></div></div><div class="bd">
       <div class="statgrid" style="margin-bottom:8px"><div class="stat"><b>${o.downloaded} / ${o.enrolled}</b><span>Downloaded</span></div>
         <div class="stat"><b>${o.sent}</b><span>Answers received</span></div><div class="stat"><b>${o.waiting.length}</b><span>Downloaded, not sent yet</span></div></div>
       ${o.notDownloaded.length ? `<details><summary class="small" style="cursor:pointer"><b>Not downloaded yet (${o.notDownloaded.length})</b>: remind them to open the exam link with internet and click <i>Download for offline</i></summary><p class="small">${names(o.notDownloaded)}</p></details>` : '<p class="small" style="color:var(--ok)">✓ Every student in the class has downloaded it.</p>'}
@@ -808,6 +819,41 @@
       <div class="row" style="gap:6px;align-items:center;margin-top:8px"><label class="btn small" style="margin:0">Upload an answer file<input type="file" accept=".json,application/json" data-offfile hidden></label>
         <span class="small muted">for a student who finished offline and cannot get internet (their "Save a copy of my answers" file)</span></div>
     </div></div>`;
+  }
+
+  /** A printable page for the exam room: password, steps, and the attendance sheet with receipt codes. */
+  async function examDaySheet(examId, off) {
+    const w = window.open('', '_blank');
+    if (!w) { toast('Allow pop-ups for this site to open the sheet.', true); return; }
+    const x = (await api('/teacher/exams/' + examId)).exam;
+    const cls = (await api('/teacher/classes')).classes.find((c) => c.id === x.class_id) || {};
+    const when = (x.start_at ? App.fmtDate(x.start_at) : '') + (x.end_at ? ' – ' + App.fmtDate(x.end_at) : '');
+    const rows = (off.students || []).map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.name)}</td><td>${esc(s.studentNo || '')}</td><td class="c">${s.downloaded ? '✓' : '—'}</td><td></td><td></td></tr>`).join('');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Exam-day sheet: ${esc(x.title)}</title><style>
+      body { font: 13px/1.45 Arial, sans-serif; color: #111; margin: 18mm 14mm; } h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 16px 0 6px; }
+      .pw { border: 2px dashed #23558c; padding: 8px 12px; display: inline-block; margin: 8px 0; } .pw b { font-size: 26px; letter-spacing: 4px; color: #23558c; }
+      ol { margin: 4px 0 0 18px; padding: 0; } li { margin: 3px 0; } table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+      th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; } th { background: #eee; } td.c { text-align: center; } td:nth-child(5) { width: 24%; } td:nth-child(6) { width: 18%; }
+      .muted { color: #555; } @media print { .noprint { display: none; } h2 { break-after: avoid; } tr { break-inside: avoid; } }
+    </style></head><body>
+      <p class="noprint"><button onclick="print()">🖨 Print</button></p>
+      <h1>${esc(x.title)}</h1><div class="muted">${esc(cls.name || '')}${cls.section ? ' — ' + esc(cls.section) : ''} · ${esc(when)} · ${x.time_limit_min ? x.time_limit_min + ' minutes' : 'no time limit'}</div>
+      <div class="pw">Password (say it only when everyone is ready): <b>${esc(x.password || '(none set)')}</b></div>
+      <div class="muted">Downloaded so far: ${off.downloaded} of ${off.enrolled} students.${off.notDownloaded.length ? ' Not yet: ' + off.notDownloaded.map((s) => esc(s.name)).join(', ') + '.' : ''}</div>
+      <h2>In the room</h2>
+      <ol>
+        <li>Students open the exam on the device they downloaded it on (same browser; the exam link, or <b>My Exams → Exams downloaded on this device</b>). No internet is needed.</li>
+        <li>When everyone is seated and ready, say the password. They type it, tick the rules box and click <b>Start exam</b>.</li>
+        <li>When a student finishes, the screen shows a <b>receipt code</b> (like 4F7-K2A). Write it in the table below.</li>
+        <li>Hand-in: the answers are sent by themselves when the device is online. Without internet, scan the student's <b>QR code</b>: Results → Offline copies → <b>Scan answers</b> (or a helper link).</li>
+        <li>If a device fails: let the student continue on paper or a spare device; afterwards use <b>Help this student</b> in Results (more time, continue, or upload their answer file).</li>
+        <li>After the exam: open Results. Check <b>Offline copies</b> (who has not sent yet) and the <b>⚠ Check</b> notes. Compare receipt codes with this sheet.</li>
+      </ol>
+      <h2>Attendance and receipt codes</h2>
+      <table><thead><tr><th>#</th><th>Student</th><th>Student no.</th><th>Downloaded</th><th>Receipt code</th><th>Signature</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No students in this class yet.</td></tr>'}</tbody></table>
+      <p class="muted" style="margin-top:10px">Printed ${esc(new Date().toLocaleString())} from Exam Wizard. Keep this sheet: the receipt codes prove which answers each student handed in.</p>
+    </body></html>`);
+    w.document.close();
   }
 
   /** Collector links: helpers scan the answer QR codes for this exam only, without an account, until the chosen time. */

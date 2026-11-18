@@ -6,6 +6,32 @@ set -euo pipefail
 BASE="$HOME/exam-wizard"
 mkdir -p "$BASE"
 cd "$BASE"
+
+# ── Not during an exam: wait while students are taking one (up to 80 minutes); stop if the owner paused updates ──
+if [ -f /etc/systemd/system/exam-wizard.service ] && [ -f .env ]; then
+  CHECK_PORT=$(grep '^PORT=' .env | cut -d= -f2 || true)
+  for i in $(seq 1 40); do
+    R=$(curl -fsS --max-time 10 "http://127.0.0.1:${CHECK_PORT:-3100}/deploy-check" 2>/dev/null || true)
+    if echo "$R" | grep -q '"paused":true'; then
+      echo "Updates are paused (Admin → Site settings → Pause site updates). Nothing was changed."
+      echo "Turn the switch off, then re-run this deploy in GitHub (Actions → the run → Re-run jobs)."
+      rm -f /tmp/exam-wizard-app.tgz
+      exit 1
+    fi
+    if echo "$R" | grep -q '"busy":true'; then
+      echo "Students are taking an exam right now; waiting 2 minutes before updating ($i of 40)…"
+      sleep 120
+      continue
+    fi
+    break
+  done
+  if echo "${R:-}" | grep -q '"busy":true'; then
+    echo "An exam was still running after 80 minutes. Nothing was changed; re-run this deploy later."
+    rm -f /tmp/exam-wizard-app.tgz
+    exit 1
+  fi
+fi
+
 rm -rf app.new && mkdir app.new
 tar xzf /tmp/exam-wizard-app.tgz -C app.new && rm -f /tmp/exam-wizard-app.tgz
 rm -rf app.old

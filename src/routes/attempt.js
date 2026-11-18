@@ -99,6 +99,34 @@ function resultFor(a, exam) {
   return { submitted: true, showScore: true, score: Number(a.score) || 0, maxScore: Number(a.max_score) || 0, percent: Number(a.percent) || 0, pendingEssays: Number(a.pending_essays) || 0 };
 }
 
+/**
+ * Grades the answers and marks the attempt submitted (used by the student's submit, and by the teacher's
+ * "submit the saved answers" / "upload an answer file" for a student whose device failed).
+ */
+async function gradeAttempt(q, a, exam, rawAnswers, o) {
+  const questions = core.attemptQuestions(exam, await loadPool(q, exam), a.id);
+  const answers = Object.assign({}, rawAnswers && typeof rawAnswers === 'object' && !Array.isArray(rawAnswers) ? rawAnswers : {});
+  if (!exam.allowBack) {
+    (await q('SELECT question_id, answer FROM locked_answers WHERE attempt_id = $1', [a.id])).rows.forEach((r) => { answers[r.question_id] = r.answer; });
+  }
+  let score = 0, max = 0, pending = 0;
+  for (let i = 0; i < questions.length; i++) {
+    const qq = questions[i];
+    const g = core.gradeQuestion(qq, answers[qq.id]);
+    max += qq.points;
+    if (g.pending) pending++; else score += g.points;
+    await q(`INSERT INTO responses (attempt_id, question_id, position, type, question_text, student_answer, correct_answer, is_correct, points_earned, max_points, note)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (attempt_id, question_id) DO NOTHING`,
+      [a.id, qq.id, i, qq.type, qq.text, g.studentText, g.correctText, g.pending ? null : g.correct, g.pending ? null : g.points, qq.points, g.note || '']);
+  }
+  const percent = max ? Math.round(score / max * 10000) / 100 : 0;
+  await q(`UPDATE attempts SET status = $1, submitted_at = $2, score = $3, max_score = $4, percent = $5, pending_essays = $6, late = $7,
+             sent_late = $9, finished_at = $10, void_reason = NULL WHERE id = $8`,
+    [STATUS.SUBMITTED, o.now, score, max, percent, pending, !!o.late, a.id, !!o.sentLate, o.finishedAt || o.now]);
+  Object.assign(a, { status: STATUS.SUBMITTED, score, max_score: max, percent, pending_essays: pending });
+  return { score, max, percent, pending, answered: Object.keys(answers).length };
+}
+
 // ───────── actions ─────────
 
 const actions = {
@@ -148,7 +176,10 @@ const actions = {
         if (last.status === STATUS.IN_PROGRESS) {
           if (!last.deadline || now <= new Date(last.deadline)) {
             // Reconnecting (page reloaded, browser crashed, connection lost)
-            if (opts.reconnectSeconds > 0) {
+            if (last.resume_until && now <= new Date(last.resume_until)) {
+              await logEvent(q, last.id, 'RECONNECTED', 'Continued after the teacher allowed it');
+              await q('UPDATE attempts SET resume_until = NULL, disconnected_at = NULL, last_seen = now() WHERE id = $1', [last.id]);
+            } else if (opts.reconnectSeconds > 0) {
               const ref = last.disconnected_at || last.last_seen || last.started_at;
               const gap = now - new Date(ref);
               const allowed = opts.reconnectSeconds * 1000 + (last.disconnected_at ? 0 : PING_SLACK_MS);
@@ -232,6 +263,16 @@ const actions = {
     return out.result;
   },
 
+  /** An unexpected error on the exam page (a bug): logged for the teacher. At most 5 per attempt. */
+  async clientError(req) {
+    if (!isUuid(req.body.attemptId)) return { logged: false };
+    const a = await db.one('SELECT id, page_errors FROM attempts WHERE id = $1 AND student_id = $2', [req.body.attemptId, req.user.id]);
+    if (!a || a.page_errors >= 5) return { logged: false };
+    await db.query('UPDATE attempts SET page_errors = page_errors + 1 WHERE id = $1', [a.id]);
+    await logEvent((sql, p) => db.query(sql, p), a.id, 'PAGE_ERROR', str(req.body.message, 300) + (req.body.where ? ' @ ' + str(req.body.where, 150) : ''));
+    return { logged: true };
+  },
+
   async ping(req) {
     return db.tx(async (t) => {
       const a = await lockAttempt(t.query, req.body.attemptId, req.user.id);
@@ -244,7 +285,7 @@ const actions = {
       } else {
         await t.query('UPDATE attempts SET last_seen = now(), disconnected_at = NULL WHERE id = $1', [a.id]);
       }
-      return { status: a.status, saved: !!ans };
+      return { status: a.status, saved: !!ans, deadlineMs: a.deadline ? new Date(a.deadline).getTime() : null };
     });
   },
 
@@ -369,26 +410,7 @@ const actions = {
         await logEvent(q, a.id, 'SENT_LATE', 'Finished ' + new Date(finishedMs).toISOString() + ' while offline; the answers arrived ' + fmtGap(now.getTime() - finishedMs) + ' later' +
           (late ? ' (too late: marked Late).' : '.'));
       }
-      const questions = core.attemptQuestions(exam, await loadPool(q, exam), a.id);
-      const answers = Object.assign({}, req.body.answers && typeof req.body.answers === 'object' ? req.body.answers : {});
-      if (!exam.allowBack) {
-        (await q('SELECT question_id, answer FROM locked_answers WHERE attempt_id = $1', [a.id])).rows.forEach((r) => { answers[r.question_id] = r.answer; });
-      }
-      let score = 0, max = 0, pending = 0;
-      for (let i = 0; i < questions.length; i++) {
-        const qq = questions[i];
-        const g = core.gradeQuestion(qq, answers[qq.id]);
-        max += qq.points;
-        if (g.pending) pending++; else score += g.points;
-        await q(`INSERT INTO responses (attempt_id, question_id, position, type, question_text, student_answer, correct_answer, is_correct, points_earned, max_points, note)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (attempt_id, question_id) DO NOTHING`,
-          [a.id, qq.id, i, qq.type, qq.text, g.studentText, g.correctText, g.pending ? null : g.correct, g.pending ? null : g.points, qq.points, g.note || '']);
-      }
-      const percent = max ? Math.round(score / max * 10000) / 100 : 0;
-      await q(`UPDATE attempts SET status = $1, submitted_at = $2, score = $3, max_score = $4, percent = $5, pending_essays = $6, late = $7,
-                 sent_late = $9, finished_at = $10 WHERE id = $8`,
-        [STATUS.SUBMITTED, now, score, max, percent, pending, late, a.id, sentLate, sentLate ? new Date(finishedMs) : now]);
-      Object.assign(a, { status: STATUS.SUBMITTED, score, max_score: max, percent, pending_essays: pending });
+      await gradeAttempt(q, a, exam, req.body.answers, { now, late, sentLate, finishedAt: sentLate ? new Date(finishedMs) : now });
       return { result: resultFor(a, exam) };
     });
     if (out.error) throw out.error;
@@ -421,3 +443,6 @@ router.get('/:attemptId/image/:questionId', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.gradeAttempt = gradeAttempt;
+module.exports.examOfAttempt = examOfAttempt;
+module.exports.logEvent = logEvent;

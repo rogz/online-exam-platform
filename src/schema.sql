@@ -255,6 +255,10 @@ ALTER TABLE attempts ADD COLUMN IF NOT EXISTS draft_answers jsonb;
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS draft_at timestamptz;
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS sent_late boolean NOT NULL DEFAULT false;
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS finished_at timestamptz;
+-- The teacher let the student continue (after a crash or a void): until then, reopening the exam is always allowed.
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS resume_until timestamptz;
+-- Unexpected errors on the student's exam page (reported by the page, shown to the teacher).
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS page_errors integer NOT NULL DEFAULT 0;
 
 -- Tab/window switch warnings used in this attempt (the exam's focusWarnings option sets how many are allowed).
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS focus_warnings integer NOT NULL DEFAULT 0;

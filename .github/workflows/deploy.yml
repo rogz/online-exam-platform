@@ -32,7 +32,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120   # the server waits (up to 80 min) while students are taking an exam
     steps:
       - name: Check the server settings
         id: cfg

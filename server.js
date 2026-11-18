@@ -25,6 +25,18 @@ function createApp() {
 
   app.get('/healthz', (req, res) => res.json({ ok: true }));
 
+  // Asked by the deploy script on the server itself before an update: wait while students are taking an exam,
+  // and don't update while the owner has paused updates (Admin → Site settings). Not reachable from outside.
+  app.get('/deploy-check', async (req, res, next) => {
+    try {
+      const ip = req.socket.remoteAddress || '';
+      if (req.get('X-Forwarded-For') || !/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip)) return res.status(404).json({ ok: false });
+      const s = await require('./src/settings').getSettings();
+      const active = (await db.one(`SELECT count(*)::int AS n FROM attempts WHERE status = 'IN_PROGRESS' AND last_seen > now() - interval '10 minutes'`)).n;
+      res.json({ ok: true, paused: !!s.updatesPaused, busy: active > 0, activeAttempts: active });
+    } catch (e) { next(e); }
+  });
+
   // API
   const api = express.Router();
   api.use(auth.loadUser);
@@ -105,6 +117,7 @@ async function main() {
   const port = Number(process.env.PORT || 3000);
   const host = process.env.HOST || undefined; // e.g. 127.0.0.1 behind nginx: not reachable from outside
   createApp().listen(port, host, () => console.log(`Online Exam running on http://${host || 'localhost'}:${port} (database: ${db.kind})`));
+  require('./src/backup').startNightly();
 }
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });

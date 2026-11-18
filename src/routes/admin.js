@@ -263,6 +263,21 @@ router.post('/requests/:id', async (req, res) => {
 // ───────── Settings ─────────
 
 router.get('/settings', async (req, res) => res.json({ ok: true, settings: await getSettings() }));
+
+// ───────── Backups (site owner only: a backup holds everything, including password hashes) ─────────
+const backup = require('../backup');
+const ownerOnly = (req) => { if (req.user.email.toLowerCase() !== ownerEmail()) throw fail(403, 'OWNER_ONLY', 'Only the site owner can manage backups.'); };
+router.get('/backups', async (req, res) => {
+  res.json({ ok: true, owner: req.user.email.toLowerCase() === ownerEmail(), nightly: !!process.env.DATABASE_URL && process.env.BACKUPS !== 'off',
+    backups: req.user.email.toLowerCase() === ownerEmail() ? await backup.list() : [] });
+});
+router.post('/backups', async (req, res) => { ownerOnly(req); res.json({ ok: true, backup: await backup.backupNow() }); });
+router.get('/backups/:name', async (req, res) => {
+  ownerOnly(req);
+  const f = backup.fileOf(req.params.name);
+  if (!f || !require('fs').existsSync(f)) throw fail(404, 'NOT_FOUND', 'Backup not found.');
+  res.download(f);
+});
 router.post('/settings', async (req, res) => res.json({ ok: true, settings: await saveSettings(req.body || {}) }));
 
 module.exports = router;

@@ -4,6 +4,7 @@ process.env.ADMIN_EMAIL = 'admin@test.local';
 process.env.ADMIN_PASSWORD = 'admin-pass-1';
 const os = require('os'), path = require('path'), fs = require('fs');
 process.env.SNAPSHOT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'snapshots-')); // camera snapshots go here during the test
+process.env.BACKUP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'backups-'));
 const { chromium } = require('playwright');
 const db = require('../src/db');
 const { createApp, ensureAdmin } = require('../server');
@@ -582,6 +583,10 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await student.click('#submitBtn'); await student.click('#confirmYes');
   await student.waitForSelector('#screen-pending:not([hidden])', { timeout: 20000 });
   await shot(student, '19-offline-finished');
+  const [dl] = await Promise.all([student.waitForEvent('download'), student.click('#pendingFile')]);
+  const fileJson = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
+  ok(fileJson.kind === 'exam-wizard-answers' && Object.keys(fileJson.answers).length === 1 && /^answers-.+\.json$/.test(dl.suggestedFilename()),
+    'offline, the student can save a copy of the answers as a file (' + dl.suggestedFilename() + ')');
   ok(offBanner.includes('No internet') && offSave.includes('Saved on this device'), 'offline: "No internet… keep answering" banner and "Saved on this device"');
   const stillOpen = await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [netExam]);
   ok(stillOpen.status === 'IN_PROGRESS', 'finishing offline shows "Your exam is finished… keep this page open" and nothing is voided');
@@ -763,6 +768,100 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(reuse === 'BAD_LINK', 'a reset link works only once');
   const testMail = await admin.evaluate(async () => (await (await fetch('/api/admin/test-email', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })).json()));
   ok(testMail.ok && outbox[outbox.length - 1].to === 'admin@test.local', 'admin can send a test email');
+
+  // ── Safeguards: backups, pausing updates, helping one student ──
+  const backupLib = require('../src/backup');
+  const bk = await backupLib.backupNow();
+  const { PGlite } = require('@electric-sql/pglite');
+  const copy = new PGlite();
+  const schemaSql = fs.readFileSync(path.join(__dirname, '..', 'src', 'schema.sql'), 'utf8').split(/;\s*\n/).map((x) => x.replace(/^\s*--.*$/gm, '').trim()).filter(Boolean);
+  for (const st of schemaSql) await copy.query(st);
+  const rest = await backupLib.restore(path.join(process.env.BACKUP_DIR, bk.file), (sql, p) => copy.query(sql, p));
+  const countsHere = await dbOne(`SELECT (SELECT count(*) FROM users)::int AS u, (SELECT count(*) FROM responses)::int AS r, (SELECT count(*) FROM question_folders)::int AS f`);
+  const countsCopy = (await copy.query(`SELECT (SELECT count(*) FROM users)::int AS u, (SELECT count(*) FROM responses)::int AS r, (SELECT count(*) FROM question_folders)::int AS f`)).rows[0];
+  ok(bk.rows > 50 && rest.failedCount === 0 && countsCopy.u === countsHere.u && countsCopy.r === countsHere.r && countsCopy.f === countsHere.f,
+    'a backup restores into an empty database with every row (' + bk.rows + ' rows, ' + Math.round(bk.bytes / 1024) + ' KB)');
+  await copy.close();
+  const check1 = await (await fetch(BASE + '/deploy-check')).json();
+  const outside = await fetch(BASE + '/deploy-check', { headers: { 'X-Forwarded-For': '1.2.3.4' } });
+  await admin.goto(BASE + '/admin#settings'); await admin.waitForSelector('#sPause');
+  await admin.waitForSelector('#sBackupNow');
+  ok((await admin.textContent('#sBackups')).includes('Download'), 'Site settings list the backups with Download buttons');
+  await admin.check('#sPause'); await admin.click('#sSave'); await toastSays(admin, 'Settings saved');
+  const check2 = await (await fetch(BASE + '/deploy-check')).json();
+  ok(check1.ok && check1.paused === false && outside.status === 404 && check2.paused === true, 'the deploy check sees "Pause site updates" and is not reachable from outside');
+  await admin.uncheck('#sPause'); await admin.click('#sSave'); await toastSays(admin, 'Settings saved');
+
+  // a student's device "crashes": answers saved on the server are submitted by the teacher
+  const helpExam = await mkExam('Help quiz', {});
+  const helpSt = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId, pageToken: '11111111-2222-4333-8444-555555555555', env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    await post({ action: 'ping', attemptId: st.attemptId, pageToken: '11111111-2222-4333-8444-555555555555', answers: { [st.questions[0].id]: 'TRUE' } });
+    await post({ action: 'clientError', attemptId: st.attemptId, message: 'TypeError: x is undefined', where: 'app.js:10' });
+    return { attemptId: st.attemptId, deadlineMs: st.deadlineMs };
+  }, helpExam);
+  await teacher.goto(BASE + '/teacher#results/' + helpExam); await teacher.waitForSelector('[data-answers]');
+  ok((await teacher.textContent('#aRows')).includes('Page problem (1)'), 'a problem on the student\'s exam page shows in Results');
+  await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-help="continue"]');
+  await teacher.fill('#helpMin', '10'); await teacher.click('.dialog [data-help="continue"]');
+  await toastSays(teacher, 'Extra time added');
+  const afterTime = await dbOne('SELECT deadline FROM attempts WHERE id = $1', [helpSt.attemptId]);
+  ok(new Date(afterTime.deadline).getTime() - helpSt.deadlineMs >= 9.9 * 60000, 'teacher gives 10 minutes extra time');
+  await teacher.waitForSelector('[data-answers]'); await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-help="draft"]');
+  ok((await teacher.textContent('.dialog .helpbox')).includes('1 answer saved on the server'), 'the Answers window shows the answers saved on the server');
+  await teacher.click('.dialog [data-help="draft"]'); await teacher.locator('.overlay').last().locator('.ft .btn.primary').click();
+  ok(await toastSays(teacher, 'Submitted. Score: 1 / 1'), 'teacher submits the saved answers for the student: 1 / 1');
+  const helpRow = await dbOne(`SELECT a.status, (SELECT count(*) FROM violations v WHERE v.attempt_id = a.id AND v.event = 'TEACHER_SUBMITTED')::int AS n FROM attempts a WHERE a.id = $1`, [helpSt.attemptId]);
+  ok(helpRow.status === 'SUBMITTED' && helpRow.n === 1, 'it is recorded in the student\'s events');
+
+  // a voided student is allowed to continue with the same questions and saved answers
+  const contExam = await mkExam('Continue quiz', {});
+  const cont1 = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    await post({ action: 'ping', attemptId: st.attemptId, answers: { [st.questions[0].id]: 'FALSE' } });
+    await post({ action: 'violation', attemptId: st.attemptId, event: 'TAB_SWITCH', detail: 'test', final: true });
+    const again = await post({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    return { attemptId: st.attemptId, blocked: again.code };
+  }, contExam);
+  await teacher.goto(BASE + '/teacher#results/' + contExam); await teacher.waitForSelector('[data-answers]');
+  await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-help="continue"]');
+  ok((await teacher.textContent('.dialog [data-help="continue"]')).includes('Let them continue'), 'a voided attempt offers "Let them continue"');
+  await teacher.click('.dialog [data-help="continue"]'); await toastSays(teacher, 'can open the exam link again');
+  const cont2 = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    return { attemptId: st.attemptId, resumed: st.resumed, draft: st.draftAnswers };
+  }, contExam);
+  ok(cont1.blocked === 'VOIDED' && cont2.attemptId === cont1.attemptId && cont2.resumed && cont2.draft && Object.values(cont2.draft)[0] === 'FALSE',
+    'after "Let them continue" the student reopens the same attempt with the saved answers');
+
+  // an answer file from a student whose device had no internet
+  const fileExam = await mkExam('File quiz', {});
+  const fileSt = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    return { attemptId: st.attemptId, qid: st.questions[0].id };
+  }, fileExam);
+  await teacher.goto(BASE + '/teacher#results/' + fileExam); await teacher.waitForSelector('[data-answers]');
+  await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-help="file"]', { state: 'attached' });
+  const wrongFile = { kind: 'exam-wizard-answers', attemptId: '00000000-0000-4000-8000-000000000000', answers: { a: 1 }, student: { name: 'Juan' }, finishedAt: new Date().toISOString() };
+  await teacher.setInputFiles('.dialog [data-help="file"]', { name: 'answers.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(wrongFile)) });
+  await teacher.locator('.overlay').last().locator('.ft .btn.primary').click();
+  ok(await toastSays(teacher, 'not for this student'), 'an answer file for another attempt is refused');
+  await teacher.keyboard.press('Escape');
+  await teacher.goto(BASE + '/teacher#results/' + fileExam); await teacher.waitForSelector('[data-answers]');
+  await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-help="file"]', { state: 'attached' });
+  const goodFile = Object.assign({}, wrongFile, { attemptId: fileSt.attemptId, answers: { [fileSt.qid]: 'TRUE' } });
+  await teacher.setInputFiles('.dialog [data-help="file"]', { name: 'answers.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(goodFile)) });
+  await teacher.locator('.overlay').last().locator('.ft .btn.primary').click();
+  ok(await toastSays(teacher, 'Submitted from the file. Score: 1 / 1'), 'teacher uploads the student\'s answer file: graded 1 / 1');
+  await db.query('UPDATE attempts SET late = true WHERE id = $1', [fileSt.attemptId]);
+  await teacher.goto(BASE + '/teacher#results/' + fileExam); await teacher.waitForSelector('[data-answers]');
+  await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-help="ontime"]');
+  await teacher.click('.dialog [data-help="ontime"]'); await toastSays(teacher, 'Counted as on time');
+  ok((await dbOne('SELECT late FROM attempts WHERE id = $1', [fileSt.attemptId])).late === false, '"Count as on time" removes the Late mark');
 
   // ── Archive: exams (teacher's list only) and classes (hidden from students) ──
   await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector('#activeExams [data-archive]');

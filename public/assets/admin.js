@@ -221,6 +221,10 @@
       <h3 class="settings-h">Email (forgot password)</h3>
       <div class="paymethod"><div id="sEmailStatus" class="note small info">Checking…</div>
         <button type="button" class="btn small" id="sTestEmail" style="margin-top:8px">Send me a test email</button></div>
+      <h3 class="settings-h">Safety: updates and backups</h3>
+      <div class="paymethod"><label class="check"><input type="checkbox" id="sPause"${s.updatesPaused ? ' checked' : ''}> <b>Pause site updates</b> (e.g. during exam week)</label>
+        <div class="hint">While on, new versions of the site are not installed, so nothing changes during your exams. Updates also wait by themselves while students are taking an exam. Turn it off after the exams.</div></div>
+      <div class="paymethod" id="sBackups"><div class="small muted">Checking backups…</div></div>
       <h3 class="settings-h">Support</h3>
       <div class="field"><label for="sSupport">Support contact <span class="muted">(optional)</span></label><input type="text" id="sSupport" value="${esc(s.supportContact)}" placeholder="e.g. Email support@abnjworks.com"></div>
       <button type="button" class="btn primary" id="sSave">Save settings</button></div></div>`;
@@ -232,6 +236,22 @@
     $$('[data-qrdel]').forEach((b) => { b.onclick = async () => {
       await api('/admin/payment-qr', { method: b.dataset.qrdel, remove: true }); toast('QR code removed'); settings();
     }; });
+    const drawBackups = async () => {
+      const box = $('#sBackups'); if (!box) return;
+      const r = await api('/admin/backups');
+      if (!r.owner) { box.innerHTML = '<div class="small muted">Backups are managed by the site owner.</div>'; return; }
+      const fmtKB = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+      box.innerHTML = `<b>Database backups</b>
+        <div class="hint">${r.nightly ? 'A backup is made every night at about 2 AM and the newest 14 are kept on the server (<code>~/exam-wizard/backups</code>).' : 'Nightly backups run on the real server only (not in this test copy).'} Download one now and then to keep a copy of your own.</div>
+        ${r.backups.length ? '<table class="list" style="margin:8px 0"><tbody>' + r.backups.slice(0, 5).map((f) => `<tr><td>${esc(App.fmtDate(f.at))}</td><td class="num">${fmtKB(f.bytes)}</td>
+          <td><a class="btn small" href="/api/admin/backups/${encodeURIComponent(f.name)}" download>Download</a></td></tr>`).join('') + '</tbody></table>' : '<p class="small muted">No backups yet.</p>'}
+        <button type="button" class="btn small" id="sBackupNow">Make a backup now</button>`;
+      $('#sBackupNow').onclick = async () => {
+        $('#sBackupNow').disabled = true;
+        try { const x = await api('/admin/backups', {}); toast('Backup saved (' + fmtKB(x.backup.bytes) + ')'); drawBackups(); } catch (e) { toast(e.message, true); $('#sBackupNow').disabled = false; }
+      };
+    };
+    drawBackups().catch(() => {});
     $('#sTestEmail').onclick = async () => {
       try { const r = await api('/admin/test-email', {}); toast('Test email sent to ' + r.to + '. Check the inbox (and Spam).'); } catch (e) { toast(e.message, true); }
     };
@@ -250,7 +270,7 @@
       await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeach').checked, studentSignup: $('#sStud').checked, signupCredits: $('#sWelcome').value,
         paymentsEnabled: $('#sPayOn').checked, creditPackages: $('#sPack').value, currency: $('#sCur').value, bankEnabled: $('#sBankOn').checked, bankDetails: $('#sBank').value,
         paypalEnabled: $('#sPpOn').checked, paypalLink: $('#sPpLink').value, otherEnabled: $('#sOtherOn').checked,
-        paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value });
+        paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value, updatesPaused: $('#sPause').checked });
       toast('Settings saved');
     };
   }

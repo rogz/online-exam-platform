@@ -718,7 +718,7 @@
         <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
           ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}${a.to_check ? '<div class="small" style="color:var(--warn)" title="Close spelling, a number just outside the range, or a different unit: open Answers to decide">⚠ ' + a.to_check + ' to check</div>' : ''}</td>
         <td data-label="Time" class="small"><div class="nowrap">${esc(App.fmtDate(a.started_at))}</div>${a.submitted_at ? '<div class="muted nowrap">→ ' + esc(endText) + ' · ' + mins + ' min</div>' : ''}</td>
-        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}${Number(a.offline_ms) >= 60000 ? '<div title="The internet was down; the exam page stayed open and kept checking">📶 Offline ' + Math.round(a.offline_ms / 60000) + ' min</div>' : ''}${a.sent_late ? '<div style="color:var(--warn)" title="Finished while offline; the answers were sent when the internet came back. See Answers → Events.">⏳ Sent after the internet came back</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
+        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}${Number(a.offline_ms) >= 60000 ? '<div title="The internet was down; the exam page stayed open and kept checking">📶 Offline ' + Math.round(a.offline_ms / 60000) + ' min</div>' : ''}${a.page_errors ? '<div style="color:var(--warn)" title="The exam page had an unexpected problem; see Answers → Events (PAGE_ERROR)">⚠ Page problem (' + a.page_errors + ')</div>' : ''}${a.sent_late ? '<div style="color:var(--warn)" title="Finished while offline; the answers were sent when the internet came back. See Answers → Events.">⏳ Sent after the internet came back</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
         <td class="actions"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
           ${a.status !== 'IN_PROGRESS' ? `<label class="check small" title="Let this student take the exam again"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`;
       }).join('')
@@ -767,12 +767,31 @@
     }; });
   }
 
+  /** "Help this student": extra time / let them continue, submit saved answers, upload an answer file, count as on time. */
+  function helpPanel(a) {
+    if (a.status === 'SUBMITTED') {
+      return a.late ? '<div class="note warn small" style="margin-bottom:10px">Marked <b>Late</b>. <button type="button" class="btn small" data-help="ontime">Count as on time</button></div>' : '';
+    }
+    const draft = a.draft_answers ? Object.values(a.draft_answers).filter((v) => String(v === null || v === undefined ? '' : v).trim() !== '').length : 0;
+    const going = a.status === 'IN_PROGRESS';
+    return `<div class="helpbox"><b>Help this student</b> <span class="small muted">(e.g. the device crashed or the internet failed)</span>
+      <div class="row" style="gap:6px;align-items:center;margin-top:8px"><label for="helpMin" class="small" style="margin:0">${going ? 'Give extra time:' : 'Let them continue, with'}</label>
+        <input type="number" id="helpMin" min="0" max="600" value="${going ? 10 : 15}" style="width:80px"> <span class="small">minutes</span>
+        <button type="button" class="btn small primary" data-help="continue">${going ? 'Add time' : 'Let them continue'}</button></div>
+      ${going ? '' : '<div class="hint">Same questions; the answers saved so far are kept. The student opens the exam link again within 30 minutes.</div>'}
+      <div class="row" style="gap:6px;align-items:center;margin-top:8px">${draft ? `<span class="small">${draft} answer${draft === 1 ? '' : 's'} saved on the server (${esc(App.fmtDate(a.draft_at))}).</span>
+        <button type="button" class="btn small" data-help="draft">Submit these answers</button>` : '<span class="small muted">No answers saved on the server yet.</span>'}</div>
+      <div class="row" style="gap:6px;align-items:center;margin-top:8px"><label class="btn small" style="margin:0">Upload an answer file<input type="file" accept=".json,application/json" data-help="file" hidden></label>
+        <span class="small muted">the file from the student's "Save a copy of my answers"</span></div></div>`;
+  }
+
   async function attemptDialog(examId, attemptId) {
     const r = await api('/teacher/exams/' + examId + '/attempts/' + attemptId);
     const a = r.attempt;
     const d = dialog(a.student_name + ' — answers', `<div class="row small" style="margin-bottom:10px">${STATUS_TAG[a.status] || ''} ${a.score !== null ? '<b>' + a.score + ' / ' + a.max_score + ' (' + a.percent + '%)</b>' : ''}
         <span class="muted">Started ${esc(App.fmtDate(a.started_at))}${a.submitted_at ? ' · submitted ' + esc(App.fmtDate(a.submitted_at)) : ''}</span></div>
       ${a.void_reason ? '<div class="note bad" style="margin-bottom:10px">Voided: ' + esc(a.void_reason) + '</div>' : ''}
+      ${helpPanel(a)}
       ${r.responses.length ? r.responses.map((x, i) => `<div class="resp"><div class="row" style="justify-content:space-between"><b>Question ${i + 1}</b><span class="tag">${TYPE_SHORT[x.type]}</span></div>
         <div class="q">${esc(x.question_text)}</div>
         <div class="small muted">Answer</div><div class="a">${esc(x.student_answer) || '<span class="muted">(no answer)</span>'}</div>
@@ -796,6 +815,28 @@
         viewResults(examId);
       } }] : [{ label: 'Close' }],
     });
+    const helpAct = async (body, okText) => {
+      try { const res = await api('/teacher/exams/' + examId + '/attempts/' + attemptId, body); toast(okText(res)); d.close(); viewResults(examId); }
+      catch (err) { toast(err.message, true); }
+    };
+    const hb = $('[data-help="continue"]', d.el);
+    if (hb) hb.onclick = () => helpAct({ continueMinutes: $('#helpMin', d.el).value }, () => a.status === 'IN_PROGRESS' ? 'Extra time added. The student\'s timer updates within a minute.' : 'Done: the student can open the exam link again within 30 minutes and continue.');
+    const hd = $('[data-help="draft"]', d.el);
+    if (hd) hd.onclick = async () => {
+      if (!(await App.confirmBox('Submit these answers?', 'The answers saved on the server will be graded and submitted for ' + a.student_name + '. The student cannot change them after this.', 'Submit'))) return;
+      helpAct({ submitDraft: true }, (res) => 'Submitted. Score: ' + res.attempt.score + ' / ' + res.attempt.max_score);
+    };
+    const hf = $('[data-help="file"]', d.el);
+    if (hf) hf.onchange = async () => {
+      const f = hf.files[0]; if (!f) return;
+      let file;
+      try { file = JSON.parse(await f.text()); } catch (err) { toast('That is not an answer file from Exam Wizard.', true); hf.value = ''; return; }
+      const n = file && file.answers ? Object.keys(file.answers).length : 0;
+      if (!(await App.confirmBox('Use this answer file?', (file.student && file.student.name ? file.student.name + ': ' : '') + n + ' answers, finished ' + (file.finishedAt ? App.fmtDate(file.finishedAt) : '?') + '. They will be graded and submitted.', 'Submit'))) { hf.value = ''; return; }
+      helpAct({ answerFile: file }, (res) => 'Submitted from the file. Score: ' + res.attempt.score + ' / ' + res.attempt.max_score);
+    };
+    const ht = $('[data-help="ontime"]', d.el);
+    if (ht) ht.onclick = () => helpAct({ markOnTime: true }, () => 'Counted as on time');
     $$('[data-give]').forEach((b) => b.onclick = () => { $('#pts' + b.dataset.give).value = b.dataset.max; toast('Click "Save points" to keep it'); });
     return d;
   }

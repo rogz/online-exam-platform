@@ -665,6 +665,43 @@ router.post('/exams/:id/attempts/:aid', async (req, res) => {
   if (b.allowRetake !== undefined) {
     await db.query('UPDATE attempts SET allow_retake = $1 WHERE id = $2', [!!b.allowRetake, a.id]);
   }
+  // ── Helping one student (device crashed, internet problem, a bug) ──
+  const attemptLib = require('./attempt');
+  const log = (event, detail) => attemptLib.logEvent((sql, p) => db.query(sql, p), a.id, event, detail);
+  if (b.continueMinutes !== undefined) {
+    // Extra time; for an attempt that was voided or ran out, also "let them continue" with the same questions and saved answers
+    if (a.status === 'SUBMITTED') throw fail(409, 'ALREADY_SUBMITTED', 'This student already submitted. Use Allow retake for a new attempt.');
+    const n = int(b.continueMinutes, 0, 0, 600);
+    await db.query(`UPDATE attempts SET status = 'IN_PROGRESS', void_reason = NULL, voided_at = NULL,
+        deadline = CASE WHEN deadline IS NULL THEN NULL ELSE GREATEST(deadline, now()) + make_interval(mins => $1::int) END,
+        resume_until = now() + make_interval(mins => GREATEST(30, $1::int)) WHERE id = $2`, [n, a.id]);
+    await log('TEACHER_HELP', a.status === 'IN_PROGRESS' ? 'Teacher added ' + n + ' minutes' : 'Teacher let the student continue (was ' + a.status + '), +' + n + ' minutes');
+  }
+  if (b.submitDraft || b.answerFile) {
+    if (a.status === 'SUBMITTED') throw fail(409, 'ALREADY_SUBMITTED', 'This student already submitted; their answers were not changed.');
+    let answers, how;
+    if (b.answerFile) {
+      const f = b.answerFile;
+      if (!f || f.kind !== 'exam-wizard-answers' || f.attemptId !== a.id || !f.answers || typeof f.answers !== 'object') {
+        throw fail(400, 'BAD_FILE', 'This answer file is not for this student\'s attempt. Check that you chose the right file.');
+      }
+      answers = f.answers; how = 'the student\'s answer file (saved ' + str(f.savedAt, 40) + ')';
+    } else {
+      if (!a.draft_answers) throw fail(409, 'NO_DRAFT', 'No answers were saved on the server for this student.');
+      answers = a.draft_answers; how = 'the answers saved on the server at ' + (a.draft_at ? new Date(a.draft_at).toISOString() : '?');
+    }
+    await db.tx(async (t) => {
+      const row = (await t.query('SELECT * FROM attempts WHERE id = $1 FOR UPDATE', [a.id])).rows[0];
+      if (row.status === 'SUBMITTED') throw fail(409, 'ALREADY_SUBMITTED', 'This student already submitted.');
+      const exam = await attemptLib.examOfAttempt(t.query, row);
+      const r = await attemptLib.gradeAttempt(t.query, row, exam, answers, { now: new Date(), late: false });
+      await attemptLib.logEvent(t.query, a.id, 'TEACHER_SUBMITTED', 'Submitted by the teacher with ' + how + ': ' + r.score + ' / ' + r.max);
+    });
+  }
+  if (b.markOnTime) {
+    await db.query('UPDATE attempts SET late = false WHERE id = $1', [a.id]);
+    await log('TEACHER_HELP', 'Teacher counted this attempt as on time');
+  }
   if (b.grade) {
     // b.grade = { questionId: points or null }
     for (const [qid, pts] of Object.entries(b.grade)) {

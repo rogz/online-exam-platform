@@ -906,6 +906,16 @@
     try {
       const r = await api('ping', { attemptId: state.attemptId, pageToken: state.pageToken, answers: keepGoing() && ver > state.savedVer ? state.answers : undefined });
       if (r.saved) state.savedVer = Math.max(state.savedVer, ver);
+      if (r.deadlineMs && state.endAt !== null) {
+        const newEnd = r.deadlineMs - state.serverOffset;
+        if (newEnd > state.endAt + 30000) {
+          state.endAt = newEnd;
+          state.warned.clear();
+          (state.rules.timeWarnings || []).forEach((m) => { if (m * 60000 >= newEnd - Date.now()) state.warned.add(m); });
+          const w = $('timeWarning'); w.hidden = false; w.className = 'notice';
+          w.textContent = 'Your teacher gave you more time. New time left: ' + fmtTime(newEnd - Date.now()) + '.';
+        }
+      }
       markOnline();
       if (r.status === 'VOIDED') showVoid(null, 'Your exam was voided: ' + (r.reason || 'exam rules were broken') + '. Please inform your instructor.');
     } catch (e) {
@@ -1022,6 +1032,20 @@
       if (e.code === 'VOIDED') { showVoid(null, e.message); return; }
       showError(e.message);
     }
+  }
+
+  /** A copy of the finished answers as a file, for the teacher to upload (Results → Answers → Upload an answer file). */
+  function saveAnswerFile() {
+    const p = pendingFromStorage();
+    if (!p) return;
+    const file = { kind: 'exam-wizard-answers', version: 1, examId: state.examId, examTitle: state.info ? state.info.exam.title : '', attemptId: p.attemptId,
+      student: state.student || { name: p.name }, answers: p.answers, finishedAt: new Date(p.finishedAt).toISOString(), savedAt: new Date(Date.now() + state.serverOffset).toISOString() };
+    const blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    const who = String((state.student && (state.student.id || state.student.name)) || 'student').replace(/[^\w.-]+/g, '_');
+    a.href = URL.createObjectURL(blob); a.download = 'answers-' + who + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   }
 
   function pendingFromStorage() {
@@ -1223,7 +1247,16 @@
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+  let errorsSent = 0;
+  function reportError(message, where) {
+    if (!state.attemptId || errorsSent >= 3) return;
+    errorsSent++;
+    api('clientError', { attemptId: state.attemptId, message: String(message || 'Unknown error').slice(0, 300), where: String(where || '').slice(0, 150) }).catch(() => {});
+  }
+
   async function boot() {
+    window.addEventListener('error', (e) => reportError(e.message, (e.filename || '').split('/').pop() + ':' + (e.lineno || '')));
+    window.addEventListener('unhandledrejection', (e) => reportError(e.reason && (e.reason.message || String(e.reason)), 'promise'));
     document.addEventListener('visibilitychange', onHidden);
     window.addEventListener('blur', onBlur);
     window.addEventListener('focus', onFocus);
@@ -1239,6 +1272,7 @@
       const p = !$('screen-pending').hidden && pendingFromStorage();
       if (p) { clearTimeout(state.pendingTimer); sendPending(p); }
     });
+    $('pendingFile').addEventListener('click', saveAnswerFile);
     $('pendingRetry').addEventListener('click', () => { const p = pendingFromStorage(); if (p) { clearTimeout(state.pendingTimer); sendPending(p); } });
     if (window.screen && typeof window.screen.addEventListener === 'function') {
       window.screen.addEventListener('change', () => { checkMonitorDuringExam(); if (!state.attemptId && state.info) refreshStartButton(); });

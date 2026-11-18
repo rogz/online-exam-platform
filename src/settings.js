@@ -21,6 +21,7 @@ const DEFAULTS = {
   otherQr: '',
   paymentInstructions: 'To buy credits, send payment by GCash to 09XX XXX XXXX (ABNJ Works), then submit a request with the reference number. Credits are added once the payment is confirmed.',
   supportContact: '',
+  updatesPaused: false,                // exam week: site updates wait until this is turned off (see deploy/remote-deploy.sh)
 };
 
 // Settings are kept in memory for a few minutes, so visitors who only look at pages (and search engine

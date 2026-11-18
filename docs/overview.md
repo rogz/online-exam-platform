@@ -40,6 +40,11 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Fill-in-the-blank checks**: close spellings ("Feranti"), numbers just outside the range and a different unit
   ("kV" for "V") are flagged as **to check** in Results (the number decides correct/wrong; spellings stay wrong) with a
   one-click **Give full points**. Notes are for the teacher only.
+- **Help this student** (Results → Answers, for an attempt not submitted): extra time / **Let them continue** after a
+  void or a crash (same questions, the server's saved answers come back; the student reopens within 30 min,
+  `resume_until`), **Submit these answers** (the draft saved on the server), **Upload an answer file** (the student's
+  "Save a copy of my answers" file from the offline screen), **Count as on time**. Each is logged in the events.
+  Unexpected errors on the exam page are reported (PAGE_ERROR, "⚠ Page problem" in Results).
 - **Results**: search, status filter, sort (name, started, finished, time taken, score), notes (void reason, camera
   and tab warnings, reconnects, device), answers per student with grading (essays), events log, **camera
   snapshots**, Allow retake, Not started list, CSV downloads (results and all answers).
@@ -110,6 +115,12 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - Database: Neon free plan (Singapore), max compute capped at 0.5 CU. Watch **Usage → Compute** (100 CU-hours a
   month); page views and idle tabs no longer wake the database. For 1000 students, Neon's paid plan or moving
   PostgreSQL onto a bigger (2 GB) server are the next steps.
+- **Backups** (`src/backup.js`): nightly at about 2 AM (site time zone), JSON-lines gzip in `~/exam-wizard/backups`
+  (`BACKUP_DIR`), newest 14 kept; Admin → Site settings lists them (Download, Make a backup now; site owner only).
+  Restore into an empty database: `DATABASE_URL=… node deploy/restore-backup.js FILE`.
+- **Updates never interrupt an exam**: `deploy/remote-deploy.sh` asks the app (`/deploy-check`, local only) first and
+  waits (up to 80 min) while students are taking an exam; Admin → Site settings → **Pause site updates** (exam week)
+  stops deploys until it is turned off (then re-run the deploy in GitHub Actions).
 - Load test (150 students at once): sign-in is the heaviest step (bcrypt); exam actions are light.
 
 ## Decisions and why

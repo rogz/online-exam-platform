@@ -97,6 +97,11 @@ After that, every push to `main` goes live in a few minutes. Settings live in `~
 
 ---
 
+## Backups and updates during exams
+- **Backups:** the site saves a copy of the database every night at about 2 AM in `~/exam-wizard/backups` (the newest 14 are kept). The site owner can download them, or make one at once, in **Admin → Site settings → Safety**. Keep a downloaded copy somewhere else now and then.
+- **Restore** (only if something went badly wrong): create a new, empty database (e.g. a new Neon database), then on the server run `cd ~/exam-wizard/app && DATABASE_URL='postgres://…new…' node/bin/node deploy/restore-backup.js ~/exam-wizard/backups/backup-….jsonl.gz` (or use `~/exam-wizard/node/bin/node`), put that address in `~/exam-wizard/.env` and run `sudo systemctl restart exam-wizard`.
+- **No updates during exams:** an update waits by itself while students are taking an exam (up to 80 minutes). For exam week, tick **Pause site updates** in Site settings; updates are refused until you untick it (then re-run the waiting deploy in GitHub → Actions).
+
 ## Email: "Forgot your password?"
 Until email is set up, "Forgot your password?" tells people to ask their teacher or an admin. An admin can reset a password in **Admin → Students/Teachers → Reset password**: the temporary password works in small or capital letters, clears any sign-in lock, and the user must choose their own password right after signing in.
 

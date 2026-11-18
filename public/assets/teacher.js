@@ -713,7 +713,7 @@
         <div class="stat"><b>${r.attempts.filter((a) => a.status === 'VOIDED').length}</b><span>Voided</span></div>
         <div class="stat"><b>${r.notStarted.length}</b><span>Not started</span></div>
         <div class="stat"><b>${sub.reduce((s, a) => s + (a.pending_essays || 0), 0)}</b><span>Essays to grade</span></div>${sub.some((a) => a.to_check) ? `<div class="stat"><b>${sub.reduce((s, a) => s + (a.to_check || 0), 0)}</b><span>Answers to check</span></div>` : ''}</div>
-      ${r.offline ? offlinePanel(r.offline) : ''}
+      ${r.offline ? offlinePanel(r.offline, id) : ''}
       <div class="panel"><div class="hd"><h3>Attempts <span class="muted small">(${r.attempts.length})</span></h3>
         ${r.attempts.length > 1 ? `<div class="toolbar">${r.attempts.length > 5 ? `<input type="search" id="aFind" placeholder="Find a student…" aria-label="Find a student" style="width:200px">
           <select id="aStatus" aria-label="Show"><option value="">All</option><option value="SUBMITTED">Submitted</option><option value="VOIDED">Voided</option><option value="IN_PROGRESS">In progress</option><option value="EXPIRED">Not submitted</option></select>` : ''}
@@ -747,6 +747,7 @@
       toast(c.checked ? 'Retake allowed: the student can open the exam again.' : 'Retake turned off');
     });
     $$('[data-answers]').forEach((b) => b.onclick = () => attemptDialog(id, b.dataset.answers));
+    if ($('#helperLinks')) $('#helperLinks').onclick = () => helperLinksDialog(id);
     const off = $('[data-offfile]');
     if (off) off.onchange = async () => {
       const f = off.files[0]; if (!f) return;
@@ -794,9 +795,11 @@
   }
 
   /** Offline exam: who has downloaded their copy, who has sent their answers, who still needs to. */
-  function offlinePanel(o) {
+  function offlinePanel(o, examId) {
     const names = (list) => list.map((s) => esc(s.name) + (s.studentNo ? ' <span class="muted">(' + esc(s.studentNo) + ')</span>' : '')).join(', ');
-    return `<div class="panel" style="margin-bottom:16px"><div class="hd"><h3>📥 Offline copies</h3></div><div class="bd">
+    return `<div class="panel" style="margin-bottom:16px"><div class="hd"><h3>📥 Offline copies</h3>
+      <div class="toolbar"><a class="btn small primary" href="/collect?exam=${examId}" target="_blank" rel="noopener" title="Open the scanner on your phone: scan the QR code on each student's screen">📷 Scan answers (QR)</a>
+        <button type="button" class="btn small" id="helperLinks" title="A link for student assistants: they can only scan answers for this exam">👥 Helper links</button></div></div><div class="bd">
       <div class="statgrid" style="margin-bottom:8px"><div class="stat"><b>${o.downloaded} / ${o.enrolled}</b><span>Downloaded</span></div>
         <div class="stat"><b>${o.sent}</b><span>Answers received</span></div><div class="stat"><b>${o.waiting.length}</b><span>Downloaded, not sent yet</span></div></div>
       ${o.notDownloaded.length ? `<details><summary class="small" style="cursor:pointer"><b>Not downloaded yet (${o.notDownloaded.length})</b>: remind them to open the exam link with internet and click <i>Download for offline</i></summary><p class="small">${names(o.notDownloaded)}</p></details>` : '<p class="small" style="color:var(--ok)">✓ Every student in the class has downloaded it.</p>'}
@@ -805,6 +808,36 @@
       <div class="row" style="gap:6px;align-items:center;margin-top:8px"><label class="btn small" style="margin:0">Upload an answer file<input type="file" accept=".json,application/json" data-offfile hidden></label>
         <span class="small muted">for a student who finished offline and cannot get internet (their "Save a copy of my answers" file)</span></div>
     </div></div>`;
+  }
+
+  /** Collector links: helpers scan the answer QR codes for this exam only, without an account, until the chosen time. */
+  async function helperLinksDialog(examId) {
+    const r = await api('/teacher/exams/' + examId + '/collectors');
+    const live = r.links.filter((l) => !l.revoked && new Date(l.expires_at) > new Date());
+    const d = dialog('Helper links (scan answers)', `<p class="small">Send a helper link to a student assistant. It opens only the QR scanner for <b>this exam</b>: no scores, no other exams. It stops working at the time you choose, or when you turn it off.</p>
+      <div class="row" style="gap:6px;align-items:end;flex-wrap:wrap"><div class="field" style="margin:0"><label for="hlName">Helper's name <span class="muted">(optional)</span></label><input type="text" id="hlName" placeholder="e.g. Ana (assistant)"></div>
+        <div class="field" style="margin:0"><label for="hlHours">Valid for</label><select id="hlHours"><option value="4">4 hours</option><option value="8" selected>8 hours</option><option value="24">1 day</option><option value="72">3 days</option></select></div>
+        <button type="button" class="btn primary" id="hlMake">Make a link</button></div>
+      <div id="hlNew" style="margin-top:10px"></div>
+      <h3 style="margin-top:14px">Links</h3>
+      ${r.links.length ? '<table class="list"><tbody>' + r.links.map((l) => {
+        const on = !l.revoked && new Date(l.expires_at) > new Date();
+        return `<tr><td>${esc(l.label || 'Helper')}<div class="small muted">${on ? 'until ' + esc(App.fmtDate(l.expires_at)) : l.revoked ? 'turned off' : 'expired'} · ${l.scans} scanned</div></td>
+          <td class="actions">${on ? `<button type="button" class="btn small danger" data-hloff="${l.id}">Turn off</button>` : ''}</td></tr>`;
+      }).join('') + '</tbody></table>' : '<p class="small muted">No links yet.</p>'}
+      ${live.length ? '<p class="small muted">The link itself is shown only once, when you make it.</p>' : ''}`, { wide: true, buttons: [{ label: 'Close' }] });
+    $('#hlMake', d.el).onclick = async () => {
+      try {
+        const x = await api('/teacher/exams/' + examId + '/collectors', { label: $('#hlName', d.el).value, hours: $('#hlHours', d.el).value });
+        const url = location.origin + x.link;
+        $('#hlNew', d.el).innerHTML = `<div class="note ok small"><b>New link</b> (valid ${x.hours} hours). Copy it and send it to your helper:<div class="row" style="gap:6px;margin-top:6px">
+          <input type="text" readonly value="${esc(url)}" id="hlUrl" style="flex:1"><button type="button" class="btn small" id="hlCopy">Copy</button></div></div>`;
+        $('#hlCopy', d.el).onclick = () => App.copyText(url);
+      } catch (e) { toast(e.message, true); }
+    };
+    $$('[data-hloff]', d.el).forEach((b) => b.onclick = async () => {
+      await api('/teacher/exams/' + examId + '/collectors', { revoke: b.dataset.hloff }); toast('Link turned off'); d.close(); helperLinksDialog(examId);
+    });
   }
 
   /** "Help this student": extra time / let them continue, submit saved answers, upload an answer file, count as on time. */

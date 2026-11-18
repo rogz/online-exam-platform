@@ -707,9 +707,42 @@
     showOfflineFinished();
   }
 
+  /** The answers as QR code(s), for handing in without internet (scanned on /collect). Format: see src/routes/collect.js. */
+  function qrParts() {
+    const o = state.offline, st = o.st, qs = (state.unlocked && state.unlocked.questions) || state.questions || [];
+    const list = qs.map((q) => {
+      const v = st.answers && st.answers[q.id];
+      if (v === undefined || v === null || String(v) === '') return '';
+      if (q.type === 'TF') return v === 'TRUE' ? 'T' : v === 'FALSE' ? 'F' : String(v);
+      return String(v);
+    });
+    while (list.length && list[list.length - 1] === '') list.pop();
+    const flags = [st.voided ? 'v=' + st.voided.event : '', st.reloads ? 'r=' + st.reloads : '', st.cameraWarnings ? 'c=' + st.cameraWarnings : '',
+      st.focusWarnings ? 'f=' + st.focusWarnings : '', (st.events || []).some((e) => e.event === 'CLOCK_CHANGED') ? 'k' : ''].filter(Boolean).join(',');
+    const text = ['EW1', o.pkg.packageId, Math.round(st.finishedAt).toString(36), Math.round(st.startedAt).toString(36), st.receipt || '', flags, JSON.stringify(list)].join('~');
+    const size = 280, n = Math.max(1, Math.ceil(text.length / size)), id8 = o.pkg.packageId.slice(0, 8);
+    const out = [];
+    for (let i = 0; i < n; i++) out.push('EWQ|' + (i + 1) + '|' + n + '|' + id8 + '|' + text.slice(i * size, (i + 1) * size));
+    return out;
+  }
+
+  function showQr(i) {
+    const parts = state.qrParts, k = ((i % parts.length) + parts.length) % parts.length;
+    state.qrIndex = k;
+    const qr = window.qrcode(0, 'L');
+    if (window.qrcode.stringToBytesFuncs && window.qrcode.stringToBytesFuncs['UTF-8']) window.qrcode.stringToBytes = window.qrcode.stringToBytesFuncs['UTF-8'];
+    qr.addData(parts[k], 'Byte');
+    qr.make();
+    $('qrImg').src = qr.createDataURL(Math.max(4, Math.floor(420 / (qr.getModuleCount() + 8))), 4);
+    $('qrPart').textContent = parts.length > 1 ? 'Code ' + (k + 1) + ' of ' + parts.length + ': it changes by itself every few seconds; keep showing it until all are scanned.' : '';
+    $('qrNext').hidden = parts.length < 2;
+  }
+
   function showOfflineFinished() {
     const st = state.offline.st;
     show('pending');
+    $('qrBox').hidden = !(window.qrcode && st.status === 'FINISHED' && state.unlocked);
+    $('qrArea').hidden = true;
     $('pendingReceipt').hidden = !st.receipt;
     $('pendingReceipt').innerHTML = 'Your receipt code<b>' + (st.receipt || '') + '</b><span class="small">Show it to your teacher (or write it on the attendance sheet).</span>';
     $('pendingKeep').innerHTML = '<b>Your answers stay on this device</b>, even if you close this page. To send them, keep this page open until you have internet, ' +
@@ -1582,6 +1615,15 @@
       if (p) { clearTimeout(state.pendingTimer); sendPending(p); }
     });
     $('pendingFile').addEventListener('click', saveAnswerFile);
+    $('qrShow').addEventListener('click', () => {
+      state.qrParts = qrParts();
+      $('qrArea').hidden = false; $('qrShow').hidden = true;
+      showQr(0);
+      setTimeout(() => $('qrImg').scrollIntoView({ block: 'center' }), 50);
+      clearInterval(state.qrTimer);
+      if (state.qrParts.length > 1) state.qrTimer = setInterval(() => showQr(state.qrIndex + 1), 2500);
+    });
+    $('qrNext').addEventListener('click', () => showQr(state.qrIndex + 1));
     $('pendingRetry').addEventListener('click', () => { if (state.offline) syncOffline(); });
     $('pendingRetry').addEventListener('click', () => { const p = pendingFromStorage(); if (p) { clearTimeout(state.pendingTimer); sendPending(p); } });
     if (window.screen && typeof window.screen.addEventListener === 'function') {
@@ -1624,6 +1666,7 @@
       state.serverOffset = pk.serverOffset || 0;
       state.attemptId = pk.packageId;
       state.student = pk.student;
+      state.unlocked = await pkgGet('open:' + pk.packageId);
       if (pst.status === 'VOIDED') showVoid(pst.voided && REASONS[pst.voided.event] ? pst.voided.event : null, 'Your offline exam was voided.');
       else showOfflineFinished();
       return;

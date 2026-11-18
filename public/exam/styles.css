@@ -139,6 +139,8 @@ textarea.essay { min-height: 160px; resize: vertical; }
 .receipt { margin: 10px auto 14px; padding: 10px 14px; border: 2px dashed #23558c; border-radius: 8px; max-width: 360px; }
 .receipt b { display: block; font-size: 30px; letter-spacing: 4px; color: #23558c; }
 .offline-list { list-style: none; padding: 0; }
+.qr-box { margin: 10px 0 16px; }
+.qr-box img { display: block; margin: 8px auto; width: min(420px, 90vw); height: auto; image-rendering: pixelated; background: #fff; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
 .offline-list li { margin: 10px 0; }
 .save-state { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .save-state.ok { color: #1a7f37; }

@@ -271,6 +271,18 @@ CREATE TABLE IF NOT EXISTS offline_packages (
   synced_at     timestamptz,
   UNIQUE (exam_id, student_id)
 );
+-- Collector links: a helper (e.g. a student assistant) scans the answer QR codes of an offline exam without an account.
+CREATE TABLE IF NOT EXISTS collector_links (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_id     uuid NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  token_hash  text NOT NULL UNIQUE,
+  label       text,
+  created_by  uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz NOT NULL,
+  revoked     boolean NOT NULL DEFAULT false,
+  scans       integer NOT NULL DEFAULT 0
+);
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS offline boolean NOT NULL DEFAULT false;
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS fixed_question_ids jsonb;
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS review jsonb;

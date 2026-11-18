@@ -47,6 +47,7 @@ function createApp() {
   api.use('/admin', require('./src/routes/admin'));
   api.use('/teacher', require('./src/routes/teacher'));
   api.use('/student', require('./src/routes/student'));
+  api.use('/collect', require('./src/routes/collect')); // QR hand-in: signed-in teachers, or helpers with a collector link
   api.use((req, res, next) => next(new HttpError(404, 'NOT_FOUND', 'Not found.')));
   app.use('/api', api);
 
@@ -81,6 +82,7 @@ function createApp() {
   app.get('/join/:code', page('join.html'));
   app.get('/manual', page('manual/index.html'));
   app.get('/offline', page('offline.html'));
+  app.get('/collect', page('collect.html'));
   // no-cache: browsers keep a copy but check for a newer one each time, so updates show up at once
   app.use(express.static(pub, { index: false, setHeaders: (res) => res.set('Cache-Control', 'no-cache') }));
 

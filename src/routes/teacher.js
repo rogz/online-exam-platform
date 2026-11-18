@@ -505,6 +505,24 @@ router.post('/exams/:id/offline-answers', async (req, res) => {
     startedAt: f.startedMs || null, receipt: f.receipt || '', events: [], voided: null }, { examId: x.id, source: 'an answer file uploaded by the teacher' });
   res.json({ ok: true, result: r });
 });
+// Collector links for helpers who scan the answer QR codes (no account needed; only this exam; until the time chosen)
+router.get('/exams/:id/collectors', async (req, res) => {
+  const x = await mine('exams', req.params.id, req.user.id, 'Exam');
+  res.json({ ok: true, links: await db.many('SELECT id, label, created_at, expires_at, revoked, scans FROM collector_links WHERE exam_id = $1 ORDER BY created_at DESC', [x.id]) });
+});
+router.post('/exams/:id/collectors', async (req, res) => {
+  const x = await mine('exams', req.params.id, req.user.id, 'Exam');
+  const b = req.body || {};
+  if (b.revoke) {
+    await db.query('UPDATE collector_links SET revoked = true WHERE id = $1 AND exam_id = $2', [String(b.revoke), x.id]);
+    return res.json({ ok: true });
+  }
+  const hours = int(b.hours, 8, 1, 72);
+  const token = require('crypto').randomBytes(18).toString('base64url');
+  await db.query(`INSERT INTO collector_links (exam_id, token_hash, label, created_by, expires_at) VALUES ($1, $2, $3, $4, now() + make_interval(hours => $5::int))`,
+    [x.id, require('./collect').hashToken(token), str(b.label, 60) || null, req.user.id, hours]);
+  res.json({ ok: true, link: '/collect?t=' + token, hours });
+});
 router.get('/new-offline-password', async (req, res) => res.json({ ok: true, password: require('../offline').newPassword() }));
 
 router.post('/exams', async (req, res) => {

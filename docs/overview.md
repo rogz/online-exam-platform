@@ -53,6 +53,12 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   "Offline" tag, receipt code, and **⚠ Check** notes (receipt mismatch, device clock, started before opening, finished
   after time, arrived late, two attempts). The receipt written on the attendance sheet is what proves the answers were
   not changed later (a very technical student could re-make a matching code, but not the one on paper).
+- **QR hand-in** (offline exams): the finished screen shows **Hand in with a QR code**: the answers in one or more QR
+  codes (about 280 characters each, changing every 2.5 s; format in `src/routes/collect.js`, drawn with
+  `public/vendor/qrcode.js`). The teacher scans them at `/collect?exam=ID` (Results → Offline copies → Scan answers), or a
+  helper at a **collector link** (`/collect?t=TOKEN`, Helper links: this exam only, no scores, 4 h–3 days, can be turned
+  off). The scanner (phone camera; BarcodeDetector or `public/vendor/jsqr.js`) keeps scans when the phone is offline and
+  sends them later. The receipt is checked as for any offline hand-in; the same answers arriving twice count once.
 - **Help this student** (Results → Answers, for an attempt not submitted): extra time / **Let them continue** after a
   void or a crash (same questions, the server's saved answers come back; the student reopens within 30 min,
   `resume_until`), **Submit these answers** (the draft saved on the server), **Upload an answer file** (the student's

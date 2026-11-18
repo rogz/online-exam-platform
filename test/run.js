@@ -848,6 +848,81 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const fRow = await dbOne(`SELECT status, offline FROM attempts WHERE exam_id = $1`, [off2.b]);
   ok(fRow && fRow.status === 'SUBMITTED' && fRow.offline, 'the uploaded offline answers are graded');
 
+  // ── QR hand-in: the student's device never gets internet; a qrHelper scans the QR codes ──
+  const qrExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const qs = (await (await fetch('/api/teacher/questions')).json()).questions;
+    const ids = [qs.find((q) => q.type === 'TF').id, qs.find((q) => q.type === 'ESSAY').id];
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'QR quiz', questionIds: ids, timeLimitMinutes: 10, password: 'QRQR-1234-XY', shuffleQuestions: false,
+      options: { offlineMode: true }, startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    const link = (await post('/api/teacher/exams/' + x.id + '/collectors', { label: 'Ana (assistant)', hours: 4 })).link;
+    const link2 = (await post('/api/teacher/exams/' + x.id + '/collectors', { label: 'Old link', hours: 4 })).link;
+    const links = (await (await fetch('/api/teacher/exams/' + x.id + '/collectors')).json()).links;
+    await post('/api/teacher/exams/' + x.id + '/collectors', { revoke: links.find((l) => l.label === 'Old link').id });
+    return { id: x.id, link, link2 };
+  });
+  await student.goto(BASE + '/exam?id=' + qrExam.id);
+  await student.waitForSelector('#offlineCard:not([hidden]) #dlBtn'); await student.click('#dlBtn');
+  await student.waitForFunction(() => /Ready offline|could not/.test((document.querySelector('#dlStatus') || {}).textContent || ''), null, { timeout: 60000 });
+  await student.context().setOffline(true);
+  await student.goto(BASE + '/exam?id=' + qrExam.id);
+  await student.waitForSelector('#screen-rules:not([hidden]) #offlineCard:not([hidden])', { timeout: 20000 });
+  await student.check('#agree'); await student.fill('#examPassword', 'QRQR-1234-XY'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])', { timeout: 20000 });
+  await student.click('#questions .question:nth-child(1) label:has-text("True")');
+  const essay = 'Ohm\'s law: V = I × R, so R = V / I = 10 Ω. '.repeat(40);
+  await student.fill('#questions .question:nth-child(2) textarea', essay);
+  await student.click('#submitBtn'); await student.click('#confirmYes');
+  await student.waitForSelector('#qrBox:not([hidden]) #qrShow');
+  await student.click('#qrShow');
+  await student.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '..', 'public', 'vendor', 'jsqr.js'), 'utf8') });
+  const qrTexts = [];
+  for (let k = 0; k < 10; k++) {
+    const t = await student.evaluate(async () => {
+      const img = document.querySelector('#qrImg'); await img.decode();
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      const r = window.jsQR(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
+      return r ? new TextDecoder('utf-8').decode(new Uint8Array(r.binaryData)) : null;
+    });
+    if (t && !qrTexts.includes(t)) qrTexts.push(t);
+    const total = t ? Number(t.split('|')[2]) : 0;
+    if (total && qrTexts.length >= total) break;
+    if (await student.isVisible('#qrNext')) await student.click('#qrNext'); else break;
+  }
+  await shot(student, '21-offline-qr');
+  ok(qrTexts.length >= 2 && qrTexts.every((t) => t.startsWith('EWQ|')), 'a long answer becomes ' + qrTexts.length + ' QR codes that a phone can read');
+  // the qrHelper opens the collector link (no account) and scans
+  const helperCtx = await browser.newContext({ viewport: { width: 400, height: 800 } });
+  const qrHelper = await helperCtx.newPage();
+  qrHelper.on('pageerror', (e) => errors.push('helper: ' + e.message));
+  await qrHelper.goto(BASE + qrExam.link2);
+  await qrHelper.waitForSelector('#err:not([hidden])');
+  ok((await qrHelper.textContent('#err')).includes('turned off'), 'a helper link that was turned off does not work');
+  await qrHelper.goto(BASE + qrExam.link);
+  await qrHelper.waitForFunction(() => document.querySelector('#title').textContent.includes('QR quiz'));
+  ok((await qrHelper.textContent('#sub')).includes('Ana (assistant)'), 'the helper link opens the scanner for this exam only');
+  for (const t of qrTexts.slice().reverse()) await qrHelper.evaluate((x) => window.EWCollect.handleText(x), t); // any order
+  await qrHelper.waitForSelector('#list li .ok', { timeout: 15000 });
+  const hl = await qrHelper.textContent('#list');
+  const qrRow = await dbOne(`SELECT a.status, a.offline, a.review, a.score, (SELECT student_answer FROM responses r WHERE r.attempt_id = a.id AND r.type = 'ESSAY') AS essay
+      FROM attempts a WHERE a.exam_id = $1`, [qrExam.id]);
+  ok(hl.includes('Juan Dela Cruz') && hl.includes('Received') && !/\d+ \/ \d+/.test(hl), 'helper sees "Juan Dela Cruz ✓ Received" (no score)');
+  ok(qrRow && qrRow.status === 'SUBMITTED' && qrRow.offline && !qrRow.review && qrRow.essay === essay, 'the scanned answers are graded; the long essay (with Ω and ×) arrived complete');
+  // the teacher's own scanner: the same codes again are recognised as already received
+  await teacher.goto(BASE + '/collect?exam=' + qrExam.id);
+  await teacher.waitForFunction(() => document.querySelector('#title').textContent.includes('QR quiz'));
+  for (const t of qrTexts) await teacher.evaluate((x) => window.EWCollect.handleText(x), t);
+  await teacher.waitForSelector('#list li .ok', { timeout: 15000 });
+  ok((await teacher.textContent('#list')).includes('Already received'), 'scanning the same student twice: "Already received", nothing changes');
+  // the student's device later gets internet: nothing is sent twice
+  await student.context().setOffline(false);
+  await student.waitForSelector('#screen-result:not([hidden])', { timeout: 30000 });
+  ok((await dbOne('SELECT count(*)::int AS n FROM attempts WHERE exam_id = $1', [qrExam.id])).n === 1, 'when the student\'s device gets internet later, the same answers are not counted twice');
+  await helperCtx.close();
+
   // ── Safeguards: backups, pausing updates, helping one student ──
   const backupLib = require('../src/backup');
   const bk = await backupLib.backupNow();

@@ -4,7 +4,8 @@
  * (network first); only when there is no internet are the kept copies used.
  */
 const CACHE = 'exam-wizard-offline-v1';
-const SHELL = ['/exam', '/offline', '/exam/app.js', '/exam/camera.js', '/exam/styles.css', '/favicon.svg', '/assets/common.js', '/assets/theme.css'];
+const CACHE_SHELL = ['/exam', '/offline', '/exam/app.js', '/exam/camera.js', '/exam/styles.css', '/favicon.svg', '/vendor/qrcode.js'];
+const SHELL = CACHE_SHELL;
 
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
@@ -37,7 +38,7 @@ self.addEventListener('fetch', (e) => {
   if (same && url.pathname.startsWith('/api/')) return; // data always comes from the site
   if (same && req.mode === 'navigate') {
     // /exam?id=… and /offline: the site first; without internet, the kept page
-    if (url.pathname !== '/exam' && url.pathname !== '/offline') return;
+    if (url.pathname !== '/exam' && url.pathname !== '/offline' && url.pathname !== '/collect') return;
     e.respondWith(fetch(req).catch(async () => (await caches.match(url.pathname)) || Response.error()));
     return;
   }

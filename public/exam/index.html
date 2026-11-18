@@ -123,6 +123,15 @@
       <div class="big-icon warn">⏳</div>
       <h1>Your exam is finished</h1>
       <div id="pendingReceipt" class="receipt" hidden></div>
+      <div id="qrBox" class="qr-box" hidden>
+        <button type="button" class="btn" id="qrShow">📱 Hand in with a QR code (no internet needed)</button>
+        <div id="qrArea" hidden>
+          <p class="small">Show this to your teacher or a helper. They scan it with their phone.</p>
+          <img id="qrImg" alt="QR code with your answers">
+          <p class="small" id="qrPart"></p>
+          <button type="button" class="btn small" id="qrNext" hidden>Next code →</button>
+        </div>
+      </div>
       <p><b>Your answers are saved on this device</b> and will be sent automatically when the internet is back.</p>
       <p class="notice warn" id="pendingKeep"><b>Keep this page open.</b> Do not close or reload it until you see "Exam submitted".</p>
       <p class="muted" id="pendingStatus">Waiting for the internet…</p>
@@ -207,6 +216,7 @@
     <div class="modal center"><div class="spinner" aria-hidden="true"></div><p id="busyText">Please wait…</p></div>
   </div>
 
+  <script src="/vendor/qrcode.js"></script>
   <script src="/exam/camera.js"></script>
   <script src="/exam/app.js"></script>
 </body>

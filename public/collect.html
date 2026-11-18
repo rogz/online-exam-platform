@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collect answers — {site}</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/exam/styles.css">
+<style>
+  .scan-wrap { position: relative; max-width: 520px; margin: 10px auto; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 4 / 3; }
+  .scan-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .scan-frame { position: absolute; inset: 14%; border: 3px solid rgba(255, 255, 255, .85); border-radius: 12px; pointer-events: none; }
+  .scan-wrap.hit .scan-frame { border-color: #2ecc71; }
+  .counts { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 8px 0; font-size: 14px; }
+  .counts span { background: #f1f4f8; border-radius: 14px; padding: 4px 10px; }
+  .scan-list { list-style: none; padding: 0; margin: 10px 0; }
+  .scan-list li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #e3e7ee; font-size: 14px; }
+  .scan-list .ok { color: #1a7f37; } .scan-list .wait { color: #9a6700; } .scan-list .bad { color: #b42318; }
+  #status { text-align: center; font-weight: 600; min-height: 1.4em; }
+</style>
+</head>
+<body>
+  <header class="topbar"><div class="brand">{site} · Collect answers</div></header>
+  <main>
+    <section class="card">
+      <h1 id="title" style="margin-bottom:4px">Collect answers</h1>
+      <p class="muted small" id="sub">Scan the QR code on each student's screen after they finish an offline exam.</p>
+      <div id="err" class="notice bad" hidden></div>
+      <div class="scan-wrap" id="wrap"><video id="video" muted playsinline></video><div class="scan-frame"></div></div>
+      <p style="text-align:center"><button type="button" class="btn primary big" id="startCam">📷 Start scanning</button></p>
+      <p id="status"></p>
+      <div class="counts"><span id="cScanned">0 scanned</span><span id="cSent">0 received</span><span id="cWait">0 waiting for internet</span></div>
+      <ul class="scan-list" id="list"></ul>
+      <p class="small muted">No internet on this phone? Keep scanning: the answers are kept here and sent by themselves when the phone is online. Keep this page open until "waiting" is 0.</p>
+    </section>
+  </main>
+  <script src="/vendor/jsqr.js"></script>
+  <script src="/assets/collect.js"></script>
+</body>
+</html>

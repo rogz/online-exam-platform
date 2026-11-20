@@ -590,8 +590,8 @@
     card.hidden = false;
     card.className = 'offline-card' + (pk ? ' ready' : '');
     card.innerHTML = pk
-      ? '<b>✓ Downloaded on this device</b> (' + new Date(pk.downloadedAt).toLocaleString() + '). On exam day you can open this page <b>without internet</b>: ' +
-        'use this same browser and the same link (or <a href="/offline">Downloaded exams</a>). Your teacher gives you the password in the room.' +
+      ? '<b>✓ Downloaded on this device</b> (' + new Date(pk.downloadedAt).toLocaleString() + '). <b>📌 Bookmark this page now.</b> On exam day, open it in this same browser, ' +
+        '<b>without internet</b>: the bookmark, or <b>' + location.host + '/offline</b>. Your teacher gives you the password in the room.' +
         '<div><button type="button" class="btn" id="dlBtn">Download again</button> <span class="small muted" id="dlStatus"></span></div>'
       : '<b>📥 This exam can be taken without internet.</b> Download it now, while you have internet (on the device you will use for the exam). ' +
         'It stays locked until your teacher gives the password.<div><button type="button" class="btn primary" id="dlBtn">Download for offline</button> <span class="small muted" id="dlStatus"></span></div>';
@@ -609,8 +609,8 @@
         serverOffset: r.serverNow - Date.now(), downloadedAt: Date.now(), externalImages: r.externalImages });
       status.textContent = 'Saving the exam page…';
       const kept = await keepForOffline(r.externalImages || []);
-      await renderOfflineCard();
       const bad = kept.filter((k) => !k.ok);
+      renderOfflineRules(await pkgGet(state.examId)); // from now on this device uses the downloaded copy
       const camBad = bad.some((k) => window.ExamCamera.files.includes(k.url));
       $('dlStatus').innerHTML = (bad.length
         ? '<span style="color:#9a6700">Downloaded, but ' + bad.length + ' file' + (bad.length === 1 ? '' : 's') + ' could not be saved' + (camBad ? ' (camera checker)' : '') + '. Click "Download again" with a better connection.</span>'
@@ -648,7 +648,10 @@
     n.hidden = false; n.className = 'offline-card';
     n.innerHTML = state.offline.st
       ? '<b>📴 Offline exam in progress.</b> Click <i>Continue exam</i> to go on. Your answers so far are kept on this device.'
-      : '<b>📴 Offline exam</b> (no internet needed). Enter the password your teacher gives you in the room, then start. When you finish, you get a <b>receipt code</b>; your answers are sent when this device is online again.';
+      : '<b>📥 Downloaded on this device</b> (' + new Date(pk.downloadedAt).toLocaleString() + '). No internet is needed. Enter the password your teacher gives you in the room, then start. ' +
+        'When you finish, you get a <b>receipt code</b>; your answers are sent as soon as this device is online.' +
+        (navigator.onLine ? '<div><button type="button" class="btn small" id="dlBtn">Download again</button> <span class="small muted" id="dlStatus">Only if your teacher asks (e.g. the password changed).</span></div>' : '');
+    if ($('dlBtn')) $('dlBtn').onclick = downloadForOffline;
     if (state.offline.st) $('startBtn').textContent = 'Continue exam';
     const rs = state.rules.reconnectSeconds || 0, mr = state.rules.maxReconnects || 0;
     $('ruleReload').innerHTML = '<b>This is an offline exam: no internet is needed.</b> Your answers are kept on this device. ' +
@@ -777,7 +780,7 @@
       st.status = 'SENT'; st.sentAt = Date.now(); offSave();
       await pkgDel('open:' + o.pkg.packageId);
       o.syncing = false;
-      if (r.status === 'VOIDED') { $('voidOffline').hidden = true; return; }
+      if (r.status === 'VOIDED') { $('voidOffline').className = 'notice ok'; $('voidOffline').textContent = '✓ This was sent to your teacher.'; return; }
       showResult(r);
       if (st.receipt) $('resultNote').textContent = ($('resultNote').textContent ? $('resultNote').textContent + ' ' : '') + 'Receipt code: ' + st.receipt + '.';
     } catch (e) {
@@ -1443,6 +1446,7 @@
     clearInterval(state.timerId);
     state.violations.push({ event, detail, at: new Date().toISOString() });
     const payload = { attemptId: state.attemptId, event, detail, final: true };
+    if (!state.offline) { try { localStorage.setItem('exam-void:' + state.examId, JSON.stringify(Object.assign({}, payload, { resend: true }))); } catch (e) { /* ignore */ } }
 
     if (document.visibilityState === 'hidden') {
       // The page may be closing: a beacon is delivered even if the tab is gone.
@@ -1475,12 +1479,18 @@
     $('voidReason').textContent = event ? REASONS[event] : (serverMessage || 'Exam rules were broken.');
     $('voidStudent').textContent = state.student ? state.student.name + ' (' + state.student.id + ')' : '';
     $('voidExam').textContent = state.info ? state.info.exam.title : '';
-    $('voidTime').textContent = new Date().toLocaleString();
+    const st0 = state.offline && state.offline.st;
+    $('voidTime').textContent = new Date(st0 && st0.finishedAt ? st0.finishedAt - (state.serverOffset || 0) : Date.now()).toLocaleString();
     $('voidRef').textContent = state.attemptId ? state.attemptId.slice(0, 8).toUpperCase() : '';
     $('questions').textContent = ''; // hide the questions
     closeZoom();
     $('voidModal').hidden = false;
-    if (state.offline && state.offline.st) { $('voidOffline').hidden = false; syncOffline(); }
+    if (state.offline && state.offline.st) {
+      $('voidOffline').hidden = false;
+      $('voidOffline').className = 'notice warn';
+      $('voidOffline').textContent = st0.status === 'SENT' ? '✓ This was sent to your teacher.' : 'Offline exam: this is sent to your teacher automatically when this device is online. Keep this page open, or open the exam again later with internet.';
+      syncOffline();
+    }
   }
 
   let blurTimer = null;
@@ -1661,9 +1671,15 @@
     }
     const left = pendingFromStorage();
     if (left) { show('pending'); sendPending(left); return; } // finished earlier without internet: send those answers first
+    // an exam voided here earlier while the internet was off: tell the server now (the void must not get lost)
+    let lostVoid = null;
+    try { lostVoid = JSON.parse(localStorage.getItem('exam-void:' + state.examId) || 'null'); } catch (e) { lostVoid = null; }
+    if (lostVoid && lostVoid.attemptId) {
+      try { await api('violation', lostVoid, 2); localStorage.removeItem('exam-void:' + state.examId); } catch (e) { if (e.code !== 'NETWORK') { try { localStorage.removeItem('exam-void:' + state.examId); } catch (err) { /* ignore */ } } }
+    }
     const pk = await pkgGet(state.examId);
     const pst = pk && offLoad(pk.packageId);
-    if (pk && pst && pst.status === 'IN_PROGRESS') { renderOfflineRules(pk); return; } // an offline exam is in progress here
+    if (pk && (!pst || pst.status === 'IN_PROGRESS')) { renderOfflineRules(pk); return; } // downloaded here: always the downloaded copy
     if (pk && pst && (pst.status === 'FINISHED' || pst.status === 'VOIDED')) {
       // finished offline earlier: send it now (or keep trying)
       state.offline = { pkg: pk, st: pst };

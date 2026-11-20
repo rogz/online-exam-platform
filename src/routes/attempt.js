@@ -164,7 +164,7 @@ async function receiveOffline(b, o) {
       if (!okTime(startedAt) || !okTime(finishedAt)) review.push('The device clock looked wrong (start or finish time not possible).');
       if (exam.start && start < exam.start.getTime() - 15 * 60000) review.push('Started before the exam opened (' + new Date(start).toISOString() + ').');
       if (exam.end && start > exam.end.getTime()) review.push('Started after the exam closed.');
-      if (b.receipt !== expect) review.push('The receipt code (' + str(b.receipt, 10) + ') does not match these answers: they may have been changed after finishing.');
+      if (!b.voided && b.receipt !== expect) review.push('The receipt code (' + str(b.receipt, 10) + ') does not match these answers: they may have been changed after finishing.');
       const events = (Array.isArray(b.events) ? b.events : []).slice(0, 300);
       if (events.some((e) => e && e.event === 'CLOCK_CHANGED')) review.push('The device clock was changed during the exam.');
       const graceMs = exam.options.submitGraceSeconds * 1000;
@@ -450,7 +450,10 @@ const actions = {
       const a = await lockAttempt(t.query, req.body.attemptId, req.user.id);
       const event = VIOLATION_LABELS[req.body.event] ? req.body.event : 'TAB_SWITCH';
       const detail = str(req.body.detail, 300);
-      if (a.status !== STATUS.IN_PROGRESS) { await logEvent(t.query, a.id, event, detail); return { status: a.status, reason: a.void_reason }; }
+      if (a.status !== STATUS.IN_PROGRESS) {
+        if (!req.body.resend) await logEvent(t.query, a.id, event, detail);
+        return { status: a.status, reason: a.void_reason };
+      }
       // Leaving the exam (tab switch, another window): warnings first, if the exam allows them.
       if (['TAB_SWITCH', 'LEFT_WINDOW'].includes(event) && req.body.final !== true) {
         const allowedF = (await examOfAttempt(t.query, a)).options.focusWarnings;

@@ -38,6 +38,10 @@ self.addEventListener('fetch', (e) => {
   if (same && url.pathname.startsWith('/api/')) return; // data always comes from the site
   if (same && req.mode === 'navigate') {
     // /exam?id=… and /offline: the site first; without internet, the kept page
+    if (url.pathname === '/student') { // My Exams needs internet; without it, show the exams downloaded here
+      e.respondWith(fetch(req).catch(async () => (await caches.match('/offline')) || Response.error()));
+      return;
+    }
     if (url.pathname !== '/exam' && url.pathname !== '/offline' && url.pathname !== '/collect') return;
     e.respondWith(fetch(req).catch(async () => (await caches.match(url.pathname)) || Response.error()));
     return;

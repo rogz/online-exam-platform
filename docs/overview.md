@@ -56,6 +56,10 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   "Offline" tag, receipt code, and **⚠ Check** notes (receipt mismatch, device clock, started before opening, finished
   after time, arrived late, two attempts). The receipt written on the attendance sheet is what proves the answers were
   not changed later (a very technical student could re-make a matching code, but not the one on paper).
+  A device that downloaded the exam always uses its downloaded copy (even with internet), so one device can't have an
+  online and an offline attempt. Opening My Exams (`/student`) without internet shows `/offline`. A void that could not
+  be sent (online exam, internet off) is kept in the browser and sent the next time the exam page opens. Results show an
+  attempt whose time (and late-sending window) ran out as "Time ran out (not submitted)".
 - **QR hand-in** (offline exams): the finished screen shows **Hand in with a QR code**: the answers in one or more QR
   codes (about 280 characters each, changing every 2.5 s; format in `src/routes/collect.js`, drawn with
   `public/vendor/qrcode.js`). The teacher scans them at `/collect?exam=ID` (Results → Offline copies → Scan answers), or a

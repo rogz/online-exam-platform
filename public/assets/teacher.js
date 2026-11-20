@@ -707,7 +707,7 @@
   }
 
   // ───────── Results ─────────
-  const STATUS_TAG = { SUBMITTED: '<span class="tag ok">Submitted</span>', VOIDED: '<span class="tag bad">Voided</span>', IN_PROGRESS: '<span class="tag">In progress</span>', EXPIRED: '<span class="tag grey">Not submitted</span>' };
+  const STATUS_TAG = { SUBMITTED: '<span class="tag ok">Submitted</span>', VOIDED: '<span class="tag bad">Voided</span>', IN_PROGRESS: '<span class="tag">In progress</span>', EXPIRED: '<span class="tag grey" title="The time ran out and nothing was submitted. Open Answers to help the student.">Time ran out (not submitted)</span>' };
   async function viewResults(id) {
     const r = await api('/teacher/exams/' + id + '/results');
     const sub = r.attempts.filter((a) => a.status === 'SUBMITTED');
@@ -842,7 +842,7 @@
       <div class="muted">Downloaded so far: ${off.downloaded} of ${off.enrolled} students.${off.notDownloaded.length ? ' Not yet: ' + off.notDownloaded.map((s) => esc(s.name)).join(', ') + '.' : ''}</div>
       <h2>In the room</h2>
       <ol>
-        <li>Students open the exam on the device they downloaded it on (same browser; the exam link, or <b>My Exams → Exams downloaded on this device</b>). No internet is needed.</li>
+        <li>Students open the exam on the device they downloaded it on, in the same browser: their bookmark, the exam link, or <b>${esc(location.host)}/offline</b>. No internet is needed.</li>
         <li>When everyone is seated and ready, say the password. They type it, tick the rules box and click <b>Start exam</b>.</li>
         <li>When a student finishes, the screen shows a <b>receipt code</b> (like 4F7-K2A). Write it in the table below.</li>
         <li>Hand-in: the answers are sent by themselves when the device is online. Without internet, scan the student's <b>QR code</b>: Results → Offline copies → <b>Scan answers</b> (or a helper link).</li>

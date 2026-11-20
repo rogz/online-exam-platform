@@ -612,6 +612,12 @@ router.get('/exams/:id/results', async (req, res) => {
             (SELECT updated_at FROM avatars av WHERE av.user_id = u.id) AS avatar_updated
        FROM attempts a JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at`, [x.id]);
   attempts.forEach((a) => { a.avatarUrl = auth.avatarUrl(a.student_id, a.avatar_updated); });
+  const xo = core.examOptions(x.options);
+  const overdueMs = xo.submitGraceSeconds * 1000 + (xo.keepGoingOffline ? xo.offlineSubmitMinutes * 60000 : 0) + 120000;
+  attempts.forEach((a) => {
+    // time ran out (and the late-sending window too) without a submit: the student closed the page or lost the device
+    if (a.status === 'IN_PROGRESS' && a.deadline && Date.now() > new Date(a.deadline).getTime() + overdueMs) a.status = 'EXPIRED';
+  });
   const notStarted = await db.many(
     `SELECT u.id, u.name, u.email, u.student_no, (SELECT updated_at FROM avatars av WHERE av.user_id = u.id) AS avatar_updated
        FROM enrollments e JOIN users u ON u.id = e.student_id

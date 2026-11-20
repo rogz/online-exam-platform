@@ -792,6 +792,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await student.click('#dlBtn');
   await student.waitForFunction(() => /Ready offline|could not/.test(document.querySelector('#dlStatus') ? document.querySelector('#dlStatus').textContent : ''), null, { timeout: 60000 });
   ok((await student.textContent('#dlStatus')).includes('Ready offline') && (await student.textContent('#offlineCard')).includes('Downloaded on this device'), 'student downloads the exam for offline: "Ready offline"');
+  ok(await student.isVisible('#examPassword') && !(await dbOne('SELECT 1 AS x FROM attempts WHERE exam_id = $1', [offExam.id])),
+    'after downloading, this device uses the downloaded copy (password needed), even with internet: no online attempt can start');
   await teacher.goto(BASE + '/teacher#results/' + offExam.id); await teacher.waitForSelector('.panel h3:has-text("Offline copies")');
   ok((await teacher.locator('.panel', { hasText: 'Offline copies' }).locator('.statgrid').textContent()).includes('1 / '), 'Results show who has downloaded the offline copy');
   const [sheet] = await Promise.all([teacher.waitForEvent('popup'), teacher.click('#examDaySheet')]);
@@ -802,7 +804,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await student.context().setOffline(true);
   await student.goto(BASE + '/exam?id=' + offExam.id);
   await student.waitForSelector('#screen-rules:not([hidden]) #offlineCard:not([hidden])', { timeout: 20000 });
-  ok((await student.textContent('#offlineCard')).includes('Offline exam'), 'without internet, the downloaded exam still opens');
+  ok((await student.textContent('#offlineCard')).includes('No internet is needed'), 'without internet, the downloaded exam still opens');
   await student.check('#agree');
   await student.fill('#examPassword', 'WRONG-PASS-1'); await student.click('#startBtn');
   await student.waitForSelector('#startError:not([hidden])');
@@ -929,6 +931,64 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await student.waitForSelector('#screen-result:not([hidden])', { timeout: 30000 });
   ok((await dbOne('SELECT count(*)::int AS n FROM attempts WHERE exam_id = $1', [qrExam.id])).n === 1, 'when the student\'s device gets internet later, the same answers are not counted twice');
   await helperCtx.close();
+
+  // ── Offline fixes: a voided offline exam, My Exams without internet, a void made while offline, old unfinished attempts ──
+  const voidOff = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.type === 'TF').slice(0, 1).map((q) => q.id);
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Offline void quiz', questionIds: ids, timeLimitMinutes: 10, password: 'VOID-TEST-99',
+      options: { offlineMode: true }, startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  });
+  await student.goto(BASE + '/exam?id=' + voidOff);
+  await student.waitForSelector('#offlineCard:not([hidden]) #dlBtn'); await student.click('#dlBtn');
+  await student.waitForFunction(() => /Ready offline|could not/.test((document.querySelector('#dlStatus') || {}).textContent || ''), null, { timeout: 60000 });
+  await student.context().setOffline(true);
+  await student.goto(BASE + '/exam?id=' + voidOff);
+  await student.waitForSelector('#screen-rules:not([hidden]) #examPassword', { timeout: 20000 });
+  await student.check('#agree'); await student.fill('#examPassword', 'VOID-TEST-99'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])', { timeout: 20000 });
+  await student.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+  await student.waitForSelector('#voidModal:not([hidden])', { timeout: 10000 });
+  await student.goto(BASE + '/student'); // My Exams without internet → the downloaded exams
+  await student.waitForSelector('.off-item', { timeout: 20000 });
+  const offList = await student.textContent('#list');
+  ok(offList.includes('Offline void quiz') && offList.includes('Voided · not sent yet'), 'My Exams without internet shows the downloaded exams; a voided one says "Voided · not sent yet"');
+  await shot(student, '22-offline-list');
+  await student.context().setOffline(false);
+  await student.goto(BASE + '/exam?id=' + voidOff);
+  await student.waitForFunction(() => (document.querySelector('#voidOffline') || {}).textContent.includes('Sent to your teacher') || (document.querySelector('#voidOffline') || {}).textContent.includes('sent to your teacher.'), null, { timeout: 20000 });
+  const vRow = await dbOne('SELECT status, review FROM attempts WHERE exam_id = $1', [voidOff]);
+  ok(vRow && vRow.status === 'VOIDED' && !vRow.review, 'the offline void arrives as Voided, shows "✓ sent to your teacher", and no false receipt warning');
+  await student.goto(BASE + '/offline'); await student.waitForSelector('.off-item');
+  ok((await student.textContent('#list')).includes('Voided · sent ✓'), 'the downloaded-exams page then says "Voided · sent ✓"');
+  // an online exam voided while the internet was off: the void is sent the next time the page opens
+  const lostExam = await mkExam('Lost void quiz', {});
+  await student.goto(BASE + '/exam?id=' + lostExam);
+  await student.waitForSelector('#screen-rules:not([hidden])'); await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  await student.context().setOffline(true);
+  await student.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+  await student.waitForSelector('#voidModal:not([hidden])', { timeout: 10000 });
+  await student.waitForTimeout(500);
+  const stillIn = (await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [lostExam])).status;
+  await student.goto('about:blank');
+  await student.context().setOffline(false);
+  await student.goto(BASE + '/exam?id=' + lostExam);
+  await student.waitForSelector('#screen-error:not([hidden]), #screen-rules:not([hidden])', { timeout: 20000 });
+  ok(stillIn === 'IN_PROGRESS' && (await dbOne('SELECT status FROM attempts WHERE exam_id = $1', [lostExam])).status === 'VOIDED',
+    'a void that happened without internet is sent the next time the exam page opens');
+  // Results: an attempt whose time ran out long ago is "Time ran out (not submitted)", not "In progress"
+  const oldExam = await mkExam('Old attempt quiz', {});
+  await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    await post({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+  }, oldExam);
+  await db.query(`UPDATE attempts SET started_at = now() - interval '5 hours', deadline = now() - interval '4 hours' WHERE exam_id = $1`, [oldExam]);
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#results/' + oldExam); await teacher.waitForSelector('[data-answers]');
+  ok((await teacher.textContent('#aRows')).includes('Time ran out'), 'Results: an old unfinished attempt shows "Time ran out (not submitted)"');
 
   // ── Safeguards: backups, pausing updates, helping one student ──
   const backupLib = require('../src/backup');

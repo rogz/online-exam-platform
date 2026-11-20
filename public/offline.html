@@ -11,32 +11,41 @@
   <header class="topbar"><div class="brand">{site}</div></header>
   <main>
     <section class="card">
-      <h1>📥 Exams downloaded on this device</h1>
-      <p class="muted">These exams can be opened without internet. Your teacher gives you the password when the exam starts.</p>
+      <h1 style="margin-bottom:6px">📥 Downloaded exams</h1>
+      <p class="muted" style="margin-top:0">On this device. They open <b>without internet</b>. Your teacher gives you the password when the exam starts.</p>
       <ul id="list" class="offline-list"><li class="muted">Looking…</li></ul>
-      <p class="small muted">Use the same browser you downloaded with. Don't clear this browser's data before you have sent your answers.</p>
-      <a class="btn" href="/student">← My Exams (needs internet)</a>
+      <p class="small muted">Use this same browser. Don't clear the browser's data until your answers are sent.</p>
+      <a class="btn" href="/student" style="text-decoration:none">← My Exams (needs internet)</a>
     </section>
   </main>
 <script>
 (function () {
   const list = document.getElementById('list');
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  // what the student should do next, for each state of a downloaded exam
+  const view = (p, st) => {
+    if (!st) return { pill: '<span class="pill">Ready</span>', btn: 'Open exam', cls: 'primary', note: 'Wait for your teacher\'s password.' };
+    if (st.status === 'IN_PROGRESS') return { pill: '<span class="pill warn">In progress</span>', btn: 'Continue exam', cls: 'primary', note: '' };
+    if (st.status === 'SENT') return { pill: st.voided ? '<span class="pill bad">Voided · sent ✓</span>' : '<span class="pill ok">Sent ✓</span>', btn: 'Open', cls: '', note: st.receipt ? 'Receipt code ' + esc(st.receipt) : '' };
+    if (st.status === 'VOIDED') return { pill: '<span class="pill bad">Voided · not sent yet</span>', btn: 'Open (sends it when online)', cls: 'primary', note: 'Your teacher is told when this device is online.' };
+    return { pill: '<span class="pill warn">Finished · not sent yet</span>', btn: 'Open (sends the answers when online)', cls: 'primary', note: st.receipt ? 'Receipt code <b>' + esc(st.receipt) + '</b>' : '' };
+  };
   const req = indexedDB.open('exam-wizard', 1);
   req.onupgradeneeded = () => { const d = req.result; if (!d.objectStoreNames.contains('packages')) d.createObjectStore('packages'); if (!d.objectStoreNames.contains('snaps')) d.createObjectStore('snaps', { autoIncrement: true }); };
   req.onerror = () => { list.innerHTML = '<li>This browser cannot keep downloaded exams.</li>'; };
   req.onsuccess = () => {
     const out = [];
-    const t = req.result.transaction('packages', 'readonly');
-    t.objectStore('packages').openCursor().onsuccess = (e) => {
+    req.result.transaction('packages', 'readonly').objectStore('packages').openCursor().onsuccess = (e) => {
       const c = e.target.result;
       if (c) { if (c.value && c.value.meta && typeof c.key === 'string' && !c.key.startsWith('open:')) out.push(c.value); c.continue(); return; }
-      if (!out.length) { list.innerHTML = '<li class="muted">No exams are downloaded on this device.</li>'; return; }
+      if (!out.length) { list.innerHTML = '<li class="muted">No exams are downloaded on this device. Open the exam link from your teacher (with internet) and click <b>Download for offline</b>.</li>'; return; }
       list.innerHTML = out.map((p) => {
         let st = null; try { st = JSON.parse(localStorage.getItem('exam-offline:' + p.packageId) || 'null'); } catch (err) { st = null; }
-        const tag = !st ? 'Ready' : st.status === 'IN_PROGRESS' ? 'In progress' : st.status === 'SENT' ? 'Sent ✓' : 'Finished: not sent yet';
-        return '<li><a class="btn primary" href="/exam?id=' + encodeURIComponent(p.meta.id) + '">' + esc(p.meta.title) + '</a> <span class="muted">' + esc(p.meta.className || '') +
-          (p.meta.startText ? ' · ' + esc(p.meta.startText) : '') + '</span> <span class="tag">' + esc(tag) + '</span></li>';
+        const v = view(p, st);
+        return '<li class="off-item"><h2>' + esc(p.meta.title) + ' ' + v.pill + '</h2>' +
+          '<div class="meta">' + esc(p.meta.className || '') + (p.meta.startText ? '<br>' + esc(p.meta.startText) : '') + (p.meta.timeLimitMinutes ? ' · ' + p.meta.timeLimitMinutes + ' minutes' : '') +
+          (v.note ? '<br>' + v.note : '') + '</div>' +
+          '<a class="btn ' + v.cls + ' big" href="/exam?id=' + encodeURIComponent(p.meta.id) + '">' + v.btn + '</a></li>';
       }).join('');
     };
   };

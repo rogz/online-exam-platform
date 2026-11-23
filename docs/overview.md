@@ -37,6 +37,10 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   **Copy link**, Duplicate, Delete.
 - **Exams list**: Results / Edit / Copy link / Preview; scrollable; **Archive**, "Archive closed exams (N)",
   Archived list with Restore (archiving an exam tidies the teacher's list and deletes its camera snapshots; results stay).
+- **Several blanks in one FIB question** (`V = ____ V and I = ____ A`): the answer key has one entry per blank separated
+  by ` ; ` (only split when the text has 2+ blanks); the editor shows one box per blank; students get a box inside the
+  sentence for each; the answer is stored as a JSON list; each correct blank earns points × 1/n (`blankCount`,
+  `blankKeys` in `src/exam-core.js`).
 - **Fill-in-the-blank checks**: close spellings ("Feranti"), numbers just outside the range and a different unit
   ("kV" for "V") are flagged as **to check** in Results (the number decides correct/wrong; spellings stay wrong) with a
   one-click **Give full points**. Notes are for the teacher only.

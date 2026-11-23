@@ -12,9 +12,9 @@ The first row holds the column names. Column order doesn't matter. `*` = require
 |---|---|---|
 | `QuestionID` | Optional code. Importing a row with an ID that already exists **updates** that question instead of adding a copy. | `PSA-LP-01` |
 | `Type` * | `MC` multiple choice, `TF` true/false, `FIB` fill in the blank, `ESSAY` | `MC` |
-| `Question` * | The question text. For `FIB`, put `____` (4 underscores) where the blank goes. | `V = I × ____` |
+| `Question` * | The question text. For `FIB`, put `____` (4 underscores) where the blank goes; several blanks are allowed. | `V = I × ____` · `V = ____ V and I = ____ A` |
 | `Choices` | `MC` only: the choices separated by ` \| ` (space, bar, space). Leave empty for other types. | `Volt \| Ohm \| Ampere \| Watt` |
-| `Answer` * | `MC`: the **letter** of the correct choice (`A`, `B`, `C`…). `TF`: `TRUE` or `FALSE`. `FIB`: accepted answers separated by ` \| ` (capital letters don't matter); for a calculated number, a range: `122.1-122.9 V`, `122.5 ± 0.4 V` or `122.5 ± 1%` (`+-` also works; any number inside counts, the unit is optional). `ESSAY`: optional guide answer for the teacher. | `B` · `TRUE` · `R \| resistance` |
+| `Answer` * | `MC`: the **letter** of the correct choice (`A`, `B`, `C`…). `TF`: `TRUE` or `FALSE`. `FIB`: accepted answers separated by ` \| ` (capital letters don't matter); for a calculated number, a range: `122.1-122.9 V`, `122.5 ± 0.4 V` or `122.5 ± 1%` (`+-` also works; any number inside counts, the unit is optional). **Several blanks:** one entry per blank, in order, separated by ` ; ` (e.g. `120 ± 1% V ; 5 ± 1% A`); each correct blank earns an equal share of the points. `ESSAY`: optional guide answer for the teacher. | `B` · `TRUE` · `R \| resistance` |
 | `Points` | Points for the question; empty = 1. | `2` |
 | `Topic` | Optional. Used for filtering and for picking random questions per topic. | `Inductance` |
 | `Image` | Optional picture link starting with `https://` (Google Drive links must be shared publicly). | `https://…` |

@@ -295,7 +295,7 @@
     const ov = d.el;
     function drawAnswer() {
       const box = $('#qeAnswer', ov);
-      $('#qeTextHint', ov).textContent = st.type === 'FIB' ? 'Mark the blank with ____ (3 or more underscores), e.g. "The unit of resistance is the ____."' : '';
+      $('#qeTextHint', ov).textContent = st.type === 'FIB' ? 'Mark each blank with ____ (3 or more underscores), e.g. "The unit of resistance is the ____." Several blanks are fine: "V = ____ V and I = ____ A".' : '';
       if (st.type === 'MC') {
         box.innerHTML = '<label>Choices <span class="muted">(select the correct one)</span></label><div id="chs"></div><button type="button" class="btn small" id="addCh">+ Add choice</button>';
         const chs = $('#chs', ov);
@@ -311,6 +311,14 @@
         const v = q && q.type === 'TF' ? String(q.answer).toUpperCase() : 'TRUE';
         box.innerHTML = `<label>Correct answer</label><div class="row" style="margin-bottom:12px"><label class="check"><input type="radio" name="tf" value="TRUE"${v === 'TRUE' ? ' checked' : ''}> True</label>
           <label class="check"><input type="radio" name="tf" value="FALSE"${v === 'FALSE' ? ' checked' : ''}> False</label></div>`;
+      } else if (st.type === 'FIB' && blanksNow() > 1) {
+        // several blanks: one box per blank (saved as "answers 1 ; answers 2 ; …")
+        const n = blanksNow();
+        if (st.fibParts === undefined) st.fibParts = q && q.type === 'FIB' ? String(q.answer).split(';').map((x) => x.trim()) : [];
+        box.innerHTML = `<label>Accepted answers for each blank</label>${Array.from({ length: n }, (_, i) => `<div class="row fibrow" style="gap:6px;align-items:center;margin-bottom:6px">
+            <label for="qeFib${i}" style="margin:0;min-width:64px">Blank ${i + 1}</label><input type="text" id="qeFib${i}" data-fibn="${i}" value="${esc(st.fibParts[i] || '')}" style="flex:1" placeholder="e.g. 120 ± 1% V   or   ohm | ohms"></div>`).join('')}
+          <div class="hint">Each blank is worth an equal share of the points (here ${n} blanks). Within a blank: several accepted answers with |, number ranges like <b>122.5 ± 1%</b>.</div>`;
+        $$('[data-fibn]', box).forEach((inp) => inp.oninput = () => { st.fibParts[+inp.dataset.fibn] = inp.value; });
       } else if (st.type === 'FIB') {
         box.innerHTML = `<div class="field"><label for="qeFib">Accepted answers</label><input type="text" id="qeFib" value="${esc(q && q.type === 'FIB' ? q.answer : '')}" placeholder="e.g. ohm | ohms | Ω   or   122.5 ± 1% V">
           <div class="hint">Separate several accepted answers with |. Capital letters and extra spaces are ignored.<br>
@@ -324,6 +332,7 @@
     function readAnswer(o) {
       if (st.type === 'MC') { st.answer = String.fromCharCode(65 + st.correct); }
       else if (st.type === 'TF') { const r = $('input[name=tf]:checked', o); st.answer = r ? r.value : ''; }
+      else if (st.type === 'FIB' && blanksNow() > 1) st.answer = Array.from({ length: blanksNow() }, (_, i) => (st.fibParts[i] || '').trim()).join(' ; ');
       else if (st.type === 'FIB') st.answer = $('#qeFib', o).value;
       else st.answer = $('#qeModel', o).value;
     }
@@ -332,14 +341,26 @@
       $('#qePic', ov).innerHTML = src ? `<img class="imgprev" alt="Question picture" src="${esc(src)}">` : '';
     }
     $('#qeType', ov).onchange = (e) => { st.type = e.target.value; drawAnswer(); };
+    // the answer boxes follow the number of blanks typed in the question
+    function blanksNow() { return ($('#qeText', ov).value.match(/_{3,}/g) || []).length; }
+    let lastBlanks = blanksNow();
+    $('#qeText', ov).addEventListener('input', () => {
+      const n = blanksNow();
+      if (st.type !== 'FIB' || n === lastBlanks) return;
+      if (lastBlanks <= 1 && n > 1 && $('#qeFib', ov)) st.fibParts = [$('#qeFib', ov).value.trim()];
+      const keep = n <= 1 && lastBlanks > 1 ? (st.fibParts || [])[0] || '' : null;
+      lastBlanks = n;
+      drawAnswer();
+      if (keep !== null && $('#qeFib', ov)) $('#qeFib', ov).value = keep;
+    });
     // Symbol buttons insert into the text box last used (question, choices, accepted answers or model answer).
     let symTarget = null;
-    ov.addEventListener('focusin', (e) => { if (e.target.matches('#qeText, #qeFib, #qeModel, #chs input[type=text]')) symTarget = e.target; });
+    ov.addEventListener('focusin', (e) => { if (e.target.matches('#qeText, #qeFib, [data-fibn], #qeModel, #chs input[type=text]')) symTarget = e.target; });
     $$('#qeSyms .sym', ov).forEach((b) => {
       b.onmousedown = (e) => e.preventDefault(); // keep the cursor in the text box
       b.onclick = () => {
         let t = symTarget && symTarget.isConnected ? symTarget : null;
-        if (!t) t = $('#qeFib', ov) || $('#qeText', ov);
+        if (!t) t = $('#qeFib', ov) || $('[data-fibn]', ov) || $('#qeText', ov);
         const a = t.selectionStart ?? t.value.length, z = t.selectionEnd ?? t.value.length;
         t.setRangeText(b.dataset.sym, a, z, 'end');
         t.dispatchEvent(new Event('input', { bubbles: true }));
@@ -370,7 +391,7 @@
         <tr><td><b>Type</b> *</td><td><b>MC</b> multiple choice, <b>TF</b> true/false, <b>FIB</b> fill in the blank, <b>ESSAY</b></td><td>MC</td></tr>
         <tr><td><b>Question</b> *</td><td>The question text. For FIB, type <b>____</b> (4 underscores) where the blank goes.</td><td>V = I × ____</td></tr>
         <tr><td><b>Choices</b></td><td>MC only: the choices separated by <b>|</b> (the key above Enter, with Shift)</td><td>Volt | Ohm | Ampere | Watt</td></tr>
-        <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter); for numbers a range: <b>122.1-122.9 V</b>, <b>122.5 ± 1%</b><br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>(optional)</td></tr>
+        <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter); for numbers a range: <b>122.1-122.9 V</b>, <b>122.5 ± 1%</b>; several blanks: one entry per blank, separated by <b>;</b><br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>(optional)</td></tr>
         <tr><td><b>Points</b></td><td>Points for the question. Empty = 1</td><td>2</td></tr>
         <tr><td><b>Topic</b></td><td>Optional. Used for filtering and for picking random questions per topic</td><td>Circuits</td></tr>
         <tr><td><b>Folder</b></td><td>Optional. Folder path; folders are created if they don't exist</td><td>EEE 150/Midterm</td></tr>

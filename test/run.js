@@ -523,6 +523,42 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.waitForSelector('[data-answers]');
   ok(!(await teacher.textContent('#aRows')).includes('to check'), 'saving clears "to check"');
 
+  // ── Fill in the blank with several blanks: one box per blank, partial points ──
+  await teacher.goto(BASE + '/teacher#questions'); await teacher.waitForSelector('#addQ');
+  await teacher.click('#addQ'); await teacher.waitForSelector('.dialog #qeType');
+  await teacher.selectOption('#qeType', 'FIB');
+  await teacher.fill('#qeText', 'The load draws V = ____ V and I = ____ A.');
+  await teacher.waitForSelector('[data-fibn="1"]');
+  await teacher.fill('[data-fibn="0"]', '120 ± 1% V'); await teacher.fill('[data-fibn="1"]', '5 ± 1% A | five');
+  await teacher.fill('#qePoints', '2'); await teacher.fill('#qeCode', 'FIB-2B');
+  await teacher.click('.dialog .ft .btn.primary'); await toastSays(teacher, 'Question saved');
+  const twoB = await dbOne(`SELECT id, answer FROM questions WHERE code = 'FIB-2B'`);
+  ok(twoB && twoB.answer === '120 ± 1% V ; 5 ± 1% A | five', 'the editor shows one answer box per blank and saves them in order (' + (twoB && twoB.answer) + ')');
+  const twoExam = await teacher.evaluate(async (qid) => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Two blanks quiz', questionIds: [qid], timeLimitMinutes: 10,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  }, twoB.id);
+  await student.goto(BASE + '/exam?id=' + twoExam);
+  await student.waitForSelector('#screen-rules:not([hidden])'); await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  ok((await student.locator('#questions .q-text input.blank').count()) === 2, 'students see a box inside the sentence for each blank');
+  await student.locator('#questions .q-text input.blank').nth(0).fill('120.4 V');
+  ok((await student.textContent('#progress')).startsWith('0 /'), 'with one blank still empty, the question does not count as answered yet');
+  await student.locator('#questions .q-text input.blank').nth(1).fill('7');
+  await shot(student, '24-two-blanks');
+  await student.click('#submitBtn'); await student.click('#confirmYes');
+  await student.waitForSelector('#screen-result:not([hidden])');
+  const twoRes = await dbOne(`SELECT r.points_earned, r.max_points, r.student_answer FROM responses r JOIN attempts a ON a.id = r.attempt_id WHERE a.exam_id = $1`, [twoExam]);
+  ok(twoRes.points_earned === 1 && twoRes.max_points === 2 && twoRes.student_answer.includes('(1) 120.4 V ✓') && twoRes.student_answer.includes('(2) 7 ✗'),
+    'each blank is graded on its own: 1 of 2 right gives 1 / 2 points (' + twoRes.student_answer + ')');
+  const badQ = await teacher.evaluate(async () => (await (await fetch('/api/teacher/questions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+    body: JSON.stringify({ type: 'FIB', text: 'a ____ b ____', answer: 'only one', code: 'FIB-BAD' }) })).json()));
+  ok(badQ && !badQ.ok && String(badQ.error).includes('2 blanks: give the accepted answers for each blank'), 'a question with 2 blanks but answers for only 1 cannot be saved, with a clear message');
+
   // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
   const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();

@@ -233,7 +233,27 @@ function validateQuestion(q) {
   }
   if (q.type === 'TF' && parseTF(q.answer) === null) p.push('the answer must be True or False');
   if (q.type === 'FIB' && !String(q.answer || '').trim()) p.push('enter at least one accepted answer');
+  else if (q.type === 'FIB' && blankCount(q.text) > 1) {
+    const n = blankCount(q.text), keys = blankKeys(q.answer, n);
+    if (keys.length !== n || keys.some((k) => !k)) p.push('the question has ' + n + ' blanks: give the accepted answers for each blank, in order, separated by ; (e.g. 120 ± 1% ; 5 ± 1%)');
+  }
   return p;
+}
+
+// ───────── Fill in the blank with several blanks ─────────
+// The question text has several ____ ; the answer key has one entry per blank, separated by ";" (each entry may have
+// alternatives with "|", number ranges, etc.). The student's answer is a JSON list, one value per blank.
+// Each correct blank earns an equal share of the points.
+
+/** How many blanks (3 or more underscores) the question text has. */
+const blankCount = (text) => (String(text || '').match(/_{3,}/g) || []).length;
+/** The answer key per blank (only split when the question has several blanks, so a ";" in a one-blank answer stays). */
+const blankKeys = (answer, n) => (n > 1 ? String(answer || '').split(';').map((s) => s.trim()) : [String(answer || '')]);
+/** The student's values per blank. */
+function blankValues(raw, n) {
+  if (n < 2) return [raw];
+  try { const a = JSON.parse(raw); if (Array.isArray(a)) return Array.from({ length: n }, (_, i) => (a[i] === undefined || a[i] === null ? '' : String(a[i]))); } catch (e) { /* not a list */ }
+  return [String(raw || '')].concat(Array(n - 1).fill(''));
 }
 
 // ───────── Fill in the blank: number ranges, units, close spellings ─────────
@@ -337,6 +357,15 @@ function gradeQuestion(q, raw) {
     out.correctText = expected === null ? String(q.answer) : (expected ? 'True' : 'False');
     out.studentText = given === null ? '' : (given ? 'True' : 'False');
     out.correct = given !== null && given === expected;
+  } else if (q.type === 'FIB' && blankCount(q.text) > 1) {
+    const n = blankCount(q.text), keys = blankKeys(q.answer, n), vals = blankValues(value, n);
+    const res = keys.slice(0, n).concat(Array(Math.max(0, n - keys.length)).fill('')).map((k, i) => gradeFib(k, vals[i]));
+    const right = res.filter((r) => r.correct).length;
+    out.correct = right === n;
+    out.points = Math.round(q.points * right / n * 100) / 100;
+    out.studentText = vals.every((v) => !String(v).trim()) ? '' : vals.map((v, i) => '(' + (i + 1) + ') ' + (String(v).trim() || '—') + (res[i].correct ? ' ✓' : ' ✗')).join('   ');
+    out.correctText = keys.map((k, i) => '(' + (i + 1) + ') ' + k.split('|').map((s) => s.trim()).filter(Boolean).join(' / ')).join('   ');
+    out.note = res.map((r, i) => (r.note ? 'Blank ' + (i + 1) + ': ' + r.note : '')).filter(Boolean).join(' ');
   } else if (q.type === 'FIB') {
     out.correctText = String(q.answer).split('|').map((s) => s.trim()).filter(Boolean).join(' / ');
     Object.assign(out, gradeFib(q.answer, value));
@@ -489,6 +518,6 @@ module.exports = {
   STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS, MAX_IMAGE_BYTES, DEFAULT_OPTIONS,
   examOptions, examConfig, questionFromRow, windowStatus,
   normText, parseTF, mcCorrectIndex, normType, validateQuestion, gradeQuestion,
-  seededShuffle, attemptQuestions, setSummary, rankOf, gradeFib, numericSpec, parseNumber, closeSpelling, applyPoints, pointsRule, publicQuestion, normTopic,
+  seededShuffle, attemptQuestions, setSummary, rankOf, blankCount, blankKeys, gradeFib, numericSpec, parseNumber, closeSpelling, applyPoints, pointsRule, publicQuestion, normTopic,
   driveFileId, externalImageUrl, deviceOf, deviceAllowed,
 };

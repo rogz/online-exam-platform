@@ -884,7 +884,28 @@
 
       const saved = state.answers[q.id];
 
-      if (q.type === 'FIB') {
+      const nBlanks = q.type === 'FIB' ? (q.text.match(/_{3,}/g) || []).length : 0;
+      if (nBlanks > 1) {
+        // several blanks: a box inside the sentence for each; the answer is a list, one value per blank
+        let vals = [];
+        try { vals = JSON.parse(saved || '[]'); } catch (e) { vals = []; }
+        if (!Array.isArray(vals)) vals = [];
+        const parts = q.text.split(/_{3,}/), inputs = [];
+        parts.forEach((p, i) => {
+          text.append(p);
+          if (i < parts.length - 1) {
+            const inp = document.createElement('input');
+            inp.className = 'blank';
+            inp.setAttribute('aria-label', 'Blank ' + (i + 1));
+            inp.placeholder = String(i + 1);
+            inp.autocomplete = 'off'; inp.spellcheck = false;
+            inp.value = vals[i] || '';
+            inp.addEventListener('input', () => setAnswer(q.id, JSON.stringify(inputs.map((x) => x.value))));
+            inputs.push(inp);
+            text.append(inp);
+          }
+        });
+      } else if (q.type === 'FIB') {
         const input = document.createElement('input');
         input.className = 'blank';
         input.setAttribute('aria-label', 'Your answer');
@@ -1058,7 +1079,11 @@
 
   function isAnswered(id) {
     const v = state.answers[id];
-    return v !== undefined && v !== null && String(v).trim() !== '';
+    if (v === undefined || v === null || String(v).trim() === '') return false;
+    if (String(v).charAt(0) === '[') { // several blanks: answered when every blank is filled
+      try { const a = JSON.parse(v); if (Array.isArray(a)) return a.length > 0 && a.every((x) => String(x).trim() !== '') && a.length >= ((state.questions.find((q) => q.id === id) || {}).text || '').split(/_{3,}/).length - 1; } catch (e) { /* plain text */ }
+    }
+    return true;
   }
 
   function updateProgress() {

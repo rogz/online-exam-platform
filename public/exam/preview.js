@@ -83,7 +83,20 @@
       if (q.image) li.appendChild(picture(q.image.src));
       const saved = state.answers[q.id];
 
-      if (q.type === 'FIB') {
+      const nBlanks = q.type === 'FIB' ? (q.text.match(/_{3,}/g) || []).length : 0;
+      if (nBlanks > 1) {
+        let vals = []; try { vals = JSON.parse(saved || '[]'); } catch (e) { vals = []; }
+        if (!Array.isArray(vals)) vals = [];
+        const parts = q.text.split(/_{3,}/), inputs = [];
+        parts.forEach((p, i) => {
+          text.append(p);
+          if (i < parts.length - 1) {
+            const inp = el('input', 'blank'); inp.setAttribute('aria-label', 'Blank ' + (i + 1)); inp.placeholder = String(i + 1); inp.autocomplete = 'off'; inp.value = vals[i] || '';
+            inp.addEventListener('input', () => { state.answers[q.id] = JSON.stringify(inputs.map((x) => x.value)); });
+            inputs.push(inp); text.append(inp);
+          }
+        });
+      } else if (q.type === 'FIB') {
         const input = el('input', 'blank'); input.setAttribute('aria-label', 'Your answer'); input.autocomplete = 'off'; input.value = saved || '';
         input.addEventListener('input', () => { state.answers[q.id] = input.value; });
         const parts = q.text.split(/_{3,}/);

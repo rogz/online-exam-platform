@@ -514,6 +514,11 @@
     const sel = new Set(x ? x.question_ids : []);
     const order = x ? x.question_ids.slice() : [];
     const topicPick = {}; (x ? x.topic_counts : []).forEach((t) => { topicPick[t.topic] = t.count; });
+    // Combine the parts of a topic ("Long Lines P1", "Long Lines P2" → "Long Lines"); same rule as topicBase() in src/exam-core.js
+    const topicBase = (t) => String(t || '').replace(/(^|[\s\-–—:(,/])(?:p|part|pt)\.?\s*\d+[a-z]?\)?(?=$|[\s\-–—:),/])/gi, ' ')
+      .replace(/[\s\-–—:(),/]+$/g, '').replace(/^[\s\-–—:(),/]+/g, '').replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+([:,])/g, '$1').trim() || String(t || '').trim();
+    const storedTc = x ? x.topic_counts || [] : [];
+    let combineParts = storedTc.length ? storedTc.some((t) => t.group) : true;
     const typePick = {}; ((x && x.options && x.options.typePicks) || []).forEach((t) => { typePick[t.type] = t.count; });
     const net = o.offlineMode ? 'OFFLINE' : o.keepGoingOffline === false ? 'STRICT' : 'ONLINE';
     const pr0 = (x && x.options && x.options.pointsRule) || {};
@@ -653,18 +658,29 @@
       const present = new Set(order.map((qid) => (qs.find((y) => y.id === qid) || {}).type).filter(Boolean));
       return Object.keys(typePick).filter((t) => present.has(t) && typePick[t] > 0).map((t) => ({ type: t, count: typePick[t] }));
     };
+    const topicKey = (t) => (combineParts ? topicBase(t) : t);
     function drawTopics() {
-      const avail = {};
-      order.forEach((qid) => { const q = qs.find((y) => y.id === qid); if (q && q.topic) avail[q.topic] = (avail[q.topic] || 0) + 1; });
+      const avail = {}, parts = {};
+      order.forEach((qid) => {
+        const q = qs.find((y) => y.id === qid);
+        if (!q || !q.topic) return;
+        const k = topicKey(q.topic);
+        avail[k] = (avail[k] || 0) + 1;
+        (parts[k] = parts[k] || new Set()).add(q.topic);
+      });
       const ts = Object.keys(avail).sort();
-      $('#topicPicks').innerHTML = ts.length ? `<table class="list"><thead><tr><th>Topic</th><th>Selected</th><th>Each student gets</th></tr></thead><tbody>${ts.map((t) => `<tr><td>${esc(t)}</td><td>${avail[t]}</td>
+      const hasParts = order.some((qid) => { const q = qs.find((y) => y.id === qid); return q && q.topic && topicBase(q.topic) !== q.topic; });
+      const label = (t) => esc(t) + (combineParts && parts[t].size > 1 ? ` <span class="muted small" title="${esc(Array.from(parts[t]).sort().join(', '))}">(${parts[t].size} parts)</span>` : '');
+      $('#topicPicks').innerHTML = (hasParts ? `<label class="check small" style="margin:0 0 6px"><input type="checkbox" id="combineParts"${combineParts ? ' checked' : ''}> Combine parts of the same topic (P1, P2, P3…) into one</label>` : '') +
+        (ts.length ? `<table class="list"><thead><tr><th>Topic</th><th>Selected</th><th>Each student gets</th></tr></thead><tbody>${ts.map((t) => `<tr><td>${label(t)}</td><td>${avail[t]}</td>
         <td><input type="number" min="0" max="${avail[t]}" style="width:80px" data-topic="${esc(t)}" value="${topicPick[t] || ''}" placeholder="0"></td></tr>`).join('')}</tbody></table>`
-        : 'Select questions that have a topic to pick a number from each topic.';
+        : 'Select questions that have a topic to pick a number from each topic.');
+      if ($('#combineParts')) $('#combineParts').onchange = (e) => { combineParts = e.target.checked; Object.keys(topicPick).forEach((k) => delete topicPick[k]); drawTopics(); drawSum(); };
       $$('[data-topic]').forEach((i) => i.oninput = () => { const n = Math.max(0, Math.round(+i.value || 0)); if (n) topicPick[i.dataset.topic] = n; else delete topicPick[i.dataset.topic]; drawSum(); });
     }
     const activeTopics = () => {
-      const present = new Set(order.map((qid) => (qs.find((y) => y.id === qid) || {}).topic).filter(Boolean));
-      return Object.keys(topicPick).filter((t) => present.has(t) && topicPick[t] > 0).map((t) => ({ topic: t, count: topicPick[t] }));
+      const present = new Set(order.map((qid) => (qs.find((y) => y.id === qid) || {}).topic).filter(Boolean).map(topicKey));
+      return Object.keys(topicPick).filter((t) => present.has(t) && topicPick[t] > 0).map((t) => ({ topic: t, count: topicPick[t], group: combineParts }));
     };
     function drawSum() {
       const picked = order.map((qid) => qs.find((y) => y.id === qid)).filter(Boolean);

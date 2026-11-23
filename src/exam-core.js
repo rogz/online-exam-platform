@@ -157,7 +157,7 @@ function examConfig(row) {
     questionSeconds,
     pickCount: Math.max(0, Number(row.pick_count) || 0),
     topicCounts: (Array.isArray(row.topic_counts) ? row.topic_counts : [])
-      .map((t) => ({ topic: String(t.topic || '').trim(), count: Math.round(Number(t.count) || 0) }))
+      .map((t) => ({ topic: String(t.topic || '').trim(), count: Math.round(Number(t.count) || 0), group: t.group === true }))
       .filter((t) => t.topic && t.count > 0),
     faceMode: ['START', 'ALWAYS'].includes(row.face_mode) ? row.face_mode : 'OFF',
     cameraPreview: row.camera_preview !== false,
@@ -397,13 +397,25 @@ function seededShuffle(arr, seedStr) {
 
 const normTopic = (t) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
+/**
+ * A topic without its part label: "Long Transmission Lines P1", "P2 - Medium Lines", "Long Lines (Part 3)" →
+ * "Long Transmission Lines", "Medium Lines", "Long Lines". Used when the teacher combines the parts of a topic.
+ * The same function is in public/assets/teacher.js (keep them alike).
+ */
+function topicBase(t) {
+  return String(t || '').replace(/(^|[\s\-–—:(,/])(?:p|part|pt)\.?\s*\d+[a-z]?\)?(?=$|[\s\-–—:),/])/gi, ' ')
+    .replace(/[\s\-–—:(),/]+$/g, '').replace(/^[\s\-–—:(),/]+/g, '').replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+([:,])/g, '$1').trim() || String(t || '').trim();
+}
+/** Does a question's topic belong to this per-topic pick? (group: all parts of the topic together) */
+const topicMatches = (tc, topic) => (tc.group ? normTopic(topicBase(topic)) === normTopic(topicBase(tc.topic)) : normTopic(topic) === normTopic(tc.topic));
+
 /** The questions one attempt gets (random set per student if configured), fixed per attempt. */
 function attemptQuestions(exam, pool, attemptId) {
   let qs = pool;
   if (exam.topicCounts.length) {
     const picked = new Set();
     exam.topicCounts.forEach((tc) => {
-      const inTopic = pool.filter((q) => normTopic(q.topic) === normTopic(tc.topic));
+      const inTopic = pool.filter((q) => topicMatches(tc, q.topic));
       seededShuffle(inTopic, attemptId + ':pick:' + normTopic(tc.topic)).slice(0, tc.count).forEach((q) => picked.add(q.id));
     });
     qs = pool.filter((q) => picked.has(q.id));
@@ -427,7 +439,7 @@ function setSummary(exam, pool) {
   if (exam.topicCounts.length) {
     let count = 0, points = 0, fixed = true;
     const breakdown = exam.topicCounts.map((tc) => {
-      const inTopic = pool.filter((q) => normTopic(q.topic) === normTopic(tc.topic));
+      const inTopic = pool.filter((q) => topicMatches(tc, q.topic));
       const n = Math.min(tc.count, inTopic.length);
       count += n;
       if (n === inTopic.length) points += sum(inTopic.map((q) => q.points));
@@ -518,6 +530,6 @@ module.exports = {
   STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS, MAX_IMAGE_BYTES, DEFAULT_OPTIONS,
   examOptions, examConfig, questionFromRow, windowStatus,
   normText, parseTF, mcCorrectIndex, normType, validateQuestion, gradeQuestion,
-  seededShuffle, attemptQuestions, setSummary, rankOf, blankCount, blankKeys, gradeFib, numericSpec, parseNumber, closeSpelling, applyPoints, pointsRule, publicQuestion, normTopic,
+  seededShuffle, attemptQuestions, setSummary, rankOf, blankCount, blankKeys, gradeFib, numericSpec, parseNumber, closeSpelling, applyPoints, pointsRule, publicQuestion, normTopic, topicBase, topicMatches,
   driveFileId, externalImageUrl, deviceOf, deviceAllowed,
 };

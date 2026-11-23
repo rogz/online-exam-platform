@@ -559,6 +559,38 @@ fs.mkdirSync(SHOTS, { recursive: true });
     body: JSON.stringify({ type: 'FIB', text: 'a ____ b ____', answer: 'only one', code: 'FIB-BAD' }) })).json()));
   ok(badQ && !badQ.ok && String(badQ.error).includes('2 blanks: give the accepted answers for each blank'), 'a question with 2 blanks but answers for only 1 cannot be saved, with a clear message');
 
+  // ── Pick per topic, combining the parts of a topic (Long Lines P1, P2 … → Long Lines) ──
+  const partsExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const rows = ['QuestionID,Type,Question,Choices,Answer,Points,Topic,Folder'];
+    [['LL1a', 'Long Lines P1'], ['LL1b', 'Long Lines P1'], ['LL2a', 'Long Lines P2'], ['LL2b', 'Long Lines (Part 3)'], ['ML1a', 'Medium Lines P1'], ['ML2a', 'P2 - Medium Lines']]
+      .forEach(([id, topic]) => rows.push(`PT-${id},TF,Statement ${id},,TRUE,1,${topic},Parts`));
+    await post('/api/teacher/questions/import', { csv: rows.join('\n') });
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.code.startsWith('PT-')).map((q) => q.id);
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Topic parts quiz', questionIds: ids, timeLimitMinutes: 10,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    return x.id;
+  });
+  await teacher.goto(BASE + '/teacher#exam/' + partsExam); await teacher.waitForSelector('#combineParts');
+  const ptRows = await teacher.$$eval('#topicPicks tbody tr td:first-child', (td) => td.map((x) => x.textContent.trim()));
+  ok(await teacher.isChecked('#combineParts') && ptRows.length === 2 && ptRows[0].startsWith('Long Lines') && ptRows[0].includes('3 parts') && ptRows[1].startsWith('Medium Lines'),
+    'pick per topic combines the parts of a topic: ' + ptRows.join(' | '));
+  await teacher.fill('#topicPicks [data-topic="Long Lines"]', '3'); await teacher.fill('#topicPicks [data-topic="Medium Lines"]', '1');
+  await teacher.click('#saveBtn'); await toastSays(teacher, 'Saved');
+  const ptSaved = await dbOne('SELECT topic_counts FROM exams WHERE id = $1', [partsExam]);
+  ok(ptSaved.topic_counts.length === 2 && ptSaved.topic_counts.every((t) => t.group === true), 'saved as combined topics');
+  await teacher.evaluate(async (id) => { await fetch('/api/teacher/exams/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ publish: true }) }); }, partsExam);
+  const ptSet = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const st = await post({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    return st.questions.map((q) => q.text);
+  }, partsExam);
+  ok(ptSet.length === 4 && ptSet.filter((x) => /LL/.test(x)).length === 3 && ptSet.filter((x) => /ML/.test(x)).length === 1, 'each student gets 3 from all the Long Lines parts and 1 from Medium Lines');
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#exam/' + partsExam); await teacher.waitForSelector('#combineParts');
+  await teacher.uncheck('#combineParts');
+  ok((await teacher.$$eval('#topicPicks tbody tr', (r) => r.length)) === 5, 'unticking shows each part as its own topic again');
+
   // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
   const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
@@ -1137,7 +1169,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await admin.waitForSelector('#sBackupNow');
   ok((await admin.textContent('#sBackups')).includes('Download'), 'Site settings list the backups with Download buttons');
   await admin.check('#sPause'); await admin.click('#sSave'); await toastSays(admin, 'Settings saved');
-  const check2 = await (await fetch(BASE + '/deploy-check')).json();
+  let check2 = {};
+  for (let i = 0; i < 50 && !check2.paused; i++) { check2 = await (await fetch(BASE + '/deploy-check')).json(); if (!check2.paused) await sleep(100); }
   ok(check1.ok && check1.paused === false && outside.status === 404 && check2.paused === true, 'the deploy check sees "Pause site updates" and is not reachable from outside');
   await admin.uncheck('#sPause'); await admin.click('#sSave'); await toastSays(admin, 'Settings saved');
 

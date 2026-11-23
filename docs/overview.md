@@ -33,7 +33,8 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   built-in format guide and sample file; IDs (re-import with the same ID updates the question).
 - **Exam editor**: class, title, instructions, open/close time, time limit, password; random set per student
   (**N of the selected**, or **per topic** (optionally **combining the parts** of a topic: "Long Lines P1/P2/(Part 3)" → "Long Lines",
-  `topicBase()`, saved as `{topic, count, group: true}`), or **per question type**, e.g. 10 MC + 5 TF); optional **Points** override for
+  `topicBase()`, saved as `{topic, count, group: true, type}`; a topic pick can be limited to one type), and/or **per question
+  type** (e.g. 10 MC + 5 TF; taken from the questions not already picked by topic); optional **Points** override for
   the exam (same points for all, or per type, or per topic; the bank isn't changed) so random sets have equal totals;
   shuffle questions/choices;
   show score; all on one page or **one at a time** (optional no going back, time per question); allowed devices
@@ -177,6 +178,5 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 ## Open ideas (not built)
 - Talking detection for take-home exams (optional, off by default).
 - Faster phone checks (every 0.5 s) on fast computers.
-- Picking per topic **and** per type together.
 - Nightly database backups to S3 / server; moving the database to the server after a memory upgrade.
 - Sign-up protection (above); sending scores back to Google Classroom.

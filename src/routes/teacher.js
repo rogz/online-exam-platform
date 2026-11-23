@@ -422,7 +422,7 @@ function examInput(b) {
   const displayMode = b.displayMode === 'ONE' ? 'ONE' : 'ALL';
   const questionSeconds = displayMode === 'ONE' ? int(b.questionSeconds, 0, 0, 36000) : 0;
   const topicCounts = (Array.isArray(b.topicCounts) ? b.topicCounts : [])
-    .map((t) => ({ topic: str(t.topic, 120), count: int(t.count, 0, 0, 10000), group: t.group === true })).filter((t) => t.topic && t.count > 0);
+    .map((t) => ({ topic: str(t.topic, 120), count: int(t.count, 0, 0, 10000), group: t.group === true, type: ['MC', 'TF', 'FIB', 'ESSAY'].includes(t.type) ? t.type : null })).filter((t) => t.topic && t.count > 0);
   return {
     classId: b.classId,
     title: str(b.title, 200),
@@ -464,11 +464,11 @@ async function examProblems(teacherId, e, forPublish) {
   }
   if (e.pickCount > qs.length && qs.length) p.push('"questions per student" (' + e.pickCount + ') is more than the ' + qs.length + ' selected');
   e.topicCounts.forEach((tc) => {
-    const n = qs.filter((q) => core.topicMatches(tc, q.topic)).length;
-    if (tc.count > n) p.push('topic "' + tc.topic + '": ' + tc.count + ' requested but only ' + n + ' selected');
+    const n = qs.filter((q) => core.topicMatches(tc, q.topic) && (!tc.type || q.type === tc.type)).length;
+    if (tc.count > n) p.push('topic "' + tc.topic + '"' + (tc.type ? ' (' + ({ MC: 'multiple choice', TF: 'true/false', FIB: 'fill in the blank', ESSAY: 'essay' })[tc.type] + ')' : '') + ': ' + tc.count + ' requested but only ' + n + ' selected');
   });
   const TYPE_NAME = { MC: 'multiple choice', TF: 'true/false', FIB: 'fill in the blank', ESSAY: 'essay' };
-  if (!e.topicCounts.length) (e.options.typePicks || []).forEach((tp) => {
+  (e.options.typePicks || []).forEach((tp) => {
     const n = qs.filter((q) => q.type === tp.type).length;
     if (tp.count > n) p.push(TYPE_NAME[tp.type] + ': ' + tp.count + ' requested but only ' + n + ' selected');
   });

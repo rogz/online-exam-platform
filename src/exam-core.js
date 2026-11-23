@@ -157,14 +157,14 @@ function examConfig(row) {
     questionSeconds,
     pickCount: Math.max(0, Number(row.pick_count) || 0),
     topicCounts: (Array.isArray(row.topic_counts) ? row.topic_counts : [])
-      .map((t) => ({ topic: String(t.topic || '').trim(), count: Math.round(Number(t.count) || 0), group: t.group === true }))
+      .map((t) => ({ topic: String(t.topic || '').trim(), count: Math.round(Number(t.count) || 0), group: t.group === true, type: ['MC', 'TF', 'FIB', 'ESSAY'].includes(t.type) ? t.type : null }))
       .filter((t) => t.topic && t.count > 0),
     faceMode: ['START', 'ALWAYS'].includes(row.face_mode) ? row.face_mode : 'OFF',
     cameraPreview: row.camera_preview !== false,
     allowedDevices: ['TABLET', 'ANY'].includes(row.allowed_devices) ? row.allowed_devices : 'COMPUTER',
     password: row.password || '',
     options: examOptions(row.options),
-    get typePicks() { return this.topicCounts.length ? [] : this.options.typePicks; },
+    get typePicks() { return this.options.typePicks; }, // used together with topicCounts: per topic first, then per type from the rest
     published: !!row.published,
   };
 }
@@ -412,17 +412,15 @@ const topicMatches = (tc, topic) => (tc.group ? normTopic(topicBase(topic)) === 
 /** The questions one attempt gets (random set per student if configured), fixed per attempt. */
 function attemptQuestions(exam, pool, attemptId) {
   let qs = pool;
-  if (exam.topicCounts.length) {
+  if (exam.topicCounts.length || (exam.typePicks && exam.typePicks.length)) {
     const picked = new Set();
     exam.topicCounts.forEach((tc) => {
-      const inTopic = pool.filter((q) => topicMatches(tc, q.topic));
-      seededShuffle(inTopic, attemptId + ':pick:' + normTopic(tc.topic)).slice(0, tc.count).forEach((q) => picked.add(q.id));
+      const inTopic = pool.filter((q) => topicMatches(tc, q.topic) && (!tc.type || q.type === tc.type) && !picked.has(q.id));
+      seededShuffle(inTopic, attemptId + ':pick:' + normTopic(tc.topic) + (tc.type ? ':' + tc.type : '')).slice(0, tc.count).forEach((q) => picked.add(q.id));
     });
-    qs = pool.filter((q) => picked.has(q.id));
-  } else if (exam.typePicks && exam.typePicks.length) {
-    const picked = new Set();
-    exam.typePicks.forEach((tp) => {
-      seededShuffle(pool.filter((q) => q.type === tp.type), attemptId + ':pick:' + tp.type).slice(0, tp.count).forEach((q) => picked.add(q.id));
+    (exam.typePicks || []).forEach((tp) => {
+      const rest = pool.filter((q) => q.type === tp.type && !picked.has(q.id));
+      seededShuffle(rest, attemptId + ':pick:' + tp.type).slice(0, tp.count).forEach((q) => picked.add(q.id));
     });
     qs = pool.filter((q) => picked.has(q.id));
   } else if (exam.pickCount > 0 && exam.pickCount < pool.length) {
@@ -436,32 +434,22 @@ function attemptQuestions(exam, pool, attemptId) {
 function setSummary(exam, pool) {
   const sum = (a) => a.reduce((x, y) => x + y, 0);
   const samePoints = (qs) => qs.length > 0 && qs.every((q) => q.points === qs[0].points);
-  if (exam.topicCounts.length) {
-    let count = 0, points = 0, fixed = true;
-    const breakdown = exam.topicCounts.map((tc) => {
-      const inTopic = pool.filter((q) => topicMatches(tc, q.topic));
-      const n = Math.min(tc.count, inTopic.length);
-      count += n;
-      if (n === inTopic.length) points += sum(inTopic.map((q) => q.points));
-      else if (samePoints(inTopic)) points += n * inTopic[0].points;
-      else fixed = false;
-      return { topic: tc.topic, count: n, available: inTopic.length };
-    });
-    return { count, poolSize: pool.length, totalPoints: fixed ? points : null, typeCounts: null, topicBreakdown: breakdown };
-  }
-  if (exam.typePicks && exam.typePicks.length) {
-    let count = 0, points = 0, fixed = true;
+  if (exam.topicCounts.length || (exam.typePicks && exam.typePicks.length)) {
+    const sample = attemptQuestions(Object.assign({}, exam, { shuffleQuestions: false }), pool, 'summary');
+    // points are the same for every student when each rule picks from questions of equal points (or takes them all)
+    const rules = exam.topicCounts.map((tc) => pool.filter((q) => topicMatches(tc, q.topic) && (!tc.type || q.type === tc.type)))
+      .concat((exam.typePicks || []).map((tp) => pool.filter((q) => q.type === tp.type)));
+    const fixed = rules.every((c) => samePoints(c) || c.length === 0);
+    // the mix of types is the same for every student unless a topic pick takes "any type" from a topic with several types
+    const typesFixed = exam.topicCounts.every((tc) => tc.type || new Set(pool.filter((q) => topicMatches(tc, q.topic)).map((q) => q.type)).size <= 1);
     const typeCounts = {};
-    exam.typePicks.forEach((tp) => {
-      const ofType = pool.filter((q) => q.type === tp.type);
-      const n = Math.min(tp.count, ofType.length);
-      if (!n) return;
-      count += n; typeCounts[tp.type] = n;
-      if (n === ofType.length) points += sum(ofType.map((q) => q.points));
-      else if (samePoints(ofType)) points += n * ofType[0].points;
-      else fixed = false;
+    if (typesFixed) sample.forEach((q) => { typeCounts[q.type] = (typeCounts[q.type] || 0) + 1; });
+    const breakdown = exam.topicCounts.map((tc) => {
+      const inTopic = pool.filter((q) => topicMatches(tc, q.topic) && (!tc.type || q.type === tc.type));
+      return { topic: tc.topic, type: tc.type || null, count: Math.min(tc.count, inTopic.length), available: inTopic.length };
     });
-    return { count, poolSize: pool.length, totalPoints: fixed ? points : null, typeCounts, topicBreakdown: null };
+    return { count: sample.length, poolSize: pool.length, totalPoints: fixed ? sum(sample.map((q) => q.points)) : null,
+      typeCounts: typesFixed ? typeCounts : null, topicBreakdown: breakdown.length ? breakdown : null };
   }
   if (exam.pickCount > 0 && exam.pickCount < pool.length) {
     return { count: exam.pickCount, poolSize: pool.length, totalPoints: samePoints(pool) ? exam.pickCount * pool[0].points : null, typeCounts: null, topicBreakdown: null };

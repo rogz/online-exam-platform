@@ -513,7 +513,7 @@
       openCountdown: true, timeWarnings: [5, 1], reconnectSeconds: 60, maxReconnects: 3 }, x ? x.options : {});
     const sel = new Set(x ? x.question_ids : []);
     const order = x ? x.question_ids.slice() : [];
-    const topicPick = {}; (x ? x.topic_counts : []).forEach((t) => { topicPick[t.topic] = t.count; });
+    const topicPick = {}, topicType = {}; (x ? x.topic_counts : []).forEach((t) => { topicPick[t.topic] = t.count; if (t.type) topicType[t.topic] = t.type; });
     // Combine the parts of a topic ("Long Lines P1", "Long Lines P2" → "Long Lines"); same rule as topicBase() in src/exam-core.js
     const topicBase = (t) => String(t || '').replace(/(^|[\s\-–—:(,/])(?:p|part|pt)\.?\s*\d+[a-z]?\)?(?=$|[\s\-–—:),/])/gi, ' ')
       .replace(/[\s\-–—:(),/]+$/g, '').replace(/^[\s\-–—:(),/]+/g, '').replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+([:,])/g, '$1').trim() || String(t || '').trim();
@@ -544,8 +544,8 @@
         <fieldset><legend>Questions</legend>
           <div class="field"><label for="ePick">Questions per student (0 = all selected)</label><input type="number" id="ePick" min="0" value="${v('pick_count', 0)}">
             <div class="hint">e.g. select 50 and enter 10: each student gets a different random 10.</div></div>
-          <label>Or pick per topic <span class="muted">(replaces the number above)</span></label><div id="topicPicks" class="fit-table small muted"></div>
-          <label style="margin-top:10px">Or pick per question type <span class="muted">(e.g. 10 of 30 multiple choice and 5 of 12 true/false)</span></label><div id="typePicks" class="fit-table small muted"></div>
+          <label>Or pick per topic <span class="muted">(replaces the number above; choose a type to take only that type from the topic)</span></label><div id="topicPicks" class="fit-table small muted"></div>
+          <label style="margin-top:10px">And/or pick per question type <span class="muted">(from the questions not already picked by topic, e.g. 10 of 30 multiple choice)</span></label><div id="typePicks" class="fit-table small muted"></div>
           <div class="field" style="margin-top:10px"><label for="ePtsMode">Points <span class="muted">(optional)</span></label>
             <select id="ePtsMode">${opt('OFF', pr.mode, "Use each question's points from the bank")}${opt('ALL', pr.mode, 'Same points for every question')}${opt('TYPE', pr.mode, 'Set points per question type')}${opt('TOPIC', pr.mode, 'Set points per topic')}</select>
             <div id="ptsBox" class="fit-table small"></div>
@@ -660,27 +660,41 @@
     };
     const topicKey = (t) => (combineParts ? topicBase(t) : t);
     function drawTopics() {
-      const avail = {}, parts = {};
+      const avail = {}, parts = {}, byType = {};
       order.forEach((qid) => {
         const q = qs.find((y) => y.id === qid);
         if (!q || !q.topic) return;
         const k = topicKey(q.topic);
         avail[k] = (avail[k] || 0) + 1;
         (parts[k] = parts[k] || new Set()).add(q.topic);
+        byType[k] = byType[k] || {}; byType[k][q.type] = (byType[k][q.type] || 0) + 1;
       });
+      const nIn = (t) => (topicType[t] ? (byType[t][topicType[t]] || 0) : avail[t]);
+      const typeCell = (t) => {
+        const types = ['MC', 'TF', 'FIB', 'ESSAY'].filter((y) => byType[t][y]);
+        if (types.length < 2) return '<span class="muted">' + esc(TYPE_LONG[types[0]] || '') + '</span>';
+        return `<select data-ttype="${esc(t)}" aria-label="Type of questions from ${esc(t)}"><option value="">Any type</option>${types.map((y) => `<option value="${y}"${topicType[t] === y ? ' selected' : ''}>${TYPE_LONG[y]} (${byType[t][y]})</option>`).join('')}</select>`;
+      };
       const ts = Object.keys(avail).sort();
       const hasParts = order.some((qid) => { const q = qs.find((y) => y.id === qid); return q && q.topic && topicBase(q.topic) !== q.topic; });
       const label = (t) => esc(t) + (combineParts && parts[t].size > 1 ? ` <span class="muted small" title="${esc(Array.from(parts[t]).sort().join(', '))}">(${parts[t].size} parts)</span>` : '');
       $('#topicPicks').innerHTML = (hasParts ? `<label class="check small" style="margin:0 0 6px"><input type="checkbox" id="combineParts"${combineParts ? ' checked' : ''}> Combine parts of the same topic (P1, P2, P3…) into one</label>` : '') +
-        (ts.length ? `<table class="list"><thead><tr><th>Topic</th><th>Selected</th><th>Each student gets</th></tr></thead><tbody>${ts.map((t) => `<tr><td>${label(t)}</td><td>${avail[t]}</td>
-        <td><input type="number" min="0" max="${avail[t]}" style="width:80px" data-topic="${esc(t)}" value="${topicPick[t] || ''}" placeholder="0"></td></tr>`).join('')}</tbody></table>`
+        (ts.length ? `<table class="list"><thead><tr><th>Topic</th><th>Type</th><th>Selected</th><th>Each student gets</th></tr></thead><tbody>${ts.map((t) => `<tr><td>${label(t)}</td><td>${typeCell(t)}</td><td data-tavail="${esc(t)}">${nIn(t)}</td>
+        <td><input type="number" min="0" max="${nIn(t)}" style="width:80px" data-topic="${esc(t)}" value="${topicPick[t] || ''}" placeholder="0"></td></tr>`).join('')}</tbody></table>`
         : 'Select questions that have a topic to pick a number from each topic.');
-      if ($('#combineParts')) $('#combineParts').onchange = (e) => { combineParts = e.target.checked; Object.keys(topicPick).forEach((k) => delete topicPick[k]); drawTopics(); drawSum(); };
+      if ($('#combineParts')) $('#combineParts').onchange = (e) => { combineParts = e.target.checked; Object.keys(topicPick).forEach((k) => delete topicPick[k]); Object.keys(topicType).forEach((k) => delete topicType[k]); drawTopics(); drawSum(); };
+      $$('[data-ttype]').forEach((sel) => sel.onchange = () => {
+        const t = sel.dataset.ttype;
+        if (sel.value) topicType[t] = sel.value; else delete topicType[t];
+        const cell = $$('[data-tavail]').find((c) => c.dataset.tavail === t); if (cell) cell.textContent = nIn(t);
+        const inp = $$('[data-topic]').find((c) => c.dataset.topic === t); if (inp) inp.max = nIn(t);
+        drawSum();
+      });
       $$('[data-topic]').forEach((i) => i.oninput = () => { const n = Math.max(0, Math.round(+i.value || 0)); if (n) topicPick[i.dataset.topic] = n; else delete topicPick[i.dataset.topic]; drawSum(); });
     }
     const activeTopics = () => {
       const present = new Set(order.map((qid) => (qs.find((y) => y.id === qid) || {}).topic).filter(Boolean).map(topicKey));
-      return Object.keys(topicPick).filter((t) => present.has(t) && topicPick[t] > 0).map((t) => ({ topic: t, count: topicPick[t], group: combineParts }));
+      return Object.keys(topicPick).filter((t) => present.has(t) && topicPick[t] > 0).map((t) => ({ topic: t, count: topicPick[t], group: combineParts, type: topicType[t] || null }));
     };
     function drawSum() {
       const picked = order.map((qid) => qs.find((y) => y.id === qid)).filter(Boolean);
@@ -688,13 +702,13 @@
       const per = picked.length ? [...new Set(picked.map(effPts))] : [];
       const tps = activeTopics(), tys = activeTypes();
       $('#ePick').disabled = tps.length > 0 || tys.length > 0;
-      $$('[data-ptype]').forEach((i) => { i.disabled = tps.length > 0; });
-      $('#typePicks').title = tps.length ? 'Per-topic picking is on: clear those numbers to pick per type instead' : '';
       const pick = +$('#ePick').value || 0;
+      const topicTxt = tps.map((t) => t.count + ' ' + t.topic + (t.type ? ' (' + TYPE_LONG[t.type].toLowerCase() + ')' : '')).join(', ');
+      const typeTxt = tys.map((t) => t.count + ' ' + TYPE_LONG[t.type].toLowerCase()).join(', ');
       $('#pSum').textContent = picked.length + ' selected — ' + pts + ' points' +
-        (tps.length ? ' — each student gets ' + tps.reduce((s, t) => s + t.count, 0) + ' at random: ' + tps.map((t) => t.count + ' ' + t.topic).join(', ')
-          : tys.length ? ' — each student gets ' + tys.reduce((s, t) => s + t.count, 0) + ' at random: ' + tys.map((t) => t.count + ' ' + TYPE_LONG[t.type].toLowerCase()).join(', ')
-            : pick > 0 && pick < picked.length ? ' — each student gets ' + pick + ' at random' : '') +
+        (tps.length || tys.length ? ' — each student gets ' + (tps.reduce((s, t) => s + t.count, 0) + tys.reduce((s, t) => s + t.count, 0)) + ' at random: ' +
+            (tps.length && tys.length ? topicTxt + ', then ' + typeTxt + ' from the rest' : tps.length ? topicTxt : typeTxt)
+          : pick > 0 && pick < picked.length ? ' — each student gets ' + pick + ' at random' : '') +
         (per.length > 1 && (tps.length || tys.length || (pick > 0 && pick < picked.length)) ? ' (questions have different points, so totals may differ between students; see Points)' : '');
     }
     function syncMode() {
@@ -735,7 +749,7 @@
       allowedDevices: $('#eDev').value, faceMode: $('#eFace').value, cameraPreview: $('#ePrev').checked,
       options: { focusWarnings: $('#oFocusWarn').value, blurGraceSeconds: $('#oBlur').value, reconnectSeconds: $('#oRecon').value, maxReconnects: $('#oMaxRe').value, timeWarnings: $('#oWarn').value,
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
-        typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
+        typePicks: activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
         randomSnapshots: $('#oRandSnap').checked && $('#eFace').value === 'ALWAYS', snapshotsPerHour: $('#oSnapHour').value,
         keepGoingOffline: ($('input[name=eNet]:checked') || {}).value !== 'STRICT', offlineSubmitMinutes: $('#oOfflineMin').value, showRank: $('#oRank').checked,
         offlineMode: ($('input[name=eNet]:checked') || {}).value === 'OFFLINE',

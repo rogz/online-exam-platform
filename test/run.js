@@ -591,6 +591,39 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.uncheck('#combineParts');
   ok((await teacher.$$eval('#topicPicks tbody tr', (r) => r.length)) === 5, 'unticking shows each part as its own topic again');
 
+  // ── Per topic (with a type) and per type together: 3 fill-in-the-blank from Long Lines, then 4 multiple choice from the rest ──
+  const mixExam = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const rows = ['QuestionID,Type,Question,Choices,Answer,Points,Topic,Folder'];
+    for (let i = 1; i <= 4; i++) rows.push(`MX-F${i},FIB,Long line value ${i} is ____,,${i},1,Long Lines P${i % 2 + 1},Mix`);
+    for (let i = 1; i <= 2; i++) rows.push(`MX-L${i},MC,Long line choice ${i},A | B | C | D,A,1,Long Lines P${i},Mix`);
+    for (let i = 1; i <= 6; i++) rows.push(`MX-M${i},MC,Other choice ${i},A | B | C | D,B,1,Misc,Mix`);
+    await post('/api/teacher/questions/import', { csv: rows.join('\n') });
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.code.startsWith('MX-')).map((q) => q.id);
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    return (await post('/api/teacher/exams', { classId: cls.id, title: 'Topic and type quiz', questionIds: ids, timeLimitMinutes: 10,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam.id;
+  });
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#exam/' + mixExam); await teacher.waitForSelector('[data-ttype="Long Lines"]');
+  await teacher.selectOption('[data-ttype="Long Lines"]', 'FIB');
+  await teacher.fill('#topicPicks [data-topic="Long Lines"]', '3');
+  await teacher.fill('#typePicks [data-ptype="MC"]', '4');
+  const mixSum = await teacher.textContent('#pSum');
+  ok(mixSum.includes('each student gets 7') && mixSum.includes('3 Long Lines (fill in the blank), then 4 multiple choice from the rest'), 'per topic and per type work together: ' + mixSum.split('—').pop().trim());
+  await teacher.click('#saveBtn'); await toastSays(teacher, 'Saved');
+  const mixRow = await dbOne('SELECT topic_counts, options FROM exams WHERE id = $1', [mixExam]);
+  ok(mixRow.topic_counts[0].type === 'FIB' && mixRow.options.typePicks[0].type === 'MC' && mixRow.options.typePicks[0].count === 4, 'both are saved');
+  await teacher.evaluate(async (id) => { await fetch('/api/teacher/exams/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ publish: true }) }); }, mixExam);
+  const mixSet = await student.evaluate(async (examId) => {
+    const post = async (b) => (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const g = await post({ action: 'getExam', examId });
+    const st = await post({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } });
+    return { told: g.exam.questionCount, types: g.exam.typeCounts, qs: st.questions.map((q) => q.type + ':' + q.text) };
+  }, mixExam);
+  const fibs = mixSet.qs.filter((q) => q.startsWith('FIB:Long line value')).length, mcs = mixSet.qs.filter((q) => q.startsWith('MC:')).length;
+  ok(mixSet.qs.length === 7 && fibs === 3 && mcs === 4 && mixSet.told === 7 && mixSet.types.FIB === 3 && mixSet.types.MC === 4,
+    'each student gets 3 fill-in-the-blank from Long Lines and 4 multiple choice; the rules screen says 7 (3 FIB, 4 MC)');
+
   // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
   const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {
     const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();

@@ -10,7 +10,7 @@ When a feature is added or a decision is made, update that file in the same comm
 ## Writing quiz questions
 When asked to write quiz/exam questions, output a CSV in the format in
 [`docs/question-format.md`](docs/question-format.md) (columns `QuestionID,Type,Question,Choices,Answer,Points,Topic,Folder`,
-choices separated by ` | `, MC answer = letter, FIB with several blanks: one answer entry per blank separated by ` ; `, quote fields with commas, UTF-8). Follow its "When an AI writes a quiz" rules:
+choices separated by ` | `, MC answer = letter, FIB with several blanks: one answer entry per blank separated by ` ; `, quote fields with commas, UTF-8, math between `$…$` like `$V_S$`, `$10^{-3}$`, answers plain). Follow its "When an AI writes a quiz" rules:
 balanced answer letters, worked-out calculations, IDs with a course prefix, Topic per sub-topic, one Folder for the set.
 Before handing it over, check that it parses (e.g. with `parseCsv` from `src/util.js` and `core.mcCorrectIndex`).
 

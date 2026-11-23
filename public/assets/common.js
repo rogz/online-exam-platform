@@ -88,8 +88,9 @@
     bar.innerHTML = `<a class="brand" href="${me ? homeFor(me) : '/'}"><img class="logo" src="/assets/logo.svg" alt="" width="30" height="30"><span class="name">${name}</span></a>
       <div class="who">${me ? `<button type="button" class="me-btn" id="profileBtn" title="My profile">${avatarHtml(me, 30)}<span class="me-text">${esc(me.name)}${me.studentNo ? ' — ' + esc(me.studentNo) : ''}${me.school ? ' — ' + esc(me.school) : ''}</span></button>` : ''}</div>
       <nav>${(links || []).map((l) => `<a href="${esc(l.href)}"${l.on ? ' class="on"' : ''}>${esc(l.label)}</a>`).join('')}
-      ${me ? '<button type="button" class="menu-btn" id="signOut">Sign out</button>' : ''}</nav>`;
+      ${me ? '<button type="button" class="menu-btn" id="signOut">Sign out</button>' : ''}</nav><span class="theme-slot" data-theme-slot></span>`;
     document.body.prepend(bar);
+    if (window.EWTheme) window.EWTheme.mount(bar);
     const so = $('#signOut', bar);
     if (so) so.onclick = async () => { await api('/auth/logout', {}); location.href = '/'; };
     const pb = $('#profileBtn', bar);

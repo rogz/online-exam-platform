@@ -41,6 +41,12 @@ PSA-LP-04,ESSAY,Explain why transmission lines are transposed.,,"To make the ave
 
 ## When an AI writes a quiz in this format
 
+- Write math between dollar signs so it is drawn properly: `$V_S$`, `$I_{L}$`, `$10^{-3}$`, `$\Omega$`, `$\sqrt{3}$`,
+  `$\frac{P}{\sqrt{3}V}$`, `$\cos\theta$`, `$30^\circ$`. A plain dollar sign is `\$`. Keep the `Answer` column plain text
+  (numbers, words, ranges like `122.5 ± 1%`), never math.
+- With several blanks, write each part so it becomes a clear answer line: `Find (a) the sending voltage $V_S$ = ____ kV;
+  (b) the sending current $I_S$ = ____ A.` The words before each blank are its label and the word right after it is its unit.
+
 - Give every question a `QuestionID` with a short course prefix and a number (`PSA-LP-01`, `PSA-LP-02`, …), so a corrected file can be re-imported to **update** the same questions.
 - Multiple choice: 4 choices, one clearly correct; spread the correct letters evenly over A–D; plausible wrong choices (common mistakes, wrong units, off by a factor).
 - For calculation questions, work the answer out step by step and double-check the numbers and units before writing the row; state the constants used (e.g. ε₀ = 8.854 × 10⁻¹² F/m, GMR = 0.7788 r) in the question when the answer depends on them.

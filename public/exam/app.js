@@ -360,7 +360,7 @@
     document.title = exam.title + ' — Online Exam';
     $('brand').textContent = exam.title;
     $('examTitle').textContent = exam.title;
-    $('examInstructions').textContent = exam.instructions;
+    EWQ.setText($('examInstructions'), exam.instructions);
     $('examInstructions').hidden = !exam.instructions;
     const types = { MC: 'multiple choice', TF: 'true/false', FIB: 'fill in the blank', ESSAY: 'essay' };
     $('factQuestions').textContent = exam.typeCounts
@@ -886,25 +886,14 @@
 
       const nBlanks = q.type === 'FIB' ? (q.text.match(/_{3,}/g) || []).length : 0;
       if (nBlanks > 1) {
-        // several blanks: a box inside the sentence for each; the answer is a list, one value per blank
+        // several blanks: the explanation on top, then one answer line per blank (a) … = [box] unit); the answer is a list
         let vals = [];
         try { vals = JSON.parse(saved || '[]'); } catch (e) { vals = []; }
         if (!Array.isArray(vals)) vals = [];
-        const parts = q.text.split(/_{3,}/), inputs = [];
-        parts.forEach((p, i) => {
-          text.append(p);
-          if (i < parts.length - 1) {
-            const inp = document.createElement('input');
-            inp.className = 'blank';
-            inp.setAttribute('aria-label', 'Blank ' + (i + 1));
-            inp.placeholder = String(i + 1);
-            inp.autocomplete = 'off'; inp.spellcheck = false;
-            inp.value = vals[i] || '';
-            inp.addEventListener('input', () => setAnswer(q.id, JSON.stringify(inputs.map((x) => x.value))));
-            inputs.push(inp);
-            text.append(inp);
-          }
-        });
+        const bl = EWQ.blankLinesEl(q.text, vals, (v) => setAnswer(q.id, JSON.stringify(v)), { idPrefix: 'q' + qi });
+        EWQ.setText(text, bl.stem);
+        if (!bl.stem) text.hidden = true;
+        li.appendChild(bl.el);
       } else if (q.type === 'FIB') {
         const input = document.createElement('input');
         input.className = 'blank';
@@ -916,14 +905,15 @@
         const parts = q.text.split(/_{3,}/);
         if (parts.length > 1) {
           text.append(parts[0], input, parts.slice(1).join('____'));
+          EWQ.render(text);
         } else {
-          text.textContent = q.text;
+          EWQ.setText(text, q.text);
           input.style.width = '100%';
           input.style.margin = '0';
           li.appendChild(input);
         }
       } else {
-        text.textContent = q.text;
+        EWQ.setText(text, q.text);
       }
 
       if (q.type === 'MC' || q.type === 'TF') {
@@ -947,7 +937,7 @@
           });
           lab.appendChild(input);
           if (o.letter) { const l = document.createElement('span'); l.className = 'letter'; l.textContent = o.letter + '.'; lab.appendChild(l); }
-          const t = document.createElement('span'); t.textContent = o.label; lab.appendChild(t);
+          const t = document.createElement('span'); EWQ.setText(t, o.label); lab.appendChild(t);
           if (input.checked) lab.classList.add('selected');
           wrap.appendChild(lab);
         });

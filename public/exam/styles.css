@@ -13,9 +13,28 @@
   --ok: #1e7d3a;
   --ok-bg: #e7f5ec;
   --focus: #8fb3ff;
+  color-scheme: light;
 }
+:root[data-theme="dark"] {
+  --bg: #12151b;
+  --card: #1b2029;
+  --text: #e7eaf0;
+  --muted: #9aa3b4;
+  --border: #2d3442;
+  --primary: #5b8dff;
+  --primary-text: #0d1220;
+  --danger: #ff6b6b;
+  --danger-bg: #3a1d1f;
+  --warn-bg: #3a3016;
+  --warn-text: #f5d27a;
+  --ok: #5fd07f;
+  --ok-bg: #173323;
+  --focus: #5b8dff;
+  color-scheme: dark;
+}
+/* without the theme script: follow the device */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #12151b;
     --card: #1b2029;
     --text: #e7eaf0;
@@ -46,9 +65,11 @@ body.locked .questions, body.locked .exam-head { user-select: none; -webkit-user
 .topbar {
   position: sticky; top: 0; z-index: 10;
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 10px max(16px, env(safe-area-inset-left, 0px)) 10px max(20px, env(safe-area-inset-left, 0px));
+  background: var(--card); border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand { flex: 1 1 auto; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-slot { flex-shrink: 0; display: flex; }
 .topbar-right { display: flex; gap: 14px; align-items: center; flex-shrink: 0; }
 .progress { color: var(--muted); font-size: 14px; }
 .timer {
@@ -236,3 +257,30 @@ textarea.essay { min-height: 160px; resize: vertical; }
 
 /* Calculator reminder on the rules screen (camera exams that watch for phones) */
 .rule-calc { list-style: none; margin: 10px 0 10px -18px; padding: 10px 12px; background: #fff4cc; border: 1px solid #f0c94d; border-left: 5px solid #e0a800; border-radius: 4px; color: #5c4400; }
+
+/* Several blanks: the explanation on top, one answer line per blank */
+.blank-lines { display: grid; gap: 10px; margin: 4px 0 2px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.blank-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 17px; }
+@media (min-width: 621px) {
+  /* wide screens: the boxes line up in one column */
+  .blank-lines { grid-template-columns: max-content minmax(0, max-content) minmax(140px, 220px) minmax(0, 1fr); column-gap: 10px; align-items: center; }
+  .blank-line { display: contents; }
+  .blank-line > * { min-width: 0; }
+  .blank-lines .blank-line input.blank { width: 100%; }
+}
+.bl-tag { font-weight: 700; color: var(--primary); min-width: 1.8em; }
+.bl-label { flex: 0 1 auto; }
+.blank-line input.blank { width: 180px; max-width: 100%; margin: 0; padding: 6px 10px; font-size: 16px; }
+.bl-unit { color: var(--muted); font-weight: 600; }
+.bl-tail { margin: 2px 0 0; color: var(--muted); grid-column: 1 / -1; }
+@media (max-width: 520px) { .blank-line input.blank { flex: 1 1 140px; } }
+
+/* Math (KaTeX) */
+.math .katex { font-size: 1.08em; }
+.q-text .math, .choice .math { white-space: nowrap; }
+
+/* Light / dark switch */
+.theme-btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text); font: 600 13px/1.4 inherit; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.theme-btn:hover { background: var(--bg); }
+.theme-btn .ti { font-size: 15px; line-height: 1; }
+@media (max-width: 560px) { .theme-btn .tl { display: none; } }

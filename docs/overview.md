@@ -44,9 +44,19 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Exams list**: grouped by course (class name, spaces/case ignored; header with exam count and "open now"; click to fold; folded groups and the "Group by course" choice remembered in the browser); Results / Edit / Copy link / Preview; scrollable; **Archive**, "Archive closed exams (N)",
   Archived list with Restore (archiving an exam tidies the teacher's list and deletes its camera snapshots; results stay).
 - **Several blanks in one FIB question** (`V = ____ V and I = ____ A`): the answer key has one entry per blank separated
-  by ` ; ` (only split when the text has 2+ blanks); the editor shows one box per blank; students get a box inside the
-  sentence for each; the answer is stored as a JSON list; each correct blank earns points × 1/n (`blankCount`,
-  `blankKeys` in `src/exam-core.js`).
+  by ` ; ` (only split when the text has 2+ blanks); the editor shows one box per blank; students see the explanation on
+  top and **one answer line per blank** (a) label = [box] unit), labels and units taken from the text around each
+  blank (`(a)`, `;`, `,`, `and`, `:` or a sentence end separate the parts; `EWQ.blankLines` in `public/exam/qtext.js`);
+  the answer is stored as a JSON list; each correct blank earns points × 1/n (`blankCount`, `blankKeys` in `src/exam-core.js`).
+- **Math in questions** (KaTeX 0.16.11, MIT, kept on the site in `public/vendor/katex/`, woff2 fonts only, also cached for
+  offline exams by `public/sw.js`): `$...$` in questions, choices and instructions is drawn on the exam page, preview,
+  question bank, exam editor list, the editor's "How students will see it" box and the Answers window (`EWQ.render`).
+  `\$` is a plain dollar; `$` followed by a space, or a closing `$` followed by a digit, is not math ("$5 and $10" stays text).
+  Math buttons (subscript, power, fraction, root) in the question editor. Answers are graded as plain text.
+- **Light / dark colours**: `public/assets/theme-mode.js` (loaded in `<head>` of every page) sets `data-theme` on `<html>`
+  from the device's choice (localStorage `ewTheme`: auto / light / dark; auto follows `prefers-color-scheme`) and puts an
+  Auto/Light/Dark button in each top bar (`[data-theme-slot]`). Dark colours: `:root[data-theme="dark"]` in
+  `public/exam/styles.css` and `public/assets/theme.css` (`--accent` is the text colour that used to be `--bar`).
 - **Fill-in-the-blank checks**: close spellings ("Feranti"), numbers just outside the range and a different unit
   ("kV" for "V") are flagged as **to check** in Results (the number decides correct/wrong; spellings stay wrong) with a
   one-click **Give full points**. Notes are for the teacher only.

@@ -48,10 +48,12 @@
   .kv td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); }
   .kv tr:nth-child(odd) td { background: #f3f5f7; }
   .kv td:last-child { text-align: right; color: var(--muted); font-weight: 600; }
-  .countdown { font: 700 26px/1.2 var(--font); font-variant-numeric: tabular-nums; color: var(--bar); }
+  .countdown { font: 700 26px/1.2 var(--font); font-variant-numeric: tabular-nums; color: var(--accent); }
   .score { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .instructions { white-space: pre-wrap; max-width: 760px; margin: 0 0 18px; }
 </style>
+<link rel="stylesheet" href="/vendor/katex/katex.min.css">
+<script src="/assets/theme-mode.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -69,6 +71,8 @@
   </aside>
   <main class="main" id="detail"><div class="empty">Loading…</div></main>
 </div>
+<script src="/vendor/katex/katex.min.js"></script>
+<script src="/exam/qtext.js"></script>
 <script src="/assets/common.js"></script>
 <script src="/assets/student.js"></script>
 </body>

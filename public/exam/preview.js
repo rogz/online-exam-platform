@@ -40,7 +40,7 @@
     document.title = 'Preview: ' + x.title;
     $('pvTitle').textContent = x.title;
     $('pvClass').textContent = x.className + (x.published ? '' : ' · Draft (students cannot see it yet)');
-    $('pvInstructions').textContent = x.instructions || '';
+    EWQ.setText($('pvInstructions'), x.instructions || '');
     $('pvInstructions').hidden = !x.instructions;
     const s = x.summary, chips = [];
     chips.push(s.poolSize ? s.count + ' questions per student (from ' + s.poolSize + ')' : s.count + ' questions');
@@ -87,22 +87,17 @@
       if (nBlanks > 1) {
         let vals = []; try { vals = JSON.parse(saved || '[]'); } catch (e) { vals = []; }
         if (!Array.isArray(vals)) vals = [];
-        const parts = q.text.split(/_{3,}/), inputs = [];
-        parts.forEach((p, i) => {
-          text.append(p);
-          if (i < parts.length - 1) {
-            const inp = el('input', 'blank'); inp.setAttribute('aria-label', 'Blank ' + (i + 1)); inp.placeholder = String(i + 1); inp.autocomplete = 'off'; inp.value = vals[i] || '';
-            inp.addEventListener('input', () => { state.answers[q.id] = JSON.stringify(inputs.map((x) => x.value)); });
-            inputs.push(inp); text.append(inp);
-          }
-        });
+        const bl = EWQ.blankLinesEl(q.text, vals, (v) => { state.answers[q.id] = JSON.stringify(v); }, { idPrefix: 'pv' + q.id });
+        EWQ.setText(text, bl.stem);
+        if (!bl.stem) text.hidden = true;
+        li.appendChild(bl.el);
       } else if (q.type === 'FIB') {
         const input = el('input', 'blank'); input.setAttribute('aria-label', 'Your answer'); input.autocomplete = 'off'; input.value = saved || '';
         input.addEventListener('input', () => { state.answers[q.id] = input.value; });
         const parts = q.text.split(/_{3,}/);
-        if (parts.length > 1) text.append(parts[0], input, parts.slice(1).join('____'));
-        else { text.textContent = q.text; input.style.width = '100%'; input.style.margin = '0'; li.appendChild(input); }
-      } else text.textContent = q.text;
+        if (parts.length > 1) { text.append(parts[0], input, parts.slice(1).join('____')); EWQ.render(text); }
+        else { EWQ.setText(text, q.text); input.style.width = '100%'; input.style.margin = '0'; li.appendChild(input); }
+      } else EWQ.setText(text, q.text);
 
       if (q.type === 'MC' || q.type === 'TF') {
         const opts = q.type === 'MC' ? q.choices.map((c, i) => ({ value: c.key, label: c.text, letter: String.fromCharCode(65 + i) }))
@@ -114,7 +109,7 @@
           input.addEventListener('change', () => { state.answers[q.id] = o.value; wrap.querySelectorAll('.choice').forEach((c) => c.classList.toggle('selected', c.contains(input))); });
           lab.appendChild(input);
           if (o.letter) lab.appendChild(el('span', 'letter', o.letter + '.'));
-          lab.appendChild(el('span', '', o.label));
+          lab.appendChild(EWQ.setText(el('span'), o.label));
           if (input.checked) lab.classList.add('selected');
           wrap.appendChild(lab);
         });

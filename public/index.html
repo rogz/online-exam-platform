@@ -17,7 +17,7 @@
   .hero h1 { font-size: clamp(28px, 4.2vw, 42px); line-height: 1.15; margin: 0 0 14px; font-weight: 700; max-width: 18ch; }
   .hero .lede { font-size: 17px; line-height: 1.55; color: #dce9f7; max-width: 52ch; margin: 0 0 22px; }
   .hero .ctas { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
-  .btn.light { background: #fff; color: var(--bar); border-color: #fff; }
+  .btn.light { background: #fff; color: #23558c; border-color: #fff; }
   .btn.light:hover { background: #eef4fb; }
   .btn.ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
   .btn.ghost:hover { background: rgba(255, 255, 255, .12); }
@@ -26,11 +26,11 @@
   .auth { background: #fff; color: var(--text); border-radius: 6px; box-shadow: 0 16px 40px rgba(0, 0, 0, .28); overflow: hidden; }
   .tabs { display: flex; border-bottom: 1px solid var(--line); }
   .tabs button { flex: 1; padding: 13px; border: 0; background: var(--panel-alt); font: 600 14px var(--font); color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
-  .tabs button.on { background: #fff; color: var(--bar); border-bottom-color: var(--bar); }
+  .tabs button.on { background: #fff; color: var(--accent); border-bottom-color: var(--accent); }
   .auth .bd { padding: 18px; }
   .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
   .roles label { border: 1px solid var(--line); border-radius: 4px; padding: 10px; cursor: pointer; font-weight: 600; font-size: 13.5px; display: flex; gap: 8px; align-items: center; margin: 0; }
-  .roles label:has(input:checked) { border-color: var(--primary); background: var(--select); color: var(--bar); }
+  .roles label:has(input:checked) { border-color: var(--primary); background: var(--select); color: var(--accent); }
 
   .section { max-width: 1180px; margin: 0 auto; padding: 52px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); }
   .section h2 { font-size: clamp(22px, 3vw, 28px); margin: 0 0 8px; }
@@ -44,11 +44,11 @@
   .how { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   @media (max-width: 760px) { .how { grid-template-columns: 1fr; } }
   .how .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px 22px; }
-  .how h3 { font-size: 17px; margin: 0 0 4px; color: var(--bar); }
+  .how h3 { font-size: 17px; margin: 0 0 4px; color: var(--accent); }
   .how .who { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
   .steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 12px; }
   .steps li { counter-increment: s; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; }
-  .steps li::before { content: counter(s); width: 28px; height: 28px; border-radius: 50%; background: var(--select); color: var(--bar); font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .steps li::before { content: counter(s); width: 28px; height: 28px; border-radius: 50%; background: var(--select); color: var(--accent); font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   .steps b { display: block; }
   .steps span { color: var(--muted); font-size: 13.5px; }
 
@@ -64,7 +64,7 @@
   @media (max-width: 900px) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 560px) { .features { grid-template-columns: minmax(0, 1fr); } }
   .feature { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; }
-  .feature svg { width: 28px; height: 28px; color: var(--bar); margin-bottom: 8px; display: block; }
+  .feature svg { width: 28px; height: 28px; color: var(--accent); margin-bottom: 8px; display: block; }
   .feature b { display: block; margin-bottom: 4px; }
   .feature span { color: var(--muted); font-size: 13.5px; }
 
@@ -75,6 +75,7 @@
   footer.site { margin-top: 52px; border-top: 1px solid var(--line); background: var(--panel); }
   footer.site .inner { max-width: 1180px; margin: 0 auto; padding: 18px max(16px, env(safe-area-inset-right, 0px)) 22px max(16px, env(safe-area-inset-left, 0px)); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
 </style>
+<script src="/assets/theme-mode.js"></script>
 </head>
 <body>
 <section class="hero">

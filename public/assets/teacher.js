@@ -230,6 +230,7 @@
         <td class="num">${q.points}</td><td>${esc(q.topic)}</td>
         <td class="nowrap"><button type="button" class="btn small" data-edit="${q.id}">Edit</button></td></tr>`).join('')
         : `<tr><td colspan="7"><div class="empty">${qs.length ? (currentFolder === 'all' ? 'No questions match.' : 'No questions in this folder yet. Add one, or select questions elsewhere and move them here.') : 'No questions yet. Add one, or import your existing question bank from a CSV file.'}</div></td></tr>`;
+      if (window.EWQ) EWQ.render($('#qRows'));
       $$('[data-edit]').forEach((b) => b.onclick = () => questionDialog(qs.find((q) => q.id === b.dataset.edit)));
       $$('[data-sel]').forEach((c) => c.onchange = () => { if (c.checked) selected.add(c.dataset.sel); else selected.delete(c.dataset.sel); syncMoveBar(); });
       syncMoveBar();
@@ -262,9 +263,11 @@
         <div class="field"><label for="qePoints">Points</label><input type="number" id="qePoints" min="0.5" step="0.5" value="${q ? q.points : 1}"></div>
         <div class="field"><label for="qeCode">Question ID <span class="muted">(optional)</span></label><input type="text" id="qeCode" value="${esc(q ? q.code : '')}" placeholder="auto"></div></div>
       <div class="field"><label for="qeText">Question</label><textarea id="qeText" rows="3">${esc(q ? q.text : '')}</textarea>
-        <div class="hint" id="qeTextHint"></div></div>
+        <div class="hint" id="qeTextHint"></div>
+        <div class="hint">Math: write it between dollar signs, e.g. <code>$V_S$</code> (small S below), <code>$10^{-3}$</code> (power), <code>$\\Omega$</code>, <code>$\\sqrt{3}$</code>, <code>$\\frac{P}{\\sqrt{3}V}$</code>. A plain dollar sign: <code>\\$</code>.</div>
+        <div class="qpreview" id="qePreview" hidden></div></div>
       <div id="qeAnswer"></div>
-      <div class="symbar" id="qeSyms" aria-label="Insert a symbol"><span class="small muted">Insert a symbol:</span><button type="button" class="sym" data-sym="±" title="Insert ±">±</button><button type="button" class="sym" data-sym="Ω" title="Insert Ω">Ω</button><button type="button" class="sym" data-sym="°" title="Insert °">°</button><button type="button" class="sym" data-sym="μ" title="Insert μ">μ</button><button type="button" class="sym" data-sym="π" title="Insert π">π</button><button type="button" class="sym" data-sym="√" title="Insert √">√</button><button type="button" class="sym" data-sym="×" title="Insert ×">×</button><button type="button" class="sym" data-sym="÷" title="Insert ÷">÷</button><button type="button" class="sym" data-sym="²" title="Insert ²">²</button><button type="button" class="sym" data-sym="³" title="Insert ³">³</button><button type="button" class="sym" data-sym="⁻" title="Insert ⁻">⁻</button><button type="button" class="sym" data-sym="∠" title="Insert ∠">∠</button><button type="button" class="sym" data-sym="≈" title="Insert ≈">≈</button><button type="button" class="sym" data-sym="θ" title="Insert θ">θ</button><button type="button" class="sym" data-sym="φ" title="Insert φ">φ</button><button type="button" class="sym" data-sym="Δ" title="Insert Δ">Δ</button><button type="button" class="sym" data-sym="ε" title="Insert ε">ε</button><button type="button" class="sym" data-sym="ρ" title="Insert ρ">ρ</button><button type="button" class="sym" data-sym="λ" title="Insert λ">λ</button><button type="button" class="sym" data-sym="∞" title="Insert ∞">∞</button><span class="small muted">(goes where your cursor is)</span></div>
+      <div class="symbar" id="qeSyms" aria-label="Insert a symbol"><span class="small muted">Insert a symbol:</span><button type="button" class="sym" data-sym="±" title="Insert ±">±</button><button type="button" class="sym" data-sym="Ω" title="Insert Ω">Ω</button><button type="button" class="sym" data-sym="°" title="Insert °">°</button><button type="button" class="sym" data-sym="μ" title="Insert μ">μ</button><button type="button" class="sym" data-sym="π" title="Insert π">π</button><button type="button" class="sym" data-sym="√" title="Insert √">√</button><button type="button" class="sym" data-sym="×" title="Insert ×">×</button><button type="button" class="sym" data-sym="÷" title="Insert ÷">÷</button><button type="button" class="sym" data-sym="²" title="Insert ²">²</button><button type="button" class="sym" data-sym="³" title="Insert ³">³</button><button type="button" class="sym" data-sym="⁻" title="Insert ⁻">⁻</button><button type="button" class="sym" data-sym="∠" title="Insert ∠">∠</button><button type="button" class="sym" data-sym="≈" title="Insert ≈">≈</button><button type="button" class="sym" data-sym="θ" title="Insert θ">θ</button><button type="button" class="sym" data-sym="φ" title="Insert φ">φ</button><button type="button" class="sym" data-sym="Δ" title="Insert Δ">Δ</button><button type="button" class="sym" data-sym="ε" title="Insert ε">ε</button><button type="button" class="sym" data-sym="ρ" title="Insert ρ">ρ</button><button type="button" class="sym" data-sym="λ" title="Insert λ">λ</button><button type="button" class="sym" data-sym="∞" title="Insert ∞">∞</button><span class="small muted">(goes where your cursor is)</span><span class="small muted" style="margin-left:8px">Math:</span><button type="button" class="sym mathsym" data-sym="\$V_{S}\$" title="Subscript: \$V_{S}\$ shows V with a small S below">x<sub>s</sub></button><button type="button" class="sym mathsym" data-sym="\$x^{2}\$" title="Power: \$x^{2}\$, \$10^{-3}\$">x<sup>2</sup></button><button type="button" class="sym mathsym" data-sym="\$\\frac{a}{b}\$" title="Fraction: \$\\frac{a}{b}\$">a⁄b</button><button type="button" class="sym mathsym" data-sym="\$\\sqrt{x}\$" title="Square root: \$\\sqrt{3}\$">√x</button></div>
       <div class="field"><label for="qeFolder">Folder</label><select id="qeFolder">${folderOptions(cache.folders || [], q ? q.folderId : (currentFolder !== 'all' && currentFolder !== 'none' ? currentFolder : null), '<option value="">Not in a folder</option>')}</select></div>
       <div class="field"><label for="qeTopic">Topic <span class="muted">(optional, for filtering and per-topic picking)</span></label><input type="text" id="qeTopic" list="qeTopics" value="${esc(q ? q.topic : '')}">
         <datalist id="qeTopics">${topics.map((t) => `<option value="${esc(t)}">`).join('')}</datalist></div>
@@ -340,7 +343,27 @@
       const src = st.newImage || (st.imageId ? '/api/teacher/images/' + st.imageId : '') || ($('#qeUrl', ov).value.trim() || '');
       $('#qePic', ov).innerHTML = src ? `<img class="imgprev" alt="Question picture" src="${esc(src)}">` : '';
     }
-    $('#qeType', ov).onchange = (e) => { st.type = e.target.value; drawAnswer(); };
+    $('#qeType', ov).onchange = (e) => { st.type = e.target.value; drawAnswer(); drawPreview(); };
+    // "How students will see it": shown when the question has math or several blanks
+    function drawPreview() {
+      const pv = $('#qePreview', ov), t = $('#qeText', ov).value;
+      if (!window.EWQ) return;
+      const multi = st.type === 'FIB' && blanksNow() > 1, mcMath = st.type === 'MC' && st.choices.some((c) => EWQ.hasMath(c));
+      if (!EWQ.hasMath(t) && !multi && !mcMath) { pv.hidden = true; pv.textContent = ''; return; }
+      pv.hidden = false;
+      pv.innerHTML = '<div class="small muted" style="margin-bottom:6px">How students will see it:</div>';
+      const bl = multi ? EWQ.blankLinesEl(t, [], null, { idPrefix: 'qp' }) : null;
+      const p = document.createElement('p'); p.className = 'qp-text';
+      EWQ.setText(p, bl ? bl.stem : t.replace(/_{3,}/g, '______'));
+      if (!bl || bl.stem) pv.appendChild(p);
+      if (bl) pv.appendChild(bl.el);
+      if (st.type === 'MC') {
+        const ul = document.createElement('ul'); ul.className = 'qp-choices';
+        st.choices.forEach((c, i) => { const li = document.createElement('li'); li.textContent = String.fromCharCode(65 + i) + '. '; const sp = document.createElement('span'); EWQ.setText(sp, c); li.appendChild(sp); ul.appendChild(li); });
+        pv.appendChild(ul);
+      }
+    }
+    ov.addEventListener('input', (e) => { if (e.target.matches('#qeText, #chs input[type=text]')) drawPreview(); });
     // the answer boxes follow the number of blanks typed in the question
     function blanksNow() { return ($('#qeText', ov).value.match(/_{3,}/g) || []).length; }
     let lastBlanks = blanksNow();
@@ -374,7 +397,7 @@
     };
     $('#qeUrl', ov).oninput = () => { st.newImage = null; st.imageId = null; drawPic(); };
     $('#qeNoPic', ov).onclick = () => { st.newImage = null; st.imageId = null; $('#qeUrl', ov).value = ''; $('#qeFile', ov).value = ''; drawPic(); };
-    drawAnswer(); drawPic();
+    drawAnswer(); drawPic(); drawPreview();
   }
   function mcIndex(q) {
     const a = String(q.answer).trim();
@@ -389,7 +412,7 @@
         Easiest: <a href="/assets/sample-questions.csv" download="sample-questions.csv">download the sample</a> and replace its rows.</p>
       <div class="tablewrap"><table class="list"><thead><tr><th>Column</th><th>What to put</th><th>Example</th></tr></thead><tbody>
         <tr><td><b>Type</b> *</td><td><b>MC</b> multiple choice, <b>TF</b> true/false, <b>FIB</b> fill in the blank, <b>ESSAY</b></td><td>MC</td></tr>
-        <tr><td><b>Question</b> *</td><td>The question text. For FIB, type <b>____</b> (4 underscores) where the blank goes. Several blanks are fine.</td><td>V = I × ____<br>V = ____ V and I = ____ A</td></tr>
+        <tr><td><b>Question</b> *</td><td>The question text. For FIB, type <b>____</b> (4 underscores) where the blank goes. Several blanks are fine. Math between dollar signs: <b>\$V_S\$</b>, <b>\$10^{-3}\$</b>, <b>\$\\Omega\$</b>.</td><td>V = I × ____<br>V = ____ V and I = ____ A</td></tr>
         <tr><td><b>Choices</b></td><td>MC only: the choices separated by <b>|</b> (the key above Enter, with Shift)</td><td>Volt | Ohm | Ampere | Watt</td></tr>
         <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter); for numbers a range: <b>122.1-122.9 V</b>, <b>122.5 ± 1%</b>; several blanks: the answers for each blank in order, separated by <b>;</b> (each blank is worth an equal share of the points)<br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>120 ± 1% ; 5 ± 1%<br>(optional)</td></tr>
         <tr><td><b>Points</b></td><td>Points for the question. Empty = 1</td><td>2</td></tr>
@@ -620,6 +643,7 @@
         <td class="nowrap">${esc(q.code)}</td><td><span class="tag">${TYPE_SHORT[q.type]}</span></td><td class="qtext">${q.imageId || q.imageUrl ? '🖼 ' : ''}${esc(q.text.length > 140 ? q.text.slice(0, 140) + '…' : q.text)}
         ${q.problems.length ? '<div class="small" style="color:var(--bad)">⚠ ' + esc(q.problems.join('; ')) + '</div>' : ''}</td><td class="num">${q.points}</td><td>${esc(q.topic)}</td></tr>`).join('')
         : `<tr><td colspan="6"><div class="empty">${qs.length ? 'No questions match.' : 'Your question bank is empty. <a href="#questions">Add questions</a> first.'}</div></td></tr>`;
+      if (window.EWQ) EWQ.render($('#pRows'));
       $$('[data-q]').forEach((c) => c.onchange = () => { toggle(c.dataset.q, c.checked); drawTopics(); drawSum(); });
       const ok = rows.filter((q) => !q.problems.length);
       $('#pAll').checked = ok.length > 0 && ok.every((q) => sel.has(q.id));
@@ -1025,6 +1049,7 @@
       try { const res = await api('/teacher/exams/' + examId + '/attempts/' + attemptId, body); toast(okText(res)); d.close(); viewResults(examId); }
       catch (err) { toast(err.message, true); }
     };
+    if (window.EWQ) d.el.querySelectorAll('.resp .q').forEach((x) => EWQ.render(x));
     const hb = $('[data-help="continue"]', d.el);
     if (hb) hb.onclick = () => helpAct({ continueMinutes: $('#helpMin', d.el).value }, () => a.status === 'IN_PROGRESS' ? 'Extra time added. The student\'s timer updates within a minute.' : 'Done: the student can open the exam link again within 30 minutes and continue.');
     const hd = $('[data-help="draft"]', d.el);

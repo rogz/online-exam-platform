@@ -27,11 +27,13 @@
     .pv-score { font-size: 18px; font-weight: 700; }
     .topbar a.btn { text-decoration: none; }
   </style>
+<link rel="stylesheet" href="/vendor/katex/katex.min.css">
+<script src="/assets/theme-mode.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">Preview</div>
-    <div class="topbar-right"><a class="btn" id="backBtn" href="/teacher#exams">Close preview</a></div>
+    <div class="topbar-right"><span class="theme-slot" data-theme-slot></span><a class="btn" id="backBtn" href="/teacher#exams">Close preview</a></div>
   </header>
   <main>
     <section id="pvLoading" class="card center"><div class="spinner" aria-hidden="true"></div><p>Loading preview…</p></section>
@@ -58,6 +60,8 @@
       </section>
     </div>
   </main>
+<script src="/vendor/katex/katex.min.js"></script>
+<script src="/exam/qtext.js"></script>
   <script src="/exam/preview.js"></script>
 </body>
 </html>

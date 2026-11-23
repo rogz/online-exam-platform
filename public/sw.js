@@ -4,7 +4,9 @@
  * (network first); only when there is no internet are the kept copies used.
  */
 const CACHE = 'exam-wizard-offline-v1';
-const CACHE_SHELL = ['/exam', '/offline', '/exam/app.js', '/exam/camera.js', '/exam/styles.css', '/favicon.svg', '/vendor/qrcode.js'];
+const CACHE_SHELL = ['/exam', '/offline', '/exam/app.js', '/exam/camera.js', '/exam/styles.css', '/exam/qtext.js', '/assets/theme-mode.js', '/favicon.svg', '/vendor/qrcode.js',
+  '/vendor/katex/katex.min.js', '/vendor/katex/katex.min.css'].concat([ // math in questions (KaTeX) and its fonts
+  'KaTeX_AMS-Regular.woff2', 'KaTeX_Caligraphic-Bold.woff2', 'KaTeX_Caligraphic-Regular.woff2', 'KaTeX_Fraktur-Bold.woff2', 'KaTeX_Fraktur-Regular.woff2', 'KaTeX_Main-Bold.woff2', 'KaTeX_Main-BoldItalic.woff2', 'KaTeX_Main-Italic.woff2', 'KaTeX_Main-Regular.woff2', 'KaTeX_Math-BoldItalic.woff2', 'KaTeX_Math-Italic.woff2', 'KaTeX_SansSerif-Bold.woff2', 'KaTeX_SansSerif-Italic.woff2', 'KaTeX_SansSerif-Regular.woff2', 'KaTeX_Script-Regular.woff2', 'KaTeX_Size1-Regular.woff2', 'KaTeX_Size2-Regular.woff2', 'KaTeX_Size3-Regular.woff2', 'KaTeX_Size4-Regular.woff2', 'KaTeX_Typewriter-Regular.woff2'].map((f) => '/vendor/katex/fonts/' + f));
 const SHELL = CACHE_SHELL;
 
 self.addEventListener('install', (e) => { self.skipWaiting(); });

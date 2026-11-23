@@ -256,3 +256,12 @@ fieldset { min-width: 0; }
 .fit-table table.list th { white-space: normal; padding: 6px 8px; }
 .fit-table table.list td { padding: 6px 8px; }
 .fit-table input[type=number] { width: 70px !important; max-width: 100%; }
+
+/* exams list grouped by course */
+table.list.exams tr.grouprow td { background: var(--panel-alt); padding: 0; border-top: 2px solid var(--line); }
+.groupbtn { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 9px 12px; font: inherit; font-size: 14px; color: inherit; cursor: pointer; }
+.groupbtn:hover { background: #eef2f7; }
+.groupbtn .caret { display: inline-block; width: 14px; color: var(--muted); }
+.groupopen { color: var(--ok, #1e7d3a); font-weight: 600; }
+table.exams tr[hidden] { display: none !important; }
+@media (max-width: 760px) { table.exams tr.grouprow { padding: 0; } table.exams tr.grouprow td { padding: 0; } }

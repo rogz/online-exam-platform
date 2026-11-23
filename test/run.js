@@ -1172,18 +1172,45 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.click('.dialog [data-help="ontime"]'); await toastSays(teacher, 'Counted as on time');
   ok((await dbOne('SELECT late FROM attempts WHERE id = $1', [fileSt.attemptId])).late === false, '"Count as on time" removes the Late mark');
 
+  // ── Exams list grouped by course ──
+  const groupCls = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const c = (await post('/api/teacher/classes', { name: 'EEE 146', section: 'W89' })).class;
+    const qid = (await (await fetch('/api/teacher/questions')).json()).questions.find((q) => q.type === 'TF').id;
+    await post('/api/teacher/exams', { classId: c.id, title: 'Magnetic circuits quiz', questionIds: [qid] });
+    return c.id;
+  });
+  await teacher.goto(BASE + '/teacher#classes'); await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector('#activeExams .grouprow');
+  const groupNames = await teacher.$$eval('#activeExams .grouprow b', (b) => b.map((x) => x.textContent));
+  ok(groupNames.includes('EEE 146') && groupNames.length >= 2, 'the Exams list is grouped by course (' + groupNames.join(', ') + ')');
+  await teacher.click('#activeExams .grouprow:has-text("EEE 146") .groupbtn');
+  ok(!(await teacher.isVisible('#activeExams tr[data-group="EEE146"]')), 'clicking a course folds its exams away');
+  await teacher.goto(BASE + '/teacher#classes'); await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector('#activeExams .grouprow');
+  ok(!(await teacher.isVisible('#activeExams tr[data-group="EEE146"]')), 'the folded course stays folded next time');
+  await teacher.click('#activeExams .grouprow:has-text("EEE 146") .groupbtn');
+  await teacher.uncheck('#groupCourses'); await teacher.waitForFunction(() => !document.querySelector('#activeExams .grouprow'));
+  ok(true, '"Group by course" can be turned off for one plain list');
+  await teacher.check('#groupCourses'); await teacher.waitForSelector('#activeExams .grouprow');
+  await shot(teacher, '25-exams-grouped');
+  await teacher.evaluate(async (id) => {
+    const xs = (await (await fetch('/api/teacher/exams')).json()).exams.filter((x) => x.class_id === id);
+    for (const x of xs) await fetch('/api/teacher/exams/' + x.id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ delete: true, confirmDeleteResults: true }) });
+    await fetch('/api/teacher/classes/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ delete: true }) });
+  }, groupCls);
+  await teacher.goto(BASE + '/teacher#classes'); await teacher.waitForSelector('.classcard');
+
   // ── Archive: exams (teacher's list only) and classes (hidden from students) ──
   await teacher.goto(BASE + '/teacher#exams'); await teacher.waitForSelector('#activeExams [data-archive]');
-  const activeBefore = await teacher.$$eval('#activeExams tbody tr', (r) => r.length);
-  const archivedBefore = await teacher.$$eval('#archivedExams tbody tr', (r) => r.filter((x) => !x.querySelector('.empty')).length);
+  const activeBefore = await teacher.$$eval('#activeExams tbody tr[data-group]', (r) => r.length);
+  const archivedBefore = await teacher.$$eval('#archivedExams tbody tr[data-group]', (r) => r.length);
   await teacher.click('#activeExams [data-archive]');
   if (await teacher.isVisible('.dialog .btn.primary').catch(() => false)) await teacher.click('.dialog .btn.primary');
   ok(await toastSays(teacher, 'Moved to Archived'), 'an exam can be archived');
   await teacher.waitForSelector('#archivedPanel:not([hidden])');
-  ok((await teacher.$$eval('#activeExams tbody tr', (r) => r.length)) === activeBefore - 1 && (await teacher.$$eval('#archivedExams tbody tr', (r) => r.length)) === archivedBefore + 1, 'archived exam moves to the Archived list');
+  ok((await teacher.$$eval('#activeExams tbody tr[data-group]', (r) => r.length)) === activeBefore - 1 && (await teacher.$$eval('#archivedExams tbody tr[data-group]', (r) => r.length)) === archivedBefore + 1, 'archived exam moves to the Archived list');
   await teacher.click('#archivedPanel > summary'); await teacher.click('#archivedExams [data-restore]');
   ok(await toastSays(teacher, 'Moved back to Exams'), 'an archived exam can be restored');
-  await teacher.waitForFunction((n) => document.querySelectorAll('#activeExams tbody tr').length === n, activeBefore);
+  await teacher.waitForFunction((n) => document.querySelectorAll('#activeExams tbody tr[data-group]').length === n, activeBefore);
   await teacher.goto(BASE + '/teacher#classes'); await teacher.waitForSelector('[data-carchive][data-to="1"]');
   await teacher.click('[data-carchive][data-to="1"]'); await teacher.click('.dialog .btn.primary');
   ok(await toastSays(teacher, 'Class archived'), 'a class can be archived');

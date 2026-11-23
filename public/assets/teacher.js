@@ -427,11 +427,23 @@
     if (x.end_at && new Date(x.end_at) < now) return '<span class="tag warn">Closed</span>';
     return '<span class="tag ok">Open</span>';
   }
+  function examStatusKey(x) {
+    const now = Date.now();
+    if (!x.published) return 'draft';
+    if (x.start_at && new Date(x.start_at) > now) return 'scheduled';
+    if (x.end_at && new Date(x.end_at) < now) return 'closed';
+    return 'open';
+  }
   async function viewExams() {
     const r = await api('/teacher/exams');
     const active = r.exams.filter((x) => !x.archived), archived = r.exams.filter((x) => x.archived);
     const closed = active.filter((x) => x.end_at && new Date(x.end_at) < Date.now());
-    const row = (x) => `<tr>
+    // Group by course (the class name; sections of the same course share a group). Folded groups and the choice are remembered.
+    const pref = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
+    const setPref = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } };
+    const grouped = pref('examsGrouped', true), folded = new Set(pref('examsFolded', []));
+    const courseKey = (x) => String(x.class_name || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const row = (x) => `<tr data-group="${esc(courseKey(x))}"${grouped && folded.has(courseKey(x)) ? ' hidden' : ''}>
         <td data-label="Exam"><a href="#exam/${x.id}" class="examname"><b>${esc(x.title)}</b></a>
           <div class="small">${esc(x.class_name)}${x.class_section ? ' <span class="muted">— ' + esc(x.class_section) + '</span>' : ''}</div>
           <div class="small muted">${x.question_count} question${x.question_count === 1 ? '' : 's'}${x.time_limit_min ? ' · ' + x.time_limit_min + ' min' : ''}</div></td>
@@ -442,14 +454,34 @@
           ? `<button type="button" class="btn small" data-restore="${x.id}" title="Move back to the active list">Restore</button><a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a><a class="btn small" href="#exam/${x.id}">Edit</a>`
           : `<a class="btn small" href="#exam/${x.id}">Edit</a><button type="button" class="btn small" data-copylink="${x.id}" title="Copy the link students open to take this exam (e.g. for Google Classroom)">Copy link</button><a class="btn small" href="/preview?id=${x.id}" target="_blank" rel="noopener">Preview</a>
              <button type="button" class="btn small ghost span2" data-archive="${x.id}" data-open="${x.published && !(x.end_at && new Date(x.end_at) < Date.now()) ? 1 : 0}" title="Move to the Archived list (nothing is deleted)">Archive</button>`}</div></td></tr>`;
-    const table = (list, empty, id) => `<div class="tablewrap examscroll" id="${id}"><table class="list exams"><thead><tr><th>Exam</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>
-      ${list.length ? list.map(row).join('') : '<tr><td colspan="4"><div class="empty">' + empty + '</div></td></tr>'}</tbody></table></div>`;
+    const rows = (list) => {
+      if (!grouped) return list.map(row).join('');
+      const groups = [];
+      list.forEach((x) => { const k = courseKey(x); let g = groups.find((y) => y.key === k); if (!g) groups.push(g = { key: k, name: x.class_name, items: [] }); g.items.push(x); });
+      return groups.map((g) => {
+        const open = g.items.filter((x) => examStatusKey(x) === 'open').length;
+        return `<tr class="grouprow" data-fold="${esc(g.key)}"><td colspan="4"><button type="button" class="groupbtn" aria-expanded="${folded.has(g.key) ? 'false' : 'true'}">
+          <span class="caret">${folded.has(g.key) ? '▸' : '▾'}</span> 📚 <b>${esc(g.name)}</b> <span class="muted">· ${g.items.length} exam${g.items.length === 1 ? '' : 's'}${open ? ' · <span class="groupopen">' + open + ' open now</span>' : ''}</span></button></td></tr>` +
+          g.items.map(row).join('');
+      }).join('');
+    };
+    const table = (list, empty, id) => `<div class="tablewrap examscroll" id="${id}"><table class="list exams${grouped ? ' grouped' : ''}"><thead><tr><th>Exam</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>
+      ${list.length ? rows(list) : '<tr><td colspan="4"><div class="empty">' + empty + '</div></td></tr>'}</tbody></table></div>`;
     view.innerHTML = `<div class="stack"><div class="panel"><div class="hd"><h2>Exams <span class="muted small">(${active.length})</span></h2>
-        <div class="toolbar">${closed.length ? `<button type="button" class="btn" id="archiveClosed" title="Move every exam that has closed to the Archived list">Archive closed exams (${closed.length})</button>` : ''}<a class="btn primary" href="#exam/new">+ New exam</a></div></div>
+        <div class="toolbar"><label class="check small" style="margin:0" title="Show the exams under each course (class name)"><input type="checkbox" id="groupCourses"${grouped ? ' checked' : ''}> Group by course</label>${closed.length ? `<button type="button" class="btn" id="archiveClosed" title="Move every exam that has closed to the Archived list">Archive closed exams (${closed.length})</button>` : ''}<a class="btn primary" href="#exam/new">+ New exam</a></div></div>
       ${table(active, archived.length ? 'No active exams. Create one, or restore one from the Archived list below.' : 'No exams yet. Add questions to your bank, then create an exam.', 'activeExams')}</div>
       <details class="panel archivepanel" id="archivedPanel"${archived.length ? '' : ' hidden'}><summary class="hd"><h3>Archived <span class="muted small">(${archived.length})</span></h3><span class="small muted">Past exams you put away. Results are kept; students still see their own scores.</span></summary>
       ${table(archived, 'Nothing archived.', 'archivedExams')}</details></div>`;
     $$('[data-copylink]').forEach((btn) => { btn.onclick = () => App.copyText(location.origin + '/exam?id=' + btn.dataset.copylink); });
+    $('#groupCourses').onchange = (e) => { setPref('examsGrouped', e.target.checked); viewExams(); };
+    $$('.grouprow').forEach((tr) => tr.querySelector('.groupbtn').onclick = () => {
+      const k = tr.dataset.fold, fold = !folded.has(k);
+      if (fold) folded.add(k); else folded.delete(k);
+      setPref('examsFolded', Array.from(folded));
+      tr.closest('tbody').querySelectorAll('tr[data-group]').forEach((r2) => { if (r2.dataset.group === k) r2.hidden = fold; });
+      tr.querySelector('.caret').textContent = fold ? '▸' : '▾';
+      tr.querySelector('.groupbtn').setAttribute('aria-expanded', String(!fold));
+    });
     $$('[data-archive]').forEach((btn) => { btn.onclick = async () => {
       const ex = r.exams.find((e) => e.id === btn.dataset.archive) || {}, n = ex.snapshot_count || 0;
       const sn = n ? ' Its ' + n + ' camera snapshot' + (n === 1 ? ' is' : 's are') + ' permanently deleted; results are kept.' : '';

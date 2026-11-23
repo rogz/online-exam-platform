@@ -35,7 +35,7 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   (computer / computer or tablet / any); camera (off / at start / throughout) with preview; advanced settings
   (below). **Preview** (try it as a student, check answers against the key, problems flagged, Edit links),
   **Copy link**, Duplicate, Delete.
-- **Exams list**: Results / Edit / Copy link / Preview; scrollable; **Archive**, "Archive closed exams (N)",
+- **Exams list**: grouped by course (class name, spaces/case ignored; header with exam count and "open now"; click to fold; folded groups and the "Group by course" choice remembered in the browser); Results / Edit / Copy link / Preview; scrollable; **Archive**, "Archive closed exams (N)",
   Archived list with Restore (archiving an exam tidies the teacher's list and deletes its camera snapshots; results stay).
 - **Several blanks in one FIB question** (`V = ____ V and I = ____ A`): the answer key has one entry per blank separated
   by ` ; ` (only split when the text has 2+ blanks); the editor shows one box per blank; students get a box inside the

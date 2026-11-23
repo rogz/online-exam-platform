@@ -110,6 +110,13 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   30 days after the exam closes; clean-up runs at most twice a day when a teacher opens the exam list (never wakes
   the database by itself) and also removes files of deleted exams/students.
 - Students are **not told** the bank size or that sets are random; they only see their own question count.
+- **Results report for students** (when "Show score" and the exam option `showRank`, default on): score as a big
+  percent, Rank n/N, percentile rank ((below + ½·equal)/N), class mean, median, standard deviation (population),
+  from each student's latest submitted attempt (`core.rankOf`); "current" while the exam is open, attempts are in
+  progress or essays are ungraded; on the result screen after submitting and on My Exams, with **Print my result**.
+- **My Exams and offline exams**: an "📥 Offline exam" label, an "Offline exam" tile and a box above the start button
+  with **Download for offline** (opens `/exam?id=…&download=1`, which downloads at once); "✓ Downloaded on this
+  device" afterwards (checked in the browser's IndexedDB). The online start becomes "Start online now".
 
 ### Accounts
 - Sign-in with Enter; signed-in visitors go straight to their page. Profile (name, student number, school,

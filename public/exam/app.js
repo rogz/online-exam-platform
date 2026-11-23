@@ -1419,6 +1419,12 @@
       $('resultNote').textContent = r.pendingEssays
         ? r.pendingEssays + ' essay question(s) still need to be graded by your instructor, so your final score may change.'
         : '';
+      if (r.rank) {
+        const k = r.rank;
+        $('resultRank').hidden = false;
+        $('resultRank').innerHTML = '<b>Rank = ' + k.rank + '/' + k.total + '</b> · Percentile rank = ' + k.percentile + '<br><span class="small muted">Mean = ' + k.mean + '% · Median = ' + k.median +
+          '% · StdDev = ' + k.sd + (k.current ? '<br>Current: these change while classmates are still taking the exam. See My Exams later.' : '') + '</span>';
+      }
     } else {
       $('resultNote').textContent = 'Your instructor will release the results.';
     }
@@ -1695,7 +1701,9 @@
       state.info = await api('getExam', { examId: state.examId }, 3);
       state.serverOffset = state.info.exam.serverNow - Date.now();
       renderRules();
-      renderOfflineCard().catch(() => {});
+      renderOfflineCard().then(() => {
+        if (new URLSearchParams(location.search).get('download') === '1' && $('dlBtn') && !state.offline) $('dlBtn').click();
+      }).catch(() => {});
     } catch (e) {
       if (e.code === 'NETWORK' && pk && !(pst && pst.status === 'SENT')) { renderOfflineRules(pk); return; }
       if (e.code === 'NETWORK') { showError('No internet connection.' + (pk ? ' Your answers for this exam were already sent.' : ' This exam was not downloaded on this device, so it needs internet.')); return; }

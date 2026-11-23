@@ -494,7 +494,8 @@
             <div class="hint">For this exam only; your question bank is not changed. Use it so every student has the same total. Results already submitted keep their points.</div></div>
           <label class="check"><input type="checkbox" id="eShufQ"${v('shuffle_q', true) ? ' checked' : ''}> Shuffle question order</label>
           <label class="check"><input type="checkbox" id="eShufC"${v('shuffle_c', true) ? ' checked' : ''}> Shuffle multiple-choice options</label>
-          <label class="check"><input type="checkbox" id="eScore"${v('show_score', true) ? ' checked' : ''}> Show score to students after submitting</label></fieldset>
+          <label class="check"><input type="checkbox" id="eScore"${v('show_score', true) ? ' checked' : ''}> Show score to students after submitting</label>
+          <label class="check" style="margin-left:24px"><input type="checkbox" id="oRank"${o.showRank !== false ? ' checked' : ''}> Also show their rank and the class statistics (e.g. Rank 3/35, mean, median)</label></fieldset>
         <fieldset><legend>How questions are shown</legend>
           <select id="eMode">${opt('ALL', v('display_mode', 'ALL'), 'All on one page (scroll)')}${opt('ONE', v('display_mode', 'ALL'), 'One question at a time')}</select>
           <label class="check"><input type="checkbox" id="eBack"${v('allow_back', true) ? ' checked' : ''}> Allow going back to previous questions</label>
@@ -633,6 +634,7 @@
       if (!one) $('#eBack').checked = true; if (perQ) $('#eBack').checked = false;
       $('#ePrev').disabled = $('#eFace').value !== 'ALWAYS';
       $('#oRandSnap').disabled = $('#eFace').value !== 'ALWAYS';
+      $('#oRank').disabled = !$('#eScore').checked;
       const netNow = ($('input[name=eNet]:checked') || {}).value || 'ONLINE';
       $('#offlineMinRow').hidden = netNow === 'STRICT';
       $('#offlineMore').hidden = netNow !== 'OFFLINE';
@@ -640,7 +642,7 @@
     }
     ['pSearch', 'pType', 'pTopic', 'pFolder'].forEach((i) => $('#' + i).addEventListener('input', drawPicker));
     $('#pAll').onchange = (e) => { visible().filter((q) => !q.problems.length).forEach((q) => toggle(q.id, e.target.checked)); drawPicker(); };
-    ['eMode', 'eQsec', 'eFace', 'oRandSnap'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
+    ['eMode', 'eQsec', 'eFace', 'oRandSnap', 'eScore'].forEach((i) => $('#' + i).addEventListener('input', syncMode));
     $('#ePick').addEventListener('input', drawSum);
     $('#ePtsMode').addEventListener('input', (e) => { pr.mode = e.target.value; drawPts(); drawSum(); });
     const showPass = () => { const p = $('#ePass').value.trim(); $('#passShow').innerHTML = p ? 'Password: <b style="letter-spacing:1px">' + esc(p) + '</b>' + (p.replace(/[\s-]/g, '').length < 8 ? ' <span style="color:var(--bad)">(too short for offline: 8+ letters or numbers)</span>' : '') : '<span style="color:var(--bad)">No password yet</span>'; };
@@ -666,7 +668,7 @@
         faceGraceSeconds: $('#oFace').value, cameraWarnings: $('#oCamWarn').value, submitGraceSeconds: $('#oSubmit').value, requireMonitorCheck: $('#oMon').checked, blockCopyPaste: $('#oCopy').checked,
         typePicks: activeTopics().length ? [] : activeTypes(), phoneDetection: $('#oPhone').checked, headDetection: $('#oHead').checked, cameraSnapshots: $('#oSnap').checked, openCountdown: $('#oCount').checked,
         randomSnapshots: $('#oRandSnap').checked && $('#eFace').value === 'ALWAYS', snapshotsPerHour: $('#oSnapHour').value,
-        keepGoingOffline: ($('input[name=eNet]:checked') || {}).value !== 'STRICT', offlineSubmitMinutes: $('#oOfflineMin').value,
+        keepGoingOffline: ($('input[name=eNet]:checked') || {}).value !== 'STRICT', offlineSubmitMinutes: $('#oOfflineMin').value, showRank: $('#oRank').checked,
         offlineMode: ($('input[name=eNet]:checked') || {}).value === 'OFFLINE',
         pointsRule: { mode: pr.mode, all: pr.all, byType: pr.byType, byTopic: pr.byTopic } },
     });

@@ -133,6 +133,7 @@ textarea.essay { min-height: 160px; resize: vertical; }
 .pager-mid { text-align: center; }
 .q-timer { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--border); font-weight: 700; font-variant-numeric: tabular-nums; }
 .q-timer.low { color: var(--danger); border-color: var(--danger); }
+.rank { font-size: 18px; margin: 6px 0; }
 .offline-card { border: 1px solid var(--border); background: var(--card); border-left: 4px solid var(--primary); border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
 .offline-card .btn { margin-top: 8px; }
 .offline-card.ready { border-left-color: var(--ok); }

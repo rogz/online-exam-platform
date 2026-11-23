@@ -41,6 +41,7 @@ const DEFAULT_OPTIONS = {
   timeWarnings: [5, 1],
   reconnectSeconds: 60,
   maxReconnects: 3,
+  showRank: true,          // with "show score": also show the student's rank (e.g. 3rd of 25)
   offlineMode: false,      // students may download the exam before and take it without internet (needs a strong password)
   keepGoingOffline: true,  // internet drops while the exam page stays open: keep going, send the answers when it's back
   offlineSubmitMinutes: 60, // answers finished in time but sent this many minutes after the deadline are still accepted
@@ -71,6 +72,7 @@ function examOptions(raw) {
       .map(Number).filter((n) => n > 0).sort((a, b) => b - a),
     reconnectSeconds: Math.round(num(o.reconnectSeconds, 60, 0)),
     maxReconnects: Math.round(num(o.maxReconnects, 3, 0)),
+    showRank: o.showRank !== false,
     offlineMode: o.offlineMode === true,
     keepGoingOffline: o.keepGoingOffline !== false,
     offlineSubmitMinutes: Math.min(24 * 60, Math.round(num(o.offlineSubmitMinutes, 60, 0))),
@@ -104,6 +106,31 @@ function applyPoints(exam, pool) {
     const p = r.mode === 'ALL' ? r.all : r.mode === 'TYPE' ? r.byType[q.type] : topics.get(normTopic(q.topic));
     return p ? Object.assign({}, q, { points: p }) : q;
   });
+}
+
+/**
+ * The student's rank among everyone who submitted this exam (each student's latest submitted attempt, by percent;
+ * equal percents share a rank). q(sql, params) runs a query. Returns null when the student has no submitted attempt.
+ */
+async function rankOf(q, examId, studentId) {
+  const r = (await q(`WITH last AS (
+      SELECT DISTINCT ON (student_id) student_id, percent FROM attempts
+       WHERE exam_id = $1 AND status = 'SUBMITTED' ORDER BY student_id, submitted_at DESC)
+    SELECT (SELECT percent FROM last WHERE student_id = $2) AS mine, (SELECT count(*)::int FROM last) AS total,
+           (SELECT count(*)::int FROM last WHERE percent > (SELECT percent FROM last WHERE student_id = $2)) AS above,
+           (SELECT count(*)::int FROM last WHERE percent = (SELECT percent FROM last WHERE student_id = $2)) AS same,
+           (SELECT count(*)::int FROM attempts WHERE exam_id = $1 AND (status = 'IN_PROGRESS' OR (status = 'SUBMITTED' AND pending_essays > 0))) AS open_count`,
+    [examId, studentId])).rows[0];
+  if (!r || r.mine === null || r.mine === undefined) return null;
+  const all = (await q(`SELECT DISTINCT ON (student_id) percent FROM attempts WHERE exam_id = $1 AND status = 'SUBMITTED' ORDER BY student_id, submitted_at DESC`, [examId])).rows
+    .map((x) => Number(x.percent) || 0).sort((a, b) => a - b);
+  const n = all.length, mean = all.reduce((t, v) => t + v, 0) / n;
+  const median = n % 2 ? all[(n - 1) / 2] : (all[n / 2 - 1] + all[n / 2]) / 2;
+  const sd = Math.sqrt(all.reduce((t, v) => t + (v - mean) * (v - mean), 0) / n);
+  const below = all.filter((v) => v < Number(r.mine)).length;
+  const r2 = (v) => Math.round(v * 100) / 100;
+  return { rank: r.above + 1, total: r.total, tied: r.same > 1, pending: r.open_count > 0,
+    mean: r2(mean), median: r2(median), sd: r2(sd), percentile: r2((below + 0.5 * r.same) / n * 100) };
 }
 
 /** Exam row from the database → the settings the rules below use. */
@@ -462,6 +489,6 @@ module.exports = {
   STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS, MAX_IMAGE_BYTES, DEFAULT_OPTIONS,
   examOptions, examConfig, questionFromRow, windowStatus,
   normText, parseTF, mcCorrectIndex, normType, validateQuestion, gradeQuestion,
-  seededShuffle, attemptQuestions, setSummary, gradeFib, numericSpec, parseNumber, closeSpelling, applyPoints, pointsRule, publicQuestion, normTopic,
+  seededShuffle, attemptQuestions, setSummary, rankOf, gradeFib, numericSpec, parseNumber, closeSpelling, applyPoints, pointsRule, publicQuestion, normTopic,
   driveFileId, externalImageUrl, deviceOf, deviceAllowed,
 };

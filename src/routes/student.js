@@ -30,8 +30,18 @@ router.get('/dashboard', async (req, res) => {
        FROM exams x JOIN classes c ON c.id = x.class_id JOIN users u ON u.id = x.teacher_id
        JOIN enrollments e ON e.class_id = c.id AND e.student_id = $1
       WHERE x.published AND NOT c.archived ORDER BY x.start_at NULLS FIRST, x.created_at`, [req.user.id]);
+  const pkgs = exams.length ? await db.many('SELECT exam_id, downloaded_at, synced_at FROM offline_packages WHERE student_id = $1', [req.user.id]) : [];
   const attempts = exams.length ? await db.many(
     `SELECT * FROM attempts WHERE student_id = $1 AND exam_id = ANY($2::uuid[]) ORDER BY started_at`, [req.user.id, exams.map((x) => x.id)]) : [];
+  const ranks = {};
+  for (const x of exams) {
+    const o = core.examOptions(x.options);
+    const last = attempts.filter((a) => a.exam_id === x.id).pop();
+    if (x.show_score && o.showRank && last && last.status === 'SUBMITTED') {
+      const r = await core.rankOf((sql, p) => db.query(sql, p), x.id, req.user.id);
+      if (r) ranks[x.id] = { rank: r.rank, total: r.total, mean: r.mean, median: r.median, sd: r.sd, percentile: r.percentile, current: r.pending || !x.end_at || new Date(x.end_at) > now };
+    }
+  }
   const out = exams.map((x) => {
     const exam = core.examConfig(x);
     const mine = attempts.filter((a) => a.exam_id === x.id);
@@ -49,7 +59,9 @@ router.get('/dashboard', async (req, res) => {
       retakeAllowed: last.allow_retake,
       score: x.show_score ? last.score : null, maxScore: x.show_score ? last.max_score : null,
       percent: x.show_score ? last.percent : null, pendingEssays: x.show_score ? last.pending_essays : null,
+      rank: ranks[x.id] || null,
     } : null;
+    const pkg = pkgs.find((p) => p.exam_id === x.id);
     return {
       id: x.id, title: x.title, instructions: x.instructions, state,
       className: x.class_name + (x.class_section ? ' — ' + x.class_section : ''), teacherName: x.teacher_name,
@@ -58,7 +70,7 @@ router.get('/dashboard', async (req, res) => {
       displayMode: exam.displayMode, allowBack: exam.allowBack, questionSeconds: exam.questionSeconds,
       faceMode: exam.faceMode, allowedDevices: exam.allowedDevices, requiresPassword: !!exam.password,
       blockCopyPaste: exam.options.blockCopyPaste, reconnectSeconds: exam.options.reconnectSeconds, focusWarnings: exam.options.focusWarnings, showScore: exam.showScore,
-      attempt,
+      attempt, offline: exam.options.offlineMode, questionTotal: questionCount(x), downloadedAt: pkg ? pkg.downloaded_at : null,
     };
   });
   res.json({ ok: true, classes, exams: out, serverNow: now.getTime() });

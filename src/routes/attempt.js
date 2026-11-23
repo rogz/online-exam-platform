@@ -400,7 +400,7 @@ const actions = {
   /** Offline exams: the answers (and what happened) arrive when the student is back online. Graded like a submit. */
   async offlineSubmit(req) {
     if (!isUuid(req.body.packageId)) throw fail(404, 'NO_ATTEMPT', 'This exam copy was not found.');
-    return receiveOffline(req.body, { studentId: req.user.id, source: 'the student\'s device' });
+    return withRank(await receiveOffline(req.body, { studentId: req.user.id, source: 'the student\'s device' }), req.body.packageId, req.user.id);
   },
 
   /** An unexpected error on the exam page (a bug): logged for the teacher. At most 5 per attempt. */
@@ -559,9 +559,21 @@ const actions = {
       return { result: resultFor(a, exam) };
     });
     if (out.error) throw out.error;
-    return out.result;
+    return withRank(out.result, req.body.attemptId, req.user.id);
   },
 };
+
+/** Adds the student's rank to a submit result, when the exam shows scores and ranks. */
+async function withRank(result, attemptId, studentId) {
+  if (!result || !result.showScore || !isUuid(attemptId)) return result;
+  const a = await db.one('SELECT exam_id FROM attempts WHERE id = $1 AND student_id = $2', [attemptId, studentId]);
+  if (!a) return result;
+  const x = await db.one('SELECT options, end_at FROM exams WHERE id = $1', [a.exam_id]);
+  if (!x || !core.examOptions(x.options).showRank) return result;
+  const rank = await core.rankOf((sql, p) => db.query(sql, p), a.exam_id, studentId);
+  if (rank) result.rank = { rank: rank.rank, total: rank.total, mean: rank.mean, median: rank.median, sd: rank.sd, percentile: rank.percentile, current: rank.pending || !x.end_at || new Date(x.end_at) > new Date() };
+  return result;
+}
 
 // Same request shape as the Google Sheets version: { action, ...fields }.
 // sendBeacon (page closing) cannot add headers, so it may post as text/plain for these two actions.

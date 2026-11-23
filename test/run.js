@@ -252,7 +252,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await student.click('#resultBack');
   await student.waitForSelector('.item:has-text("EEE 150 Quiz 1")');
   ok((await student.textContent('#list')).includes('Completed'), 'dashboard moves the exam to Completed');
-  await student.waitForSelector('#startbox .score');
+  await student.waitForSelector('#startbox .scorebox');
   await shot(student, '08-student-completed');
 
   // ── Teacher grades the essay and allows a retake ──
@@ -989,6 +989,58 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await db.query(`UPDATE attempts SET started_at = now() - interval '5 hours', deadline = now() - interval '4 hours' WHERE exam_id = $1`, [oldExam]);
   await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#results/' + oldExam); await teacher.waitForSelector('[data-answers]');
   ok((await teacher.textContent('#aRows')).includes('Time ran out'), 'Results: an old unfinished attempt shows "Time ran out (not submitted)"');
+
+  // ── My Exams: offline exams are labelled and can be downloaded from there; students see their current rank ──
+  const dashOff = await teacher.evaluate(async () => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const ids = (await (await fetch('/api/teacher/questions')).json()).questions.filter((q) => q.type === 'TF').slice(0, 1).map((q) => q.id);
+    const x = (await post('/api/teacher/exams', { classId: cls.id, title: 'Dashboard offline quiz', questionIds: ids, timeLimitMinutes: 10, password: 'DASH-OFF-123',
+      options: { offlineMode: true }, startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() })).exam;
+    await post('/api/teacher/exams/' + x.id, { publish: true });
+    return x.id;
+  });
+  await student.goto(BASE + '/student'); await student.waitForSelector('.item');
+  await student.click(`.item[data-id="${dashOff}"]`); await student.waitForSelector('#offbox a.btn');
+  ok((await student.textContent(`.item[data-id="${dashOff}"]`)).includes('Offline exam') && (await student.textContent('#offbox')).includes('weak or no internet') &&
+    (await student.textContent('.tiles')).includes('Offline exam'), 'My Exams shows "📥 Offline exam" before starting, with a Download for offline button');
+  await shot(student, '23-dashboard-offline');
+  await student.click('#offbox a.btn');
+  await student.waitForFunction(() => /Ready offline|could not/.test((document.querySelector('#dlStatus') || {}).textContent || ''), null, { timeout: 60000 });
+  ok((await student.textContent('#dlStatus')).includes('Ready offline'), 'the button on My Exams downloads it straight away');
+  await student.goto(BASE + '/student'); await student.waitForSelector('.item');
+  await student.click(`.item[data-id="${dashOff}"]`); await student.waitForSelector('#offbox.ready');
+  ok((await student.textContent('#offbox')).includes('Downloaded on this device'), 'My Exams then says "✓ Downloaded on this device"');
+  // rank: one other student scored higher
+  const rankExam = await mkExam('Rank quiz', {});
+  const teacherId = (await dbOne(`SELECT teacher_id FROM exams WHERE id = $1`, [rankExam])).teacher_id;
+  await db.query(`INSERT INTO attempts (id, exam_id, student_id, status, started_at, submitted_at, score, max_score, percent, pending_essays)
+      VALUES (gen_random_uuid(), $1, $2, 'SUBMITTED', now(), now(), 1, 1, 100, 0)`, [rankExam, teacherId]);
+  await student.goto(BASE + '/exam?id=' + rankExam);
+  await student.waitForSelector('#screen-rules:not([hidden])'); await student.check('#agree'); await student.click('#startBtn');
+  await student.waitForSelector('#screen-exam:not([hidden])');
+  await student.click('#questions .question label:has-text("False")');
+  await student.click('#submitBtn'); await student.click('#confirmYes');
+  await student.waitForSelector('#resultRank:not([hidden])');
+  const rText = await student.textContent('#resultRank');
+  ok(rText.includes('Rank = 2/2') && rText.includes('Percentile rank = 25') && rText.includes('Mean = 50'), 'after submitting, the student sees the rank and class statistics (' + rText.trim().slice(0, 60) + ')');
+  await student.goto(BASE + '/student'); await student.waitForSelector('.item');
+  await student.click(`.item[data-id="${rankExam}"]`); await student.waitForSelector('#startbox .scorebox');
+  const rep = await student.textContent('#startbox');
+  ok(rep.includes('0.00%') && rep.includes('Rank = 2/2') && rep.includes('Median = 50'), 'My Exams shows the results report: score, rank 2/2, mean, median, percentile');
+  const [rpop] = await Promise.all([student.waitForEvent('popup'), student.click('#printResult')]);
+  await rpop.waitForSelector('.box');
+  ok((await rpop.textContent('body')).includes('Rank = 2/2') && (await rpop.textContent('.box')).includes('0.00%'), 'a printable result report opens');
+  await rpop.close();
+  await teacher.evaluate(async (id) => {
+    const x = (await (await fetch('/api/teacher/exams/' + id)).json()).exam;
+    await fetch('/api/teacher/exams/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ classId: x.class_id, title: x.title, questionIds: x.question_ids, startAt: x.start_at, endAt: x.end_at, timeLimitMinutes: x.time_limit_min, showScore: true, options: Object.assign({}, x.options, { showRank: false }) }) });
+  }, rankExam);
+  await student.goto(BASE + '/student'); await student.waitForSelector('.item');
+  await student.click(`.item[data-id="${rankExam}"]`); await student.waitForSelector('#startbox .scorebox');
+  ok(!(await student.textContent('#startbox')).includes('Rank'), 'with "show rank" turned off, no rank or statistics are shown');
+  await db.query('DELETE FROM attempts WHERE exam_id = $1 AND student_id = $2', [rankExam, teacherId]);
 
   // ── Safeguards: backups, pausing updates, helping one student ──
   const backupLib = require('../src/backup');

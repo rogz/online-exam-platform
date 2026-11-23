@@ -21,6 +21,7 @@
     forward: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
     device: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>',
     key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M16 7l3 3"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>',
   };
 
   function fmtCountdown(ms) {
@@ -72,7 +73,7 @@
       const items = data.exams.filter((x) => x.state === state);
       if (!items.length) return '';
       return `<section class="group"><h2>${label}</h2>${items.map((x) => `<button type="button" class="item${x.id === selected ? ' on' : ''}" data-id="${esc(x.id)}">
-        <div><b>${esc(x.title)}</b><span>${esc(x.className)}</span><span>${esc(subline(x))}</span></div>${mark(x)}</button>`).join('')}</section>`;
+        <div><b>${esc(x.title)}</b>${x.offline ? ' <span class="offtag">📥 Offline exam</span>' : ''}<span>${esc(x.className)}</span><span>${esc(subline(x))}</span></div>${mark(x)}</button>`).join('')}</section>`;
     }).join('') || '<div class="empty">No exams yet. Your teachers\' exams will appear here when they are published.</div>';
     el.querySelectorAll('.item').forEach((b) => b.addEventListener('click', () => {
       selected = b.dataset.id;
@@ -105,6 +106,7 @@
       ? (x.questionSeconds ? ['forward', x.questionSeconds + ' s per question'] : x.allowBack ? ['nav', 'One at a time'] : ['forward', 'No going back'])
       : ['nav', 'Navigate freely'];
     const tiles = [
+      ...(x.offline ? [['download', 'Offline exam']] : []),
       ['lock', 'Secure'],
       ['clock', x.timeLimitMinutes ? minutes(x.timeLimitMinutes) : 'No time limit'],
       [x.faceMode === 'OFF' ? 'nocamera' : 'camera', x.faceMode === 'ALWAYS' ? 'Camera on' : x.faceMode === 'START' ? 'Face check' : 'No camera'],
@@ -114,6 +116,7 @@
     if (x.requiresPassword) tiles.push(['key', 'Password']);
     el.innerHTML = `<h1>${esc(x.title)}</h1>
       <p class="sub">${esc(x.className)} · ${esc(x.teacherName)}</p>
+      ${x.offline && ['open', 'upcoming', 'inprogress'].includes(x.state) ? '<div class="offbox" id="offbox"></div>' : ''}
       <div class="startbox" id="startbox"></div>
       ${x.instructions ? '<h2>Instructions</h2><p class="instructions">' + esc(x.instructions) + '</p>' : ''}
       <h2>Exam settings</h2>
@@ -133,7 +136,81 @@
         </tbody></table></div>
       </div>`;
     renderStartbox(x);
+    renderOffbox(x);
+    const pb = $('#printResult'); if (pb) pb.onclick = () => printResult(x);
   }
+
+  /** Offline exam: tell the student before they start, and let them download it on this device. */
+  async function renderOffbox(x) {
+    const box = $('#offbox');
+    if (!box) return;
+    const here = await downloadedHere(x.id);
+    const url = '/exam?id=' + encodeURIComponent(x.id);
+    if (here) {
+      box.className = 'offbox ready';
+      box.innerHTML = `<b>✓ Downloaded on this device</b> <span class="muted small">(${esc(App.fmtDate(here.downloadedAt))})</span>
+        <p>This exam works <b>without internet</b>. On exam day open it here (in this browser) and type the password your teacher gives you in the room.
+        If you have no internet then, open <b>${esc(location.host)}/offline</b> (or your bookmark).</p>
+        <a class="btn primary" href="${url}">Open exam</a>`;
+      const sb = $('#startbox .btn.primary'); if (sb) sb.textContent = 'Open exam';
+    } else {
+      box.className = 'offbox';
+      box.innerHTML = `<b>📥 Offline exam</b>: for rooms with weak or no internet.
+        <p>Download it <b>now, while you have internet</b>, on the device you will use for the exam. It stays locked until your teacher gives the password in the room.
+        ${x.downloadedAt ? '<br><span class="small muted">You downloaded it on another device (' + esc(App.fmtDate(x.downloadedAt)) + '). Use that device, or download it here too.</span>' : ''}</p>
+        <a class="btn primary" href="${url}&download=1">📥 Download for offline</a>`;
+      // the online start becomes the second choice
+      const sb = $('#startbox .btn.primary');
+      if (sb && x.state === 'open') { sb.classList.remove('primary', 'big'); sb.textContent = 'Start online now'; }
+      const hint = $('#startbox .hint');
+      if (hint && x.state === 'open') hint.textContent = 'With good internet you can also take it online now. Once it starts, switching tabs or apps will void it.';
+    }
+  }
+
+  /** Was this exam downloaded in this browser? (kept by the exam page in IndexedDB) */
+  function downloadedHere(examId) {
+    return new Promise((resolve) => {
+      try {
+        const r = indexedDB.open('exam-wizard', 1);
+        r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains('packages')) d.createObjectStore('packages'); if (!d.objectStoreNames.contains('snaps')) d.createObjectStore('snaps', { autoIncrement: true }); };
+        r.onerror = () => resolve(null);
+        r.onsuccess = () => {
+          const g = r.result.transaction('packages', 'readonly').objectStore('packages').get(examId);
+          g.onsuccess = () => resolve(g.result || null);
+          g.onerror = () => resolve(null);
+        };
+      } catch (e) { resolve(null); }
+    });
+  }
+
+  /** The results report: the score in big type, and the class statistics with the rank (when the teacher shows them). */
+  function reportHtml(x, a) {
+    const k = a.rank;
+    const stats = k ? `<div class="statline">Mean = ${k.mean}% · Median = ${k.median}% · StdDev = ${k.sd} · <b>Rank = ${k.rank}/${k.total}</b> · Percentile rank = ${k.percentile}</div>
+      ${k.current ? '<div class="small muted">Current: these change while classmates are still taking the exam or being graded.</div>' : ''}` : '';
+    return `<div class="report"><div class="scorebox"><div class="pct">${Number(a.percent).toFixed(2)}%</div><div>My score · ${a.score} / ${a.maxScore}</div></div>${stats}</div>`;
+  }
+
+  function printResult(x) {
+    const a = x.attempt, k = a.rank, w = window.open('', '_blank');
+    if (!w) { toast('Allow pop-ups for this site to print.', true); return; }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Result: ${esc(x.title)}</title><style>
+      body { font: 15px/1.5 Arial, sans-serif; color: #111; margin: 16mm; } .top { display: flex; justify-content: space-between; gap: 20px; }
+      .brand { font-weight: 700; font-size: 20px; color: #23558c; } .who { text-align: right; }
+      h1 { text-align: center; font-size: 26px; margin: 18px 0 2px; } .sub, .stats { text-align: center; font-style: italic; }
+      .box { margin: 18px auto; width: 300px; background: #eee; text-align: center; padding: 10px; } .box b { display: block; font-size: 48px; font-weight: 400; }
+      @media print { .noprint { display: none; } }</style></head><body>
+      <p class="noprint"><button onclick="print()">🖨 Print</button></p>
+      <div class="top"><div class="brand">${esc(document.title.split('—').pop().trim() || 'Exam Wizard')}</div><div class="who">${esc(me.user.name)}${me.user.student_no ? '; Student ID: ' + esc(me.user.student_no) : ''}</div></div>
+      <h1>${esc(x.title)}</h1>
+      <div class="sub">Class: ${esc(x.className)} • Teacher: ${esc(x.teacherName)} • ${esc(App.fmtDate(a.submittedAt))} • Questions: ${x.questionTotal || x.questionCount}</div>
+      ${k ? `<div class="stats">StdDev = ${k.sd} • Mean = ${k.mean} • Median = ${k.median} • Rank = ${k.rank}/${k.total} • Percentile Rank = ${k.percentile}${k.current ? ' (current)' : ''}</div>` : ''}
+      <div class="box"><b>${Number(a.percent).toFixed(2)}%</b>My Score (${a.score} / ${a.maxScore})</div>
+      </body></html>`);
+    w.document.close();
+  }
+
+  const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
 
   function renderStartbox(x) {
     const box = $('#startbox');
@@ -155,7 +232,8 @@
       const a = x.attempt || {};
       if (a.status === 'SUBMITTED') {
         box.innerHTML = `<div class="row" style="justify-content:space-between"><div><span class="tag ok">Submitted</span> <span class="muted small">${esc(App.fmtDate(a.submittedAt))}${a.late ? ' — late' : ''}</span></div></div>
-          ${a.score !== null && a.score !== undefined ? `<div class="score">${a.score} / ${a.maxScore} <span class="muted" style="font-size:18px">(${a.percent}%)</span></div>
+          ${a.score !== null && a.score !== undefined ? `${reportHtml(x, a)}
+            <button type="button" class="btn small" id="printResult" style="margin-top:10px">🖨 Print my result</button>
             ${a.pendingEssays ? '<p class="small muted" style="margin:0">' + a.pendingEssays + ' essay question(s) still to be graded by your teacher.</p>' : ''}`
           : '<p class="muted" style="margin:6px 0 0">Your teacher will release the results.</p>'}`;
       } else if (a.status === 'VOIDED') {

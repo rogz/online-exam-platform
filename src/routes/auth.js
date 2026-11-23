@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.get('/me', async (req, res) => {
   const s = await getSettings();
-  res.json({ ok: true, user: auth.publicUser(req.user), site: { name: s.siteName, teacherSignup: s.teacherSignup, studentSignup: s.studentSignup, signupCredits: Number(s.signupCredits) || 0, passwordEmail: require('../mailer').enabled() } });
+  res.json({ ok: true, user: auth.publicUser(req.user), site: { name: s.siteName, teacherSignup: s.teacherSignup, teacherApproval: !!(s.teacherSignup && s.teacherApproval), studentSignup: s.studentSignup, signupCredits: Number(s.signupCredits) || 0, passwordEmail: require('../mailer').enabled() } });
 });
 
 router.post('/register', async (req, res) => {
@@ -25,6 +25,24 @@ router.post('/register', async (req, res) => {
   const pwProblem = auth.passwordProblem(b.password);
   if (pwProblem) throw fail(400, 'BAD_INPUT', pwProblem);
   if (await db.one('SELECT 1 FROM users WHERE email = $1', [email])) throw fail(409, 'EMAIL_TAKEN', 'An account with this email already exists. Sign in instead.');
+  // Teacher accounts that need approval: with a valid access code the account works at once; without one it is a request.
+  const needsApproval = role === 'teacher' && s.teacherApproval && !str(b.accessCode);
+  if (role === 'teacher' && s.teacherApproval && str(b.accessCode)) await require('./codes').checkCode(b.accessCode);
+  if (needsApproval) {
+    const hash0 = await auth.hashPassword(b.password);
+    const u = await db.one(`INSERT INTO users (email, password_hash, name, role, school, pending_approval, signup_note) VALUES ($1, $2, $3, 'teacher', $4, true, $5) RETURNING id`,
+      [email, hash0, name, str(b.school, 160) || null, str(b.note, 500) || null]);
+    const mailer = require('../mailer');
+    const owner = String(process.env.ADMIN_EMAIL || '').trim();
+    if (mailer.enabled() && owner) {
+      mailer.send({ to: owner, subject: 'New teacher account request: ' + name,
+        text: name + ' (' + email + (b.school ? ', ' + str(b.school, 160) : '') + ') asked for a teacher account on ' + s.siteName + '.' +
+          (b.note ? '\n\nTheir note: ' + str(b.note, 500) : '') + '\n\nApprove or decline it here: ' + mailer.config().publicUrl + '/admin#signups' })
+        .catch((e) => console.error('Request email not sent:', e.message));
+    }
+    return res.json({ ok: true, pending: true, id: u.id, message: 'Thank you! Your request for a teacher account was sent. You can sign in as soon as the administrator approves it' +
+      (mailer.enabled() ? ' (you will get an email).' : '.') });
+  }
   const hash = await auth.hashPassword(b.password);
   const user = await db.one(
     `INSERT INTO users (email, password_hash, name, role, student_no, school) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
@@ -57,6 +75,7 @@ router.post('/login', async (req, res) => {
     throw fail(401, 'BAD_LOGIN', 'The email or password is incorrect.');
   }
   auth.clearTries(email);
+  if (user.pending_approval) throw fail(403, 'PENDING', 'Your teacher account is waiting for the administrator\'s approval. You can sign in as soon as it is approved.');
   if (user.disabled) throw fail(403, 'DISABLED', 'This account has been disabled. Contact the site administrator.');
   await auth.startSession(res, user.id, req.secure);
   res.json({ ok: true, user: auth.publicUser(await auth.userById(user.id)) });

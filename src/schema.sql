@@ -257,6 +257,10 @@ ALTER TABLE attempts ADD COLUMN IF NOT EXISTS sent_late boolean NOT NULL DEFAULT
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS finished_at timestamptz;
 -- The teacher let the student continue (after a crash or a void): until then, reopening the exam is always allowed.
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS resume_until timestamptz;
+-- New teacher accounts waiting for the admin's approval (Site settings: "need an access code or my approval").
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_approval boolean NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_note text;
+
 -- Offline exams (src/offline.js): one locked download per student and exam. Its id becomes the attempt id when the
 -- answers arrive; question_ids fixes the student's questions at download time.
 CREATE TABLE IF NOT EXISTS offline_packages (

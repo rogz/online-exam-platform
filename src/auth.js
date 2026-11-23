@@ -47,7 +47,7 @@ async function loadUser(req, res, next) {
     req.user = await db.one(
       `SELECT u.*, (SELECT updated_at FROM avatars a WHERE a.user_id = u.id) AS avatar_updated
          FROM sessions s JOIN users u ON u.id = s.user_id
-        WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled`, [sha256(token)]);
+        WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled AND NOT u.pending_approval`, [sha256(token)]);
   }
   next();
 }

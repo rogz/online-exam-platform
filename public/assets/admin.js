@@ -13,6 +13,8 @@
     const r = await api('/admin/overview');
     $('#reqBadge').hidden = !r.counts.pending_requests;
     $('#reqBadge').textContent = r.counts.pending_requests;
+    $('#signBadge').hidden = !r.counts.pending_signups;
+    $('#signBadge').textContent = r.counts.pending_signups;
     return r.counts;
   }
 
@@ -24,6 +26,7 @@
     try {
       if (name === 'overview') await overview();
       else if (name === 'requests') await requests();
+      else if (name === 'signups') await signups();
       else if (name === 'codes') await codes();
       else if (name === 'teachers') await users('teacher');
       else if (name === 'students') await users('student');
@@ -32,6 +35,31 @@
     } catch (e) { view.innerHTML = '<div class="note bad">' + esc(e.message) + '</div>'; }
   }
   window.addEventListener('hashchange', route);
+
+  /** New teacher accounts waiting for approval (Site settings → New teacher accounts → need an access code or my approval). */
+  async function signups() {
+    const r = await api('/admin/signups');
+    const s = (await api('/admin/settings')).settings;
+    const mode = !s.teacherSignup ? 'closed' : s.teacherApproval ? 'approval' : 'open';
+    view.innerHTML = `<div class="panel"><div class="hd"><h2>Teacher sign-ups <span class="muted small">(${r.signups.length} waiting)</span></h2></div><div class="bd">
+      <div class="note ${mode === 'approval' ? 'info' : mode === 'open' ? 'warn' : 'bad'} small" style="margin-bottom:12px">New teacher accounts: <b>${mode === 'approval' ? 'need an access code or your approval' : mode === 'open' ? 'open to anyone' : 'closed'}</b>.
+        <a href="#settings">Change it in Site settings</a>.</div>
+      ${r.signups.length ? `<div class="tablewrap"><table class="list"><thead><tr><th>Teacher</th><th>School</th><th>Their note</th><th>Asked</th><th></th></tr></thead><tbody>
+        ${r.signups.map((u) => `<tr><td><b>${esc(u.name)}</b><div class="small muted">${esc(u.email)}</div></td><td>${esc(u.school || '')}</td><td class="small">${esc(u.signup_note || '')}</td>
+          <td class="small nowrap">${esc(App.fmtDate(u.created_at))}</td>
+          <td class="actions"><button type="button" class="btn small primary" data-approve="${u.id}">Approve</button> <button type="button" class="btn small danger" data-decline="${u.id}">Decline</button></td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="muted">No requests waiting.</p>'}
+      <p class="small muted" style="margin-top:10px">Approving gives the teacher their welcome credits and emails them that they can sign in (when email is set up). Declining deletes the request.</p></div></div>`;
+    $$('[data-approve]').forEach((b) => b.onclick = async () => {
+      const x = await api('/admin/signups/' + b.dataset.approve, { approve: true });
+      toast('Approved' + (x.emailed ? ': the teacher was emailed.' : '. Email is off: tell the teacher they can sign in now.')); signups(); badge().catch(() => {});
+    });
+    $$('[data-decline]').forEach((b) => b.onclick = async () => {
+      const u = r.signups.find((x) => x.id === b.dataset.decline);
+      if (!(await App.confirmBox('Decline this request?', 'The request from ' + u.name + ' (' + u.email + ') is deleted. They can ask again later.', 'Decline', true))) return;
+      await api('/admin/signups/' + u.id, { decline: true }); toast('Declined'); signups(); badge().catch(() => {});
+    });
+  }
 
   async function overview() {
     const c = await badge();
@@ -198,7 +226,12 @@
     view.innerHTML = `<div class="panel"><div class="hd"><h2>Site settings</h2></div><div class="bd">
       <div class="grid2"><div class="field"><label for="sName">Site name</label><input type="text" id="sName" value="${esc(s.siteName)}"></div>
         <div class="field"><label for="sTz">Time zone</label><input type="text" id="sTz" value="${esc(s.timeZone)}"><div class="hint">e.g. Asia/Manila</div></div></div>
-      <label class="check"><input type="checkbox" id="sTeach"${s.teacherSignup ? ' checked' : ''}> Anyone can sign up as a teacher</label>
+      <div class="field" style="margin-bottom:6px"><label for="sTeachMode">New teacher accounts</label>
+        <select id="sTeachMode" style="max-width:520px">
+          <option value="open"${s.teacherSignup && !s.teacherApproval ? ' selected' : ''}>Open: anyone can sign up as a teacher</option>
+          <option value="approval"${s.teacherSignup && s.teacherApproval ? ' selected' : ''}>Need an access code or my approval (requests come to Teacher sign-ups)</option>
+          <option value="closed"${!s.teacherSignup ? ' selected' : ''}>Closed: no teacher sign-ups</option></select>
+        <div class="hint">With an access code from you, a teacher's account works at once. Without one, they send a request and you approve it in <a href="#signups">Teacher sign-ups</a>.</div></div>
       <div class="field" style="margin:6px 0 4px"><label for="sWelcome">Free credits for each new teacher</label><input type="number" id="sWelcome" min="0" max="1000" value="${esc(s.signupCredits)}" style="max-width:120px"><div class="hint">Given once, when a teacher signs up. 0 = none.</div></div>
       <label class="check"><input type="checkbox" id="sStud"${s.studentSignup ? ' checked' : ''}> Anyone can sign up as a student</label>
       <h3 class="settings-h">Credit packages</h3>
@@ -267,7 +300,7 @@
         : 'Automatic checkout is off: teachers send money to the link below and you approve their request. To turn on automatic checkout, add <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> on the server (see the README).';
     }).catch(() => {});
     $('#sSave').onclick = async () => {
-      await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeach').checked, studentSignup: $('#sStud').checked, signupCredits: $('#sWelcome').value,
+      await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeachMode').value !== 'closed', teacherApproval: $('#sTeachMode').value === 'approval', studentSignup: $('#sStud').checked, signupCredits: $('#sWelcome').value,
         paymentsEnabled: $('#sPayOn').checked, creditPackages: $('#sPack').value, currency: $('#sCur').value, bankEnabled: $('#sBankOn').checked, bankDetails: $('#sBank').value,
         paypalEnabled: $('#sPpOn').checked, paypalLink: $('#sPpLink').value, otherEnabled: $('#sOtherOn').checked,
         paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value, updatesPaused: $('#sPause').checked });

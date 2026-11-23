@@ -114,6 +114,8 @@
           <div class="field"><label for="upPass">Password</label><input type="password" id="upPass" autocomplete="new-password" minlength="8" required><div class="hint">At least 8 characters.</div></div>
           <div class="field" id="studentNoWrap"><label for="upStudentNo">Student number <span class="muted">(optional)</span></label><input type="text" id="upStudentNo" autocomplete="off"></div>
           <div class="field"><label for="upSchool">School name <span class="muted">(optional)</span></label><input type="text" id="upSchool" autocomplete="organization" placeholder="e.g. MSU-IIT"></div>
+          <div class="note info small" id="approvalNote" hidden style="margin-bottom:10px">New teacher accounts need an <b>access code</b> from the site owner, or the owner's <b>approval</b>. No code? Leave it empty: your request is sent, and you can sign in once it is approved.</div>
+          <div class="field" id="noteWrap" hidden><label for="upNote">A short note for the site owner <span class="muted">(optional)</span></label><input type="text" id="upNote" maxlength="500" placeholder="e.g. EE instructor at MSU-IIT, for my EEE 150 classes"></div>
           <div class="field" id="codeWrap" hidden><label for="upCode">Access code <span class="muted">(optional)</span></label><input type="text" id="upCode" autocomplete="off">
             <div class="hint" id="codeHint">Teachers need an access code or credits to publish exams. You can also add one later under My account.</div></div>
           <p class="hint">By creating an account you agree that your name, email and exam results are stored on this site so your teachers can see them.</p>
@@ -235,7 +237,11 @@
     }
     try {
       const r = await api('/auth/register', { role: role(), name: $('#upName').value, email: $('#upEmail').value, password: pw,
-        studentNo: $('#upStudentNo').value, school: $('#upSchool').value, accessCode: $('#upCode').value });
+        studentNo: $('#upStudentNo').value, school: $('#upSchool').value, accessCode: $('#upCode').value, note: $('#upNote').value });
+      if (r.pending) {
+        $('#signUp').innerHTML = '<div class="note ok" id="pendingMsg"><b>Request sent.</b> ' + App.esc(r.message) + '</div>';
+        return;
+      }
       if (r.codeMessage) { try { sessionStorage.setItem('welcome', r.codeMessage); } catch (e2) { /* ignore */ } }
       go(r.user);
     } catch (err) { $('#upMsg').textContent = err.message; $('#upMsg').hidden = false; }
@@ -253,7 +259,12 @@
   $('#footName').textContent = '© ' + new Date().getFullYear() + ' ' + me.site.name;
 
   const tab = (up) => { $('#signIn').hidden = up; $('#signUp').hidden = !up; $('#tabIn').classList.toggle('on', !up); $('#tabUp').classList.toggle('on', up); };
-  const syncRole = () => { $('#studentNoWrap').hidden = role() !== 'student'; $('#codeWrap').hidden = role() !== 'teacher'; };
+  const syncRole = () => {
+    $('#studentNoWrap').hidden = role() !== 'student'; $('#codeWrap').hidden = role() !== 'teacher';
+    const appr = role() === 'teacher' && !!me.site.teacherApproval;
+    $('#approvalNote').hidden = !appr; $('#noteWrap').hidden = !appr;
+    $('#signUp button[type=submit]').textContent = appr ? 'Create account / send request' : 'Create account';
+  };
   $('#tabIn').onclick = () => tab(false);
   $('#tabUp').onclick = () => tab(true);
   document.querySelectorAll('input[name=role]').forEach((r) => r.addEventListener('change', syncRole));
@@ -270,6 +281,10 @@
     const n = me.site.signupCredits, cr = n + ' free credit' + (n === 1 ? '' : 's');
     $('#teacherStart').textContent = 'Start free: ' + cr + ' when you sign up';
     $('#codeHint').textContent = 'New teachers get ' + cr + ' (publish ' + n + ' exam' + (n === 1 ? '' : 's') + '). Have an access code? Enter it for more. You can also add one later under My account.';
+  }
+  if (me.site.teacherApproval) {
+    $('#codeHint').textContent = 'From the site owner. With a code your account works at once; without one, your request is sent for approval.';
+    if ($('#teacherStart')) $('#teacherStart').textContent = 'Teacher accounts are by approval or access code';
   }
   if (!me.site.teacherSignup) document.querySelectorAll('input[value=teacher], [data-signup=teacher]').forEach((el) => { (el.closest('label') || el).hidden = true; });
 

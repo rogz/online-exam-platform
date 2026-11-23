@@ -5,6 +5,7 @@ const DEFAULTS = {
   siteName: process.env.SITE_NAME || 'Exam Wizard',
   timeZone: process.env.TIME_ZONE || 'Asia/Manila',
   teacherSignup: true,                 // anyone may register as a teacher (then needs a code or credits to publish)
+  teacherApproval: false,              // with teacherSignup: a new teacher needs an access code, or the admin's approval
   signupCredits: 5,                    // free credits for each new teacher account (0 = none)
   studentSignup: true,
   // Credit packages, one per line: "credits = price" (e.g. "10 = 100"). Lines like "10 credits — ₱100" also work.

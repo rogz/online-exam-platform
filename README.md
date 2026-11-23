@@ -97,6 +97,9 @@ After that, every push to `main` goes live in a few minutes. Settings live in `~
 
 ---
 
+## New teacher accounts
+In **Admin → Site settings → New teacher accounts** choose: open to anyone, **need an access code or my approval**, or closed. With approval, a teacher who has an access code from you can use the account at once; others send a request, which you approve or decline in **Admin → Teacher sign-ups** (you and they get an email when email is set up).
+
 ## Backups and updates during exams
 - **Backups:** the site saves a copy of the database every night at about 2 AM in `~/exam-wizard/backups` (the newest 14 are kept). The site owner can download them, or make one at once, in **Admin → Site settings → Safety**. Keep a downloaded copy somewhere else now and then.
 - **Restore** (only if something went badly wrong): create a new, empty database (e.g. a new Neon database), then on the server run `cd ~/exam-wizard/app && DATABASE_URL='postgres://…new…' ~/exam-wizard/node/bin/node deploy/restore-backup.js ~/exam-wizard/backups/backup-….jsonl.gz`, put that address in `~/exam-wizard/.env` and run `sudo systemctl restart exam-wizard`.

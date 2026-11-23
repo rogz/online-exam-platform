@@ -1078,6 +1078,46 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(!(await student.textContent('#startbox')).includes('Rank'), 'with "show rank" turned off, no rank or statistics are shown');
   await db.query('DELETE FROM attempts WHERE exam_id = $1 AND student_id = $2', [rankExam, teacherId]);
 
+  // ── New teacher accounts: need an access code or the admin's approval ──
+  await admin.goto(BASE + '/admin#settings'); await admin.waitForSelector('#sTeachMode');
+  await admin.selectOption('#sTeachMode', 'approval'); await admin.click('#sSave'); await toastSays(admin, 'Settings saved');
+  const appl = await newUser();
+  await appl.goto(BASE + '/#signup'); await appl.waitForSelector('#signUp:not([hidden])');
+  await appl.check('input[name=role][value=teacher]');
+  ok(await appl.isVisible('#approvalNote') && await appl.isVisible('#upNote'), 'the sign-up form explains: an access code, or a request for approval');
+  await appl.fill('#upName', 'Rosa Reyes'); await appl.fill('#upEmail', 'rosa@school.edu'); await appl.fill('#upPass', 'teacher-pass-7');
+  await appl.fill('#upSchool', 'MSU-IIT'); await appl.fill('#upNote', 'EE instructor, EEE 152');
+  await appl.click('#signUp button[type=submit]'); await appl.waitForSelector('#pendingMsg');
+  ok((await appl.textContent('#pendingMsg')).includes('Request sent'), 'without a code, the teacher\'s sign-up becomes a request');
+  const reqMail = outbox[outbox.length - 1];
+  ok(reqMail && reqMail.to === 'admin@test.local' && reqMail.text.includes('Rosa Reyes') && reqMail.text.includes('/admin#signups'), 'the site owner gets an email about the request');
+  const pendLogin = await appl.evaluate(async () => (await (await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ email: 'rosa@school.edu', password: 'teacher-pass-7' }) })).json()));
+  ok(pendLogin.code === 'PENDING' && pendLogin.error.includes('waiting for the administrator'), 'the teacher cannot sign in before approval (clear message)');
+  await admin.goto(BASE + '/admin#signups'); await admin.waitForSelector('[data-approve]');
+  ok((await admin.textContent('#signBadge')) === '1' && (await admin.textContent('#view')).includes('EE instructor, EEE 152'), 'Admin → Teacher sign-ups lists the request with their note');
+  await shot(admin, '26-teacher-signups');
+  await admin.click('[data-approve]'); await toastSays(admin, 'Approved');
+  const okMail = outbox[outbox.length - 1];
+  ok(okMail.to === 'rosa@school.edu' && okMail.subject.includes('is ready'), 'approving emails the teacher that the account is ready');
+  const afterLogin = await appl.evaluate(async () => (await (await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ email: 'rosa@school.edu', password: 'teacher-pass-7' }) })).json()));
+  ok(afterLogin.ok && afterLogin.user.role === 'teacher', 'after approval the teacher signs in');
+  // with an access code: at once; a wrong code is refused; a declined request is deleted
+  const goodCode = await admin.evaluate(async () => (await (await fetch('/api/admin/codes', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ kind: 'days', amount: 30 }) })).json()).codes[0]);
+  const reg = async (email, extra) => appl.evaluate(async ([email, extra]) => (await (await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+    body: JSON.stringify(Object.assign({ role: 'teacher', name: 'T ' + email, email, password: 'teacher-pass-8' }, extra)) })).json()), [email, extra]);
+  const withCode = await reg('coded@school.edu', { accessCode: goodCode });
+  const wrongCode = await reg('wrong@school.edu', { accessCode: 'NOPE-NOPE' });
+  ok(withCode.ok && !withCode.pending && withCode.user && withCode.user.role === 'teacher', 'with a valid access code, the teacher account works at once');
+  ok(!wrongCode.ok && wrongCode.error.includes('not valid') && !(await dbOne(`SELECT 1 AS x FROM users WHERE email = 'wrong@school.edu'`)), 'a wrong access code is refused (no account made)');
+  const toDecline = await reg('nope@school.edu', {});
+  await admin.goto(BASE + '/admin#overview'); await admin.goto(BASE + '/admin#signups'); await admin.waitForSelector('[data-decline]');
+  await admin.click('[data-decline]'); await admin.locator('.overlay').last().locator('.ft .btn.danger, .ft .btn.primary').last().click();
+  await toastSays(admin, 'Declined');
+  ok(toDecline.pending && !(await dbOne(`SELECT 1 AS x FROM users WHERE email = 'nope@school.edu'`)), 'declining deletes the request');
+  await admin.goto(BASE + '/admin#settings'); await admin.waitForSelector('#sTeachMode');
+  await admin.selectOption('#sTeachMode', 'open'); await admin.click('#sSave'); await toastSays(admin, 'Settings saved');
+  await appl.context().close();
+
   // ── Safeguards: backups, pausing updates, helping one student ──
   const backupLib = require('../src/backup');
   const bk = await backupLib.backupNow();

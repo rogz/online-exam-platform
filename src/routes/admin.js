@@ -11,11 +11,12 @@ router.use(auth.requireRole('admin'));
 
 router.get('/overview', async (req, res) => {
   const c = await db.one(`SELECT
-      (SELECT count(*) FROM users WHERE role = 'teacher')::int AS teachers,
+      (SELECT count(*) FROM users WHERE role = 'teacher' AND NOT pending_approval)::int AS teachers,
       (SELECT count(*) FROM users WHERE role = 'student')::int AS students,
       (SELECT count(*) FROM exams WHERE published)::int AS exams,
       (SELECT count(*) FROM attempts)::int AS attempts,
-      (SELECT count(*) FROM credit_requests WHERE status = 'pending')::int AS pending_requests`);
+      (SELECT count(*) FROM credit_requests WHERE status = 'pending')::int AS pending_requests,
+      (SELECT count(*) FROM users WHERE pending_approval)::int AS pending_signups`);
   res.json({ ok: true, counts: c });
 });
 
@@ -26,7 +27,7 @@ router.get('/users', async (req, res) => {
     `SELECT u.id, u.email, u.name, u.role, u.student_no, u.school, u.teacher_until, u.credits, u.disabled, u.created_at,
             (SELECT count(*) FROM exams e WHERE e.teacher_id = u.id)::int AS exam_count,
             (SELECT count(*) FROM classes c WHERE c.teacher_id = u.id)::int AS class_count
-       FROM users u WHERE u.role = $1 AND (lower(u.email) LIKE $2 OR lower(u.name) LIKE $2)
+       FROM users u WHERE u.role = $1 AND NOT u.pending_approval AND (lower(u.email) LIKE $2 OR lower(u.name) LIKE $2)
       ORDER BY u.created_at DESC LIMIT 500`, [role, q]);
   res.json({ ok: true, users: rows });
 });
@@ -261,6 +262,34 @@ router.post('/requests/:id', async (req, res) => {
 });
 
 // ───────── Settings ─────────
+
+// ───────── New teacher accounts waiting for approval ─────────
+router.get('/signups', async (req, res) => {
+  res.json({ ok: true, signups: await db.many('SELECT id, name, email, school, signup_note, created_at FROM users WHERE pending_approval ORDER BY created_at') });
+});
+router.post('/signups/:id', async (req, res) => {
+  if (!isUuid(req.params.id)) throw fail(404, 'NOT_FOUND', 'Request not found.');
+  const u = await db.one('SELECT * FROM users WHERE id = $1 AND pending_approval', [req.params.id]);
+  if (!u) throw fail(404, 'NOT_FOUND', 'This request was already handled.');
+  const mailer = require('../mailer');
+  const s = await getSettings();
+  if (req.body && req.body.approve) {
+    await db.query('UPDATE users SET pending_approval = false WHERE id = $1', [u.id]);
+    const welcome = Math.max(0, Math.round(Number(s.signupCredits) || 0));
+    if (welcome) await grant(u.id, { credits: welcome }, 'Welcome credits for new teachers');
+    if (mailer.enabled()) {
+      mailer.send({ to: u.email, subject: 'Your teacher account on ' + s.siteName + ' is ready',
+        text: 'Hello ' + u.name + ',\n\nYour teacher account on ' + s.siteName + ' was approved' + (welcome ? ', with ' + welcome + ' free credit' + (welcome === 1 ? '' : 's') : '') +
+          '. Sign in here: ' + mailer.config().publicUrl + '/\n\nEmail: ' + u.email + '\n' }).catch((e) => console.error('Approval email not sent:', e.message));
+    }
+    return res.json({ ok: true, approved: true, emailed: mailer.enabled() });
+  }
+  if (req.body && req.body.decline) {
+    await db.query('DELETE FROM users WHERE id = $1 AND pending_approval', [u.id]);
+    return res.json({ ok: true, declined: true });
+  }
+  throw fail(400, 'BAD_INPUT', 'Approve or decline.');
+});
 
 router.get('/settings', async (req, res) => res.json({ ok: true, settings: await getSettings() }));
 

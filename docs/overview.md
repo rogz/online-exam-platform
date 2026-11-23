@@ -15,6 +15,10 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Teachers**: classes, question bank, exams, results. Publishing an exam needs **days of access** (access code)
   or **credits** (1 credit = first publish of 1 exam; editing/re-publishing is free). New teachers get **5 free
   credits** (Site settings).
+- **New teacher accounts** (Site settings): open / **need an access code or my approval** / closed. With approval: a valid
+  access code works at once; without one the sign-up is a request (`users.pending_approval`, note in `signup_note`;
+  cannot sign in), the owner is emailed, and approves or declines in **Admin → Teacher sign-ups** (approval gives the
+  welcome credits and emails the teacher).
 - **Admins**: access codes, requests, teachers and students (reset password, disable, delete), other admins,
   site settings. The `ADMIN_EMAIL` account is the **site owner** (other admins can't remove, disable or reset it).
 

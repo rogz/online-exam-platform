@@ -2,6 +2,16 @@
 const db = require('../db');
 const { fail, str } = require('../util');
 
+/** Checks that an access code can still be used, without using it (throws a friendly error if not). */
+async function checkCode(rawCode) {
+  const code = str(rawCode, 40).toUpperCase().replace(/\s+/g, '');
+  const c = code && await db.one('SELECT * FROM access_codes WHERE code = $1', [code]);
+  if (!c || !c.active) throw fail(404, 'BAD_CODE', 'That access code is not valid. Check it, or leave it empty to send a request instead.');
+  if (c.expires_at && new Date(c.expires_at) < new Date()) throw fail(410, 'CODE_EXPIRED', 'That access code has expired. Leave it empty to send a request instead.');
+  if (c.uses >= c.max_uses) throw fail(410, 'CODE_USED', 'That access code has already been used. Leave it empty to send a request instead.');
+  return c;
+}
+
 /** Applies an access code to a teacher. Returns a sentence describing what was added. */
 async function redeemCode(userId, rawCode) {
   const code = str(rawCode, 40).toUpperCase().replace(/\s+/g, '');
@@ -42,4 +52,4 @@ async function grantWith(t, teacherId, { credits = 0, days = 0 }, reason) {
   await t.query('INSERT INTO credit_ledger (teacher_id, credits, days, reason) VALUES ($1, $2, $3, $4)', [teacherId, credits, days, reason]);
 }
 
-module.exports = { redeemCode, grant, grantWith };
+module.exports = { checkCode, redeemCode, grant, grantWith };

@@ -389,9 +389,9 @@
         Easiest: <a href="/assets/sample-questions.csv" download="sample-questions.csv">download the sample</a> and replace its rows.</p>
       <div class="tablewrap"><table class="list"><thead><tr><th>Column</th><th>What to put</th><th>Example</th></tr></thead><tbody>
         <tr><td><b>Type</b> *</td><td><b>MC</b> multiple choice, <b>TF</b> true/false, <b>FIB</b> fill in the blank, <b>ESSAY</b></td><td>MC</td></tr>
-        <tr><td><b>Question</b> *</td><td>The question text. For FIB, type <b>____</b> (4 underscores) where the blank goes.</td><td>V = I × ____</td></tr>
+        <tr><td><b>Question</b> *</td><td>The question text. For FIB, type <b>____</b> (4 underscores) where the blank goes. Several blanks are fine.</td><td>V = I × ____<br>V = ____ V and I = ____ A</td></tr>
         <tr><td><b>Choices</b></td><td>MC only: the choices separated by <b>|</b> (the key above Enter, with Shift)</td><td>Volt | Ohm | Ampere | Watt</td></tr>
-        <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter); for numbers a range: <b>122.1-122.9 V</b>, <b>122.5 ± 1%</b>; several blanks: one entry per blank, separated by <b>;</b><br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>(optional)</td></tr>
+        <tr><td><b>Answer</b> *</td><td>MC: the <b>letter</b> of the correct choice (A, B, C…)<br>TF: <b>TRUE</b> or <b>FALSE</b><br>FIB: accepted answers separated by <b>|</b> (capital letters don't matter); for numbers a range: <b>122.1-122.9 V</b>, <b>122.5 ± 1%</b>; several blanks: the answers for each blank in order, separated by <b>;</b> (each blank is worth an equal share of the points)<br>ESSAY: optional guide answer for you</td><td>B<br>TRUE<br>R | resistance<br>120 ± 1% ; 5 ± 1%<br>(optional)</td></tr>
         <tr><td><b>Points</b></td><td>Points for the question. Empty = 1</td><td>2</td></tr>
         <tr><td><b>Topic</b></td><td>Optional. Used for filtering and for picking random questions per topic</td><td>Circuits</td></tr>
         <tr><td><b>Folder</b></td><td>Optional. Folder path; folders are created if they don't exist</td><td>EEE 150/Midterm</td></tr>

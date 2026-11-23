@@ -35,6 +35,7 @@ QuestionID,Type,Question,Choices,Answer,Points,Topic,Folder
 PSA-LP-01,MC,"For a conductor of resistivity ρ, length l and area A, the DC resistance is:",R = ρA / l | R = ρl / A | R = l / (ρA) | R = ρl² / A,B,1,Resistance,Power System Analysis/Line Parameters
 PSA-LP-02,TF,Skin effect makes the AC resistance higher than the DC resistance.,,TRUE,1,Resistance,Power System Analysis/Line Parameters
 PSA-LP-03,FIB,The GMR of a solid round conductor of radius r is ____ r.,,0.7788 | .7788,1,Inductance,Power System Analysis/Line Parameters
+PSA-LP-05,FIB,"A 3-phase line delivers 10 MW at 0.8 power factor and 69 kV. The line current is I = ____ A and the reactive power is Q = ____ MVAR.",,104.6 ± 1% ; 7.5 ± 1%,2,Power,Power System Analysis/Line Parameters
 PSA-LP-04,ESSAY,Explain why transmission lines are transposed.,,"To make the average inductance and capacitance of the three phases equal.",5,Inductance,Power System Analysis/Line Parameters
 ```
 
@@ -44,6 +45,7 @@ PSA-LP-04,ESSAY,Explain why transmission lines are transposed.,,"To make the ave
 - Multiple choice: 4 choices, one clearly correct; spread the correct letters evenly over A–D; plausible wrong choices (common mistakes, wrong units, off by a factor).
 - For calculation questions, work the answer out step by step and double-check the numbers and units before writing the row; state the constants used (e.g. ε₀ = 8.854 × 10⁻¹² F/m, GMR = 0.7788 r) in the question when the answer depends on them.
 - Fill-in-the-blank calculations: give the answer as a range, normally ± 1% of the worked-out value (e.g. `122.5 ± 1% V`), so rounding along the way still counts; put the unit wanted in the question.
+- A calculation with two or three results (e.g. current **and** power) can be one FIB question with several blanks: `I = ____ A and P = ____ W`, answer `10 ± 1% ; 2400 ± 1%` (one entry per blank, in order, separated by ` ; `). Give it enough points for the blanks (each blank earns an equal share). Keep the number of `____` and the number of `;`-separated entries the same.
 - Use `Topic` for the sub-topics (so exams can pick e.g. 5 per topic) and one `Folder` for the whole set.
 - Output the CSV only (header + rows), properly quoted, ready to save as `.csv`.
 - Ask the teacher to review the answer key, or use **Preview → Check answers** on the site, before publishing.

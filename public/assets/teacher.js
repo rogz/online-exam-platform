@@ -272,7 +272,8 @@
       <div class="field"><label for="qeTopic">Topic <span class="muted">(optional, for filtering and per-topic picking)</span></label><input type="text" id="qeTopic" list="qeTopics" value="${esc(q ? q.topic : '')}">
         <datalist id="qeTopics">${topics.map((t) => `<option value="${esc(t)}">`).join('')}</datalist></div>
       <fieldset><legend>Picture (optional)</legend>
-        <div class="row"><input type="file" id="qeFile" accept="image/*" aria-label="Upload a picture"><button type="button" class="btn small danger" id="qeNoPic">Remove picture</button></div>
+        <div><input type="file" id="qeFile" accept="image/*" aria-label="Upload a picture"></div>
+        <div class="row" style="margin-top:6px"><button type="button" class="btn small danger" id="qeNoPic">Remove picture</button></div>
         <div class="field" style="margin-top:8px"><label for="qeUrl">…or a link to a picture</label><input type="text" id="qeUrl" value="${esc(st.imageUrl)}" placeholder="https:// (Dropbox, public Google Drive, or a direct image link)"></div>
         <div class="hint" id="qePicNote">Pictures over 2 MB are shrunk automatically.</div><div id="qePic"></div></fieldset>`, {
       wide: true,
@@ -390,13 +391,14 @@
         t.focus(); symTarget = t;
       };
     });
+    const picDrop = App.dropZone($('#qeFile', ov), { text: 'Drag a picture here', hint: 'You can also paste a screenshot here with Ctrl+V.', paste: true });
     $('#qeFile', ov).onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
       try { const r = await App.pictureToDataUrl(f); st.newImage = r.dataUrl; $('#qePicNote', ov).textContent = r.note; $('#qeUrl', ov).value = ''; drawPic(); }
       catch (err) { toast(err.message, true); }
     };
     $('#qeUrl', ov).oninput = () => { st.newImage = null; st.imageId = null; drawPic(); };
-    $('#qeNoPic', ov).onclick = () => { st.newImage = null; st.imageId = null; $('#qeUrl', ov).value = ''; $('#qeFile', ov).value = ''; drawPic(); };
+    $('#qeNoPic', ov).onclick = () => { st.newImage = null; st.imageId = null; $('#qeUrl', ov).value = ''; picDrop.clear(); drawPic(); };
     drawAnswer(); drawPic(); drawPreview();
   }
   function mcIndex(q) {
@@ -429,17 +431,22 @@
       <a href="/assets/sample-questions.csv" download="sample-questions.csv">Download a sample CSV</a></p>
       <details class="csvdetails"><summary>Show the CSV format</summary>${CSV_HELP}</details>
       <div class="field"><label for="csvFolder">Put imported questions in</label><select id="csvFolder">${folderOptions(cache.folders || [], currentFolder !== 'all' && currentFolder !== 'none' ? currentFolder : null, '<option value="">Not in a folder</option>')}</select></div>
-      <input type="file" id="csvFile" accept=".csv,text/csv" aria-label="CSV file"><div id="csvOut" style="margin-top:12px"></div>`, {
+      <input type="file" id="csvFile" accept=".csv,text/csv" multiple aria-label="CSV file"><div id="csvOut" style="margin-top:12px"></div>`, {
       buttons: [{ label: 'Close' }, { label: 'Import', primary: true, onClick: async (ov) => {
-        const f = $('#csvFile', ov).files[0];
-        if (!f) throw new Error('Choose a CSV file first.');
-        const r = await api('/teacher/questions/import', { csv: await f.text(), folderId: $('#csvFolder', ov).value || null });
-        $('#csvOut', ov).innerHTML = `<div class="note ${r.errors.length ? 'warn' : 'ok'}">${r.created} added, ${r.updated} updated.${r.errors.length ? '<br>' + r.errors.map(esc).join('<br>') : ''}</div>`;
+        const files = Array.from($('#csvFile', ov).files || []);
+        if (!files.length) throw new Error('Drop a CSV file in the box (or click it to choose one) first.');
+        const out = [];
+        for (const f of files) {
+          const r = await api('/teacher/questions/import', { csv: await f.text(), folderId: $('#csvFolder', ov).value || null });
+          out.push(`<div class="note ${r.errors.length ? 'warn' : 'ok'}" style="margin-bottom:6px">${files.length > 1 ? '<b>' + esc(f.name) + ':</b> ' : ''}${r.created} added, ${r.updated} updated.${r.errors.length ? '<br>' + r.errors.map(esc).join('<br>') : ''}</div>`);
+        }
+        $('#csvOut', ov).innerHTML = out.join('');
         cache.questions = null;
         if (location.hash === '#questions') viewQuestions();
         return true;
       } }],
     });
+    App.dropZone($('#csvFile', $$('.overlay').pop()), { text: 'Drag your CSV file(s) here', hint: 'Several files at once are fine.' });
   }
 
   // ───────── Exams list ─────────

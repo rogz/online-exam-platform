@@ -267,6 +267,18 @@ table.list.exams tr.grouprow td { background: var(--panel-alt); padding: 0; bord
 table.exams tr[hidden] { display: none !important; }
 @media (max-width: 760px) { table.exams tr.grouprow { padding: 0; } table.exams tr.grouprow td { padding: 0; } }
 
+/* Drop a file here (CSV import, question pictures) */
+.dropzone { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; border: 2px dashed var(--line); border-radius: 8px; padding: 18px 16px; background: var(--panel-alt); cursor: pointer; font-weight: 400; font-size: 14px; color: var(--text); margin: 0; transition: border-color .15s, background .15s; }
+.dropzone:hover, .dropzone:focus-within { border-color: var(--primary); }
+.dropzone.over { border-color: var(--primary); background: var(--select); }
+.dropzone.has-file { border-style: solid; border-color: var(--ok); }
+.dropzone .dz-icon { font-size: 24px; line-height: 1; color: var(--primary); width: 40px; height: 40px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex: none; }
+.dropzone .dz-text { display: flex; flex-direction: column; }
+.dropzone .dz-or { color: var(--muted); font-size: 13px; }
+.dropzone .dz-or u { color: var(--link); text-decoration: none; }
+.dropzone .dz-file { flex-basis: 100%; color: var(--ok); font-weight: 600; word-break: break-all; }
+.dropzone .dz-hint { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+
 /* Sign-up: "I'm not a robot" */
 .humancheck { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel-alt); padding: 10px 12px; margin: 4px 0 12px; }
 .humancheck .hc-box { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; }

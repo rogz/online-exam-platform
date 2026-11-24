@@ -30,7 +30,9 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 - **Question bank**: types MC, TF, FIB (accepted answers separated by `|`; numbers as a range `122.1-122.9 V`,
   `122.5 ± 0.4` or `122.5 ± 1%`), ESSAY; points; topic; **symbol buttons** (± Ω ° μ π √ ² …) in the question editor; pictures
   (upload ≤ 2 MB, or a link incl. Google Drive/Dropbox); **folders and subfolders**; CSV import/export with a
-  built-in format guide and sample file; IDs (re-import with the same ID updates the question).
+  built-in format guide and sample file; IDs (re-import with the same ID updates the question). Files are added by
+  dragging them into a drop box (`App.dropZone` in `common.js`: CSV import takes several files at once; the question
+  picture box also takes a screenshot pasted with Ctrl+V); clicking the box still opens the file chooser.
 - **Exam editor**: class, title, instructions, open/close time, time limit, password; random set per student
   (**N of the selected**, or **per topic** (optionally **combining the parts** of a topic: "Long Lines P1/P2/(Part 3)" → "Long Lines",
   `topicBase()`, saved as `{topic, count, group: true, type}`; a topic pick can be limited to one type), and/or **per question

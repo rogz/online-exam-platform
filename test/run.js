@@ -106,6 +106,15 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.click('#importBtn');
   const csv = path.join(os.tmpdir(), 'bank.csv');
   fs.writeFileSync(csv, 'QuestionID,Type,Question,Choices,Answer,Points,Topic\nH-1,MC,1 kΩ equals,10 Ω | 100 Ω | 1000 Ω,C,1,Hard\nH-2,TF,"Power = V × I",,TRUE,1,Hard\n');
+  ok(await teacher.isVisible('.dialog .dropzone'), 'the import window has a box to drop the CSV file on');
+  // drop a file onto the window (as when dragging it from the Downloads folder)
+  await teacher.evaluate((text) => {
+    const dt = new DataTransfer(); dt.items.add(new File([text], 'dropped.csv', { type: 'text/csv' }));
+    const ov = document.querySelector('.overlay:last-of-type');
+    for (const t of ['dragenter', 'dragover', 'drop']) ov.querySelector('.dz-text').dispatchEvent(new DragEvent(t, { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, 'QuestionID,Type,Question,Choices,Answer,Points,Topic\nH-1,MC,1 kΩ equals,10 Ω | 100 Ω | 1000 Ω,C,1,Hard\n');
+  ok((await teacher.textContent('.dialog .dz-file')).includes('dropped.csv'), 'a dropped file is picked up and its name shown');
+  await shot(teacher, '06b-import-drop');
   await teacher.setInputFiles('#csvFile', csv);
   await teacher.click('.dialog .btn.primary');
   await teacher.waitForSelector('#csvOut .note');

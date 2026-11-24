@@ -78,6 +78,59 @@
     catch (e) { window.prompt('Copy this:', text); }
   }
 
+  /**
+   * Turns a file input into a box you can drop files on (or click to choose). The input stays in the page (hidden),
+   * so its "change" event works as before. Files dropped anywhere in the same window (dialog) land here too.
+   * opts: { text, hint, paste: true to also take a picture pasted with Ctrl+V }
+   */
+  function dropZone(input, opts) {
+    const o = opts || {};
+    const zone = document.createElement('label');
+    zone.className = 'dropzone'; zone.htmlFor = input.id;
+    zone.innerHTML = `<span class="dz-icon" aria-hidden="true">⬆</span><span class="dz-text"><b>${esc(o.text || 'Drag a file here')}</b>
+      <span class="dz-or">or <u>click to choose a file</u></span></span><span class="dz-file" hidden></span>${o.hint ? '<span class="dz-hint">' + esc(o.hint) + '</span>' : ''}`;
+    input.parentNode.insertBefore(zone, input);
+    zone.appendChild(input);
+    input.classList.add('sr-only');
+    const fileBox = $('.dz-file', zone);
+    const accepts = (f) => {
+      const acc = String(input.accept || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+      if (!acc.length) return true;
+      const name = f.name.toLowerCase(), type = String(f.type || '').toLowerCase();
+      return acc.some((a) => (a.startsWith('.') ? name.endsWith(a) : a.endsWith('/*') ? type.startsWith(a.slice(0, -1)) : type === a));
+    };
+    const show = () => {
+      const fs = Array.from(input.files || []);
+      fileBox.hidden = !fs.length;
+      fileBox.textContent = fs.length ? '✓ ' + fs.map((f) => f.name).join(', ') : '';
+      zone.classList.toggle('has-file', fs.length > 0);
+    };
+    const take = (list) => {
+      let fs = Array.from(list || []).filter(accepts);
+      if (!fs.length) { toast(list && list.length ? 'That file type can\'t be used here.' : 'No file found.', true); return; }
+      if (!input.multiple) fs = fs.slice(0, 1);
+      const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f));
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    input.addEventListener('change', show);
+    // the whole window (dialog) accepts a drop, so a near miss doesn't open the file in the browser
+    const area = zone.closest('.overlay') || document.body;
+    let depth = 0;
+    const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    area.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; zone.classList.add('over'); });
+    area.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    area.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) zone.classList.remove('over'); });
+    area.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; zone.classList.remove('over'); take(e.dataTransfer.files); });
+    if (o.paste) area.addEventListener('paste', (e) => {
+      const fs = Array.from((e.clipboardData && e.clipboardData.files) || []);
+      if (!fs.length) return; // pasting text into a box works as usual
+      e.preventDefault(); take(fs);
+    });
+    show();
+    return { zone, take, clear() { input.value = ''; show(); } };
+  }
+
   /** Top bar with the site name and the signed-in user. */
   function renderTopbar(me, site, links) {
     const bar = document.createElement('header');
@@ -208,5 +261,5 @@
     return { dataUrl: out, note: 'Shrunk from ' + (file.size / 1048576).toFixed(1) + ' MB to ' + (bytes(out) / 1048576).toFixed(2) + ' MB (' + w + ' × ' + h + ')' };
   }
 
-  window.App = { $, $$, esc, api, toast, dialog, confirmBox, fmtDate, fmtDay, toLocalInput, fromLocalInput, copyText, renderTopbar, requireRole, homeFor, pictureToDataUrl, avatarHtml, openProfile };
+  window.App = { $, $$, esc, api, toast, dialog, dropZone, confirmBox, fmtDate, fmtDay, toLocalInput, fromLocalInput, copyText, renderTopbar, requireRole, homeFor, pictureToDataUrl, avatarHtml, openProfile };
 })();

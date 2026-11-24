@@ -14,14 +14,31 @@
   const SKIP = { INPUT: 1, TEXTAREA: 1, SCRIPT: 1, STYLE: 1, SELECT: 1, OPTION: 1, CODE: 1 };
 
   /** True when the text has math in it. */
-  function hasMath(s) { MATH.lastIndex = 0; let m; while ((m = MATH.exec(String(s || '')))) if (m[0] !== '\\$') return true; return false; }
+  function hasMath(s) { s = autoMath(String(s || '')); MATH.lastIndex = 0; let m; while ((m = MATH.exec(s))) if (m[0] !== '\\$') return true; return false; }
+
+  // Plain-text math typed without dollar signs: V_R, I_sc, V_{RMS}, θ_1 → subscripts; 10^-3, x^2, m^{3} → powers.
+  // Only short pieces that start a word, so ordinary words (file_name) and the blanks (____) are left alone.
+  const AUTO_SUB = /(?<![\p{L}\p{N}_\\$])(\p{L}{1,2})_(\{[^{}$]{1,16}\}|[\p{L}\p{N}]{1,4})(?:\^(\{[^{}$]{1,12}\}|[-−]?\d{1,3}|\p{L}))?(?![\p{L}\p{N}_])/gu;
+  const AUTO_POW = /(?<![\p{L}\p{N}_\\$.])(\p{L}{1,2}|\d+(?:\.\d+)?)\^(\{[^{}$]{1,12}\}|[-−]?\d{1,3}|\p{L})(?![\p{L}\p{N}_])/gu;
+  const brace = (x) => (x.startsWith('{') ? x : '{' + x.replace('−', '-') + '}');
+  function autoMath(s) {
+    if (!/[_^]/.test(s)) return s;
+    // only outside $…$ pieces
+    let out = '', last = 0, m;
+    MATH.lastIndex = 0;
+    const conv = (t) => t
+      .replace(AUTO_SUB, (all, base, sub, pow) => '$' + base + '_' + brace(sub) + (pow ? '^' + brace(pow) : '') + '$')
+      .replace(AUTO_POW, (all, base, pow) => '$' + base + '^' + brace(pow) + '$');
+    while ((m = MATH.exec(s))) { out += conv(s.slice(last, m.index)) + m[0]; last = m.index + m[0].length; }
+    return out + conv(s.slice(last));
+  }
 
   /** Draws the math in the text of an element (and everything inside it). Safe to call more than once. */
   function render(root) {
-    if (!root || !String(root.textContent || '').includes('$')) return root;
+    if (!root || !/[$_^]/.test(String(root.textContent || ''))) return root;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(n) {
-        if (!n.nodeValue.includes('$')) return NodeFilter.FILTER_REJECT;
+        if (!/[$_^]/.test(n.nodeValue)) return NodeFilter.FILTER_REJECT;
         for (let p = n.parentNode; p && p !== root.parentNode; p = p.parentNode) {
           if (SKIP[p.nodeName] || (p.classList && (p.classList.contains('katex') || p.classList.contains('no-math')))) return NodeFilter.FILTER_REJECT;
         }
@@ -31,7 +48,7 @@
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
     nodes.forEach((n) => {
-      const s = n.nodeValue, frag = document.createDocumentFragment();
+      const s = autoMath(n.nodeValue), frag = document.createDocumentFragment();
       let last = 0, changed = false, m;
       MATH.lastIndex = 0;
       while ((m = MATH.exec(s))) {
@@ -76,18 +93,21 @@
   /** Where the label of a blank starts in the text before it: { cut, start } (cut = end of the text before the label). */
   function labelStart(raw) {
     const s = mask(raw);
-    let best = null, m;
+    let best = null, trailing = null, m;
     SEP.lastIndex = 0;
     while ((m = SEP.exec(s))) {
       if (m[0] === '') { SEP.lastIndex++; continue; }
       const enumerator = isEnum(m[0]);
       const start = enumerator ? m.index : m.index + m[0].length;
       if (enumerator || raw.slice(start).trim()) best = { cut: m.index, start };
+      else if (!trailing) trailing = { cut: m.index, start: raw.length };
     }
     if (best) return best;
     // no separator: "… V = ____ kV I = ____" → the label is the word before "="
     const eq = /(\S+\s*=\s*)$/.exec(s);
     if (eq && eq.index > 0) return { cut: eq.index, start: eq.index };
+    // "____ % at unity pf and ____ % at 0.85 pf": the text up to "and" belongs to the first blank
+    if (trailing && trailing.cut > 0) return trailing;
     return { cut: 0, start: 0 };
   }
 
@@ -157,13 +177,13 @@
       inp.value = (values && values[i]) || '';
       if (onInput) inp.addEventListener('input', () => onInput(inputs.map((x) => x.value)));
       inputs.push(inp);
-      row.append(tag, lab, inp);
-      if (ln.unit) { const u = document.createElement('span'); u.className = 'bl-unit'; setText(u, ln.unit); row.appendChild(u); }
+      const u = document.createElement('span'); u.className = 'bl-unit'; setText(u, ln.unit || '');
+      row.append(tag, lab, inp, u); // every line has all four parts (even empty), so the boxes line up
       box.appendChild(row);
     });
     if (b.tail) { const t = document.createElement('p'); t.className = 'bl-tail'; setText(t, b.tail); box.appendChild(t); }
     return { stem: b.stem, el: box, inputs };
   }
 
-  window.EWQ = { render, setText, hasMath, blankLines, blankLinesEl, BLANK };
+  window.EWQ = { render, setText, hasMath, autoMath, blankLines, blankLinesEl, BLANK };
 })();

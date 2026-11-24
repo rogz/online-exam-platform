@@ -54,6 +54,10 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   offline exams by `public/sw.js`): `$...$` in questions, choices and instructions is drawn on the exam page, preview,
   question bank, exam editor list, the editor's "How students will see it" box and the Answers window (`EWQ.render`).
   `\$` is a plain dollar; `$` followed by a space, or a closing `$` followed by a digit, is not math ("$5 and $10" stays text).
+  Also without dollar signs (`EWQ.autoMath`): short symbols with `_` or `^` such as `V_R`, `I_{sc}`, `θ_1`, `10^-3`, `x^2`
+  (base of 1–2 letters or a number; ordinary words like `file_name` and the `____` blanks are left alone). Every answer
+  line always has its four parts (tag, label, box, unit; empty ones too) so the boxes stay in one column; on phones the
+  box and unit sit under the label.
   Math buttons (subscript, power, fraction, root) in the question editor. Answers are graded as plain text.
 - **Light / dark colours**: `public/assets/theme-mode.js` (loaded in `<head>` of every page) sets `data-theme` on `<html>`
   from the device's choice (localStorage `ewTheme`: auto / light / dark; auto follows `prefers-color-scheme`) and puts an

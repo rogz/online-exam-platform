@@ -565,6 +565,15 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(lines.length === 2 && lines[0][0] === 'a)' && lines[1][0] === 'b)' && lines[0][2] === 'V' && lines[1][2] === 'A' && (await student.locator('#questions .blank-line .katex').count()) === 2,
     'students see one answer line per blank: a) V_S = [box] V, b) I_S = [box] A, with the math drawn (' + JSON.stringify(lines) + ')');
   ok((await student.textContent('#questions .q-text')).includes('The load draws'), 'the explanation stays on top');
+  const auto = await student.evaluate(() => {
+    const b = EWQ.blankLines('For a 10-kVA unit with V_R = 1.360% and V_X = 1.179%, the full-load regulation is ____% at unity pf and ____% at 0.85 pf lagging.');
+    const box = EWQ.blankLinesEl('a) V_R = ____ % b) ____ %', [], null).el;
+    return { text: EWQ.autoMath('V_R = 1.7%, I_{sc}, 10^-3, file_name, ____'), b, cells: Array.from(box.querySelectorAll('.blank-line')).map((r) => r.children.length) };
+  });
+  ok(auto.text === '$V_{R}$ = 1.7%, $I_{sc}$, $10^{-3}$, file_name, ____', 'V_R, I_{sc} and 10^-3 typed without dollar signs are shown as subscripts and powers (' + auto.text + ')');
+  ok(auto.b.lines[0].label === 'the full-load regulation is' && auto.b.lines[0].unit === '% at unity pf' && auto.b.lines[1].label === '' && auto.b.lines[1].unit === '% at 0.85 pf lagging',
+    '"… is ____% at unity pf and ____% at 0.85 pf" splits into two clean lines');
+  ok(auto.cells.every((n) => n === 4), 'every answer line has the same parts, so the boxes stay lined up');
   await student.locator('#questions .blank-lines input.blank').nth(0).fill('120.4 V');
   ok((await student.textContent('#progress')).startsWith('0 /'), 'with one blank still empty, the question does not count as answered yet');
   await student.locator('#questions .blank-lines input.blank').nth(1).fill('7');

@@ -273,7 +273,15 @@ textarea.essay { min-height: 160px; resize: vertical; }
 .blank-line input.blank { width: 180px; max-width: 100%; margin: 0; padding: 6px 10px; font-size: 16px; }
 .bl-unit { color: var(--muted); font-weight: 600; }
 .bl-tail { margin: 2px 0 0; color: var(--muted); grid-column: 1 / -1; }
-@media (max-width: 520px) { .blank-line input.blank { flex: 1 1 140px; } }
+@media (max-width: 620px) {
+  /* phones: tag and label on one row, the box and its unit under the label */
+  .blank-line { display: grid; grid-template-columns: 1.8em minmax(0, 1fr) auto; column-gap: 8px; row-gap: 4px; align-items: center; }
+  .blank-line .bl-label { grid-column: 2 / 4; }
+  .blank-line .bl-label:empty { display: none; }
+  .blank-line input.blank { grid-column: 2; width: 100%; }
+  .blank-line .bl-unit { grid-column: 3; max-width: 9em; }
+  .blank-line .bl-unit:empty { display: none; }
+}
 
 /* Math (KaTeX) */
 .math .katex { font-size: 1.08em; }

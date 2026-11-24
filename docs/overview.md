@@ -182,11 +182,17 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   snapshots when flagged, disclosed on the rules screen (Philippine Data Privacy Act).
 - Archiving an exam doesn't change what students see; archiving a class hides it from them. Both delete the camera
   snapshots (to save space and keep personal data no longer than needed).
-- Sign-up has no captcha yet (being observed); plan if bots appear: per-network sign-up limit + hidden honeypot,
-  then Cloudflare Turnstile.
+- **Sign-up spam check** ("I'm not a robot", `src/human.js`, `public/assets/human-check.js`): no outside service or keys.
+  Ticking the box (or pressing Create account) gets a signed puzzle from `GET /api/auth/human` (salt with a 10-minute
+  expiry, sha256 hash of salt + a secret number 0–60000, HMAC with a key made at each start) and the browser finds the
+  number with WebCrypto (about a second). `/register` checks it before touching the database: valid signature, not
+  expired, correct number, used once (in memory). Also a hidden "website" field robots fill in, and at most 80 sign-ups
+  per internet address per hour (a class at school shares one address). Chosen over Google reCAPTCHA / Turnstile: works
+  on slow connections, no picture puzzles, nothing about students sent to another company. If bots get through anyway:
+  raise the puzzle size or add Cloudflare Turnstile.
 
 ## Open ideas (not built)
 - Talking detection for take-home exams (optional, off by default).
 - Faster phone checks (every 0.5 s) on fast computers.
 - Nightly database backups to S3 / server; moving the database to the server after a memory upgrade.
-- Sign-up protection (above); sending scores back to Google Classroom.
+- Sending scores back to Google Classroom.

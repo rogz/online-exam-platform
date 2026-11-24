@@ -191,6 +191,10 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const student = await newUser();
   await student.goto(BASE + '/#signup');
   await student.fill('#upName', 'Juan Dela Cruz'); await student.fill('#upEmail', 'juan@student.edu'); await student.fill('#upPass', 'student-pass-1'); await student.fill('#upStudentNo', '2024-0001');
+  await student.click('#humanBox .hc-input');
+  await student.waitForSelector('#humanBox[data-state="done"]');
+  ok((await student.textContent('#humanBox')).includes('Verified'), 'ticking "I\'m not a robot" checks in a moment and turns green');
+  await shot(student, '02b-not-a-robot');
   await student.click('#signUp button[type=submit]');
   await student.waitForURL(/\/student/);
   await student.waitForSelector('#joinBig2');
@@ -1184,8 +1188,27 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(afterLogin.ok && afterLogin.user.role === 'teacher', 'after approval the teacher signs in');
   // with an access code: at once; a wrong code is refused; a declined request is deleted
   const goodCode = await admin.evaluate(async () => (await (await fetch('/api/admin/codes', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ kind: 'days', amount: 30 }) })).json()).codes[0]);
-  const reg = async (email, extra) => appl.evaluate(async ([email, extra]) => (await (await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
-    body: JSON.stringify(Object.assign({ role: 'teacher', name: 'T ' + email, email, password: 'teacher-pass-8' }, extra)) })).json()), [email, extra]);
+  const reg = async (email, extra) => appl.evaluate(async ([email, extra]) => {
+    const human = await EWHuman.attach(document.createElement('div')).proof();
+    return (await (await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify(Object.assign({ role: 'teacher', name: 'T ' + email, email, password: 'teacher-pass-8', human }, extra)) })).json());
+  }, [email, extra]);
+  // spam checks: no tick, a reused tick, a made-up answer, or the hidden field filled in are all refused (and no account is made)
+  const spam = await appl.evaluate(async () => {
+    const post = async (b) => (await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const base = (email) => ({ role: 'student', name: 'Bot', email, password: 'robot-pass-1' });
+    const none = await post(base('bot1@spam.test'));
+    const human = await EWHuman.attach(document.createElement('div')).proof();
+    const fake = await post(Object.assign(base('bot2@spam.test'), { human: Object.assign({}, human, { number: (human.number + 1) % 60000 }) }));
+    const trap = await post(Object.assign(base('bot3@spam.test'), { human, website: 'http://spam.test' }));
+    const first = await post(Object.assign(base('real@student.edu'), { human }));
+    const again = await post(Object.assign(base('bot4@spam.test'), { human }));
+    return { none, fake, trap, first, again };
+  });
+  ok(!spam.none.ok && spam.none.error.includes("I'm not a robot") && !spam.fake.ok && !spam.trap.ok && spam.first.ok && !spam.again.ok
+    && !(await dbOne(`SELECT 1 AS x FROM users WHERE email LIKE '%@spam.test'`)),
+    'sign-up needs the "I\'m not a robot" check: no tick, a wrong answer, the hidden robot field, or reusing one tick are refused');
+  await appl.evaluate(async () => { await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' }); });
   const withCode = await reg('coded@school.edu', { accessCode: goodCode });
   const wrongCode = await reg('wrong@school.edu', { accessCode: 'NOPE-NOPE' });
   ok(withCode.ok && !withCode.pending && withCode.user && withCode.user.role === 'teacher', 'with a valid access code, the teacher account works at once');

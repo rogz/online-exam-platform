@@ -119,6 +119,8 @@
           <div class="field" id="noteWrap" hidden><label for="upNote">A short note for the site owner <span class="muted">(optional)</span></label><input type="text" id="upNote" maxlength="500" placeholder="e.g. EE instructor at MSU-IIT, for my EEE 150 classes"></div>
           <div class="field" id="codeWrap" hidden><label for="upCode">Access code <span class="muted">(optional)</span></label><input type="text" id="upCode" autocomplete="off">
             <div class="hint" id="codeHint">Teachers need an access code or credits to publish exams. You can also add one later under My account.</div></div>
+          <div class="hp" aria-hidden="true"><label for="upWebsite">Website</label><input type="text" id="upWebsite" name="website" tabindex="-1" autocomplete="off"></div>
+          <div id="humanBox"></div>
           <p class="hint">By creating an account you agree that your name, email and exam results are stored on this site so your teachers can see them.</p>
           <div id="upMsg" class="note bad" hidden></div>
           <div class="row" style="margin-top:12px"><button class="btn primary big" type="submit">Create account</button></div>
@@ -199,6 +201,7 @@
 <footer class="site"><div class="inner"><span id="footName"></span><span>Need help? Ask your teacher or the site administrator.</span></div></footer>
 
 <script src="/assets/common.js"></script>
+<script src="/assets/human-check.js"></script>
 <script>
 (async function () {
   const { $, $$, api } = App;
@@ -236,17 +239,25 @@
       $('#upMsg').textContent = 'Your School or Student number is the same as your password. Those fields are shown on screen, so please check them.';
       $('#upMsg').hidden = false; return;
     }
+    const btn = $('#signUp button[type=submit]');
     try {
+      btn.disabled = true;
+      const proof = await humanCheck.proof();
       const r = await api('/auth/register', { role: role(), name: $('#upName').value, email: $('#upEmail').value, password: pw,
-        studentNo: $('#upStudentNo').value, school: $('#upSchool').value, accessCode: $('#upCode').value, note: $('#upNote').value });
+        studentNo: $('#upStudentNo').value, school: $('#upSchool').value, accessCode: $('#upCode').value, note: $('#upNote').value,
+        website: $('#upWebsite').value, human: proof });
       if (r.pending) {
         $('#signUp').innerHTML = '<div class="note ok" id="pendingMsg"><b>Request sent.</b> ' + App.esc(r.message) + '</div>';
         return;
       }
       if (r.codeMessage) { try { sessionStorage.setItem('welcome', r.codeMessage); } catch (e2) { /* ignore */ } }
       go(r.user);
-    } catch (err) { $('#upMsg').textContent = err.message; $('#upMsg').hidden = false; }
+    } catch (err) {
+      humanCheck.reset(); // each check counts once: a new one runs with the next try
+      $('#upMsg').textContent = err.message; $('#upMsg').hidden = false;
+    } finally { btn.disabled = false; }
   };
+  const humanCheck = EWHuman.attach($('#humanBox'));
   const me = await api('/auth/me', undefined, { allowSignedOut: true });
   if (me.user) return go(me.user);
   resetByEmail = !!me.site.passwordEmail;

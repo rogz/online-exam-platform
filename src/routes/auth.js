@@ -5,6 +5,7 @@ const auth = require('../auth');
 const { getSettings } = require('../settings');
 const { fail, str, emailOk, isUuid } = require('../util');
 const { redeemCode, grant } = require('./codes');
+const human = require('../human');
 
 const router = express.Router();
 
@@ -13,9 +14,16 @@ router.get('/me', async (req, res) => {
   res.json({ ok: true, user: auth.publicUser(req.user), site: { name: s.siteName, teacherSignup: s.teacherSignup, teacherApproval: !!(s.teacherSignup && s.teacherApproval), studentSignup: s.studentSignup, signupCredits: Number(s.signupCredits) || 0, passwordEmail: require('../mailer').enabled() } });
 });
 
+// "I'm not a robot": a small puzzle for the sign-up form (no database, no outside service)
+router.get('/human', (req, res) => { res.set('Cache-Control', 'no-store'); res.json({ ok: true, challenge: human.challenge() }); });
+
 router.post('/register', async (req, res) => {
   const b = req.body || {};
   const role = b.role === 'teacher' ? 'teacher' : 'student';
+  // spam checks first, before the database is touched
+  if (str(b.website)) throw fail(400, 'NOT_HUMAN', 'Sign-up failed. Please reload the page and try again.'); // a hidden field only robots fill in
+  if (!human.verify(b.human)) throw fail(400, 'NOT_HUMAN', 'Please tick "I\'m not a robot" and try again.');
+  if (human.tooMany(req.ip, 80)) throw fail(429, 'SLOW_DOWN', 'Too many new accounts from this internet connection. Please try again in an hour.');
   const s = await getSettings();
   if (role === 'teacher' && !s.teacherSignup) throw fail(403, 'CLOSED', 'Teacher sign-up is closed. Contact the site administrator.');
   if (role === 'student' && !s.studentSignup) throw fail(403, 'CLOSED', 'Student sign-up is closed.');

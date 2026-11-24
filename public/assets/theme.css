@@ -267,6 +267,18 @@ table.list.exams tr.grouprow td { background: var(--panel-alt); padding: 0; bord
 table.exams tr[hidden] { display: none !important; }
 @media (max-width: 760px) { table.exams tr.grouprow { padding: 0; } table.exams tr.grouprow td { padding: 0; } }
 
+/* Sign-up: "I'm not a robot" */
+.humancheck { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel-alt); padding: 10px 12px; margin: 4px 0 12px; }
+.humancheck .hc-box { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; }
+.humancheck .hc-input { width: 22px; height: 22px; margin: 0; cursor: pointer; }
+.humancheck .hc-side { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.humancheck[data-state="busy"] .hc-text::after { content: ''; display: inline-block; width: 12px; height: 12px; margin-left: 8px; border: 2px solid var(--line); border-top-color: var(--primary); border-radius: 50%; animation: hcspin .8s linear infinite; vertical-align: -2px; }
+.humancheck[data-state="done"] { border-color: var(--ok); background: var(--ok-bg); }
+.humancheck[data-state="done"] .hc-text { color: var(--ok); }
+.humancheck[data-state="error"] .hc-text { color: var(--bad); }
+@keyframes hcspin { to { transform: rotate(360deg); } }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
 /* Math (KaTeX) and answer lines (question bank, editor preview, Answers window) */
 .math .katex { font-size: 1.06em; }
 .qpreview { border: 1px dashed var(--line); border-radius: 6px; padding: 10px 12px; margin-top: 8px; background: var(--panel-alt); font-size: 15px; }

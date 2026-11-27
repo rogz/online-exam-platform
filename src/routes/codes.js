@@ -1,10 +1,10 @@
 // Access codes and credits (used by teacher and admin routes).
 const db = require('../db');
-const { fail, str } = require('../util');
+const { fail, str, cleanCode } = require('../util');
 
 /** Checks that an access code can still be used, without using it (throws a friendly error if not). */
 async function checkCode(rawCode) {
-  const code = str(rawCode, 40).toUpperCase().replace(/\s+/g, '');
+  const code = cleanCode(rawCode, 40);
   const c = code && await db.one('SELECT * FROM access_codes WHERE code = $1', [code]);
   if (!c || !c.active) throw fail(404, 'BAD_CODE', 'That access code is not valid. Check it, or leave it empty to send a request instead.');
   if (c.expires_at && new Date(c.expires_at) < new Date()) throw fail(410, 'CODE_EXPIRED', 'That access code has expired. Leave it empty to send a request instead.');
@@ -14,7 +14,7 @@ async function checkCode(rawCode) {
 
 /** Applies an access code to a teacher. Returns a sentence describing what was added. */
 async function redeemCode(userId, rawCode) {
-  const code = str(rawCode, 40).toUpperCase().replace(/\s+/g, '');
+  const code = cleanCode(rawCode, 40);
   if (!code) throw fail(400, 'BAD_INPUT', 'Enter an access code.');
   return db.tx(async (t) => {
     const c = (await t.query('SELECT * FROM access_codes WHERE code = $1 FOR UPDATE', [code])).rows[0];

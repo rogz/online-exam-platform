@@ -265,13 +265,23 @@
   });
 
   function joinClass() {
-    dialog('Join a class', `<div class="field"><label for="joinCode">Class code</label><input type="text" id="joinCode" autocomplete="off" placeholder="e.g. 7KQ2PA" style="text-transform:uppercase;font-size:18px;letter-spacing:2px"></div>
-      <p class="hint">Your teacher gives you this code. It is 6 letters and numbers.</p>`, {
+    dialog('Join a class', `<div class="field"><label for="joinCode">Class code</label><input type="text" id="joinCode" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="20" placeholder="e.g. 7KQ2PA" style="text-transform:uppercase;font-size:18px;letter-spacing:2px;font-family:ui-monospace,Consolas,monospace"></div>
+      <div class="note warn small" id="joinOdd" hidden></div>
+      <p class="hint">Your teacher gives you this code. It is 6 letters and numbers (never O, 0, I, 1 or L).</p>`, {
       buttons: [{ label: 'Cancel' }, { label: 'Join class', primary: true, onClick: async (ov) => {
         const r = await api('/student/join', { code: $('#joinCode', ov).value });
         toast('Joined ' + r.class.name + (r.class.section ? ' — ' + r.class.section : ''));
         load();
       } }],
+    });
+    const box = App.$$('.overlay').pop(), inp = $('#joinCode', box), odd = $('#joinOdd', box);
+    inp.addEventListener('input', () => {
+      // turn full-width or look-alike letters into plain ones as they are typed; warn about anything else
+      const clean = App.cleanCode(inp.value);
+      const bad = Array.from(clean.replace(/-/g, '')).filter((c) => !/[A-Z0-9]/.test(c));
+      if (clean !== inp.value.toUpperCase() && !bad.length) { const at = inp.selectionStart; inp.value = clean; try { inp.setSelectionRange(at, at); } catch (e) { /* ignore */ } }
+      odd.hidden = !bad.length;
+      odd.textContent = bad.length ? 'This code has a character that is not a plain letter or number (' + bad.slice(0, 3).join(' ') + '). Switch your keyboard to English (ABC) and type it again.' : '';
     });
   }
 

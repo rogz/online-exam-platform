@@ -25,6 +25,10 @@ students. Time zone Asia/Manila. Students often use phones for everything except
 ## Features (as of November 2026)
 
 ### Teachers
+- **Typed codes** (class codes, access codes): `cleanCode` in `src/util.js` (and `App.cleanCode` in the browser) turns
+  full-width letters, look-alike Cyrillic/Greek letters and invisible spaces from phone keyboards into plain letters
+  (a student's phone typed a correct-looking code that didn't match; the join link worked). A code that still isn't
+  found gets a message saying what looks wrong (odd character, wrong length, O/0/I/1/L), and the raw characters are logged.
 - **Classes**: 6-character join code, **Copy join link** (`/join/CODE`, signs in or signs up, then joins), student
   list with profile pictures, archive/restore (an archived class is hidden from students).
 - **Question bank**: types MC, TF, FIB (accepted answers separated by `|`; numbers as a range `122.1-122.9 V`,

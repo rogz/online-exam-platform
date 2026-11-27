@@ -4,7 +4,7 @@ const db = require('../db');
 const auth = require('../auth');
 const core = require('../exam-core');
 const { getSettings, fmtDate } = require('../settings');
-const { fail, str, isUuid } = require('../util');
+const { fail, str, isUuid, cleanCode } = require('../util');
 
 const router = express.Router();
 router.use(auth.requireRole('student'));
@@ -76,10 +76,19 @@ router.get('/dashboard', async (req, res) => {
 });
 
 router.post('/join', async (req, res) => {
-  const code = str(req.body && req.body.code, 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const typed = cleanCode(req.body && req.body.code, 40);
+  const code = typed.replace(/[^A-Z0-9]/g, '');
   if (!code) throw fail(400, 'BAD_INPUT', 'Enter the class code from your teacher.');
   const c = await db.one('SELECT c.*, u.name AS teacher_name FROM classes c JOIN users u ON u.id = c.teacher_id WHERE c.join_code = $1', [code]);
-  if (!c || c.archived) throw fail(404, 'BAD_CODE', 'No class has that code. Check it with your teacher.');
+  if (!c || c.archived) {
+    // say what looks wrong, so the student can fix it without the teacher
+    const odd = Array.from(typed.replace(/-/g, '')).filter((ch) => !/[A-Z0-9]/.test(ch));
+    console.warn('Class code not found:', JSON.stringify(Array.from(String(req.body && req.body.code || '').slice(0, 20)).map((ch) => ch.codePointAt(0).toString(16))));
+    if (odd.length) throw fail(404, 'BAD_CODE', 'The code has a character that is not a plain letter or number (' + odd.slice(0, 3).join(' ') + '). Switch your keyboard to English (ABC) and type the code again.');
+    if (code.length !== 6) throw fail(404, 'BAD_CODE', 'Class codes have 6 letters and numbers; you typed ' + code.length + '. Check it with your teacher.');
+    if (/[O0I1L]/.test(code)) throw fail(404, 'BAD_CODE', 'Class codes never use the letters O, I or L or the numbers 0 or 1. Check that character with your teacher.');
+    throw fail(404, 'BAD_CODE', c && c.archived ? 'That class has been closed by the teacher.' : 'No class has that code. Check it with your teacher.');
+  }
   await db.query('INSERT INTO enrollments (class_id, student_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [c.id, req.user.id]);
   res.json({ ok: true, class: { id: c.id, name: c.name, section: c.section, teacherName: c.teacher_name } });
 });

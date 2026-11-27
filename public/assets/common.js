@@ -131,6 +131,13 @@
     return { zone, take, clear() { input.value = ''; show(); } };
   }
 
+  /** A code as typed on any keyboard → plain capital letters (same as cleanCode in src/util.js). */
+  const LOOKALIKE = { А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', Х: 'X', У: 'Y', Ѕ: 'S', І: 'I', Ј: 'J', Ԛ: 'Q', Ԝ: 'W', Α: 'A', Β: 'B', Ε: 'E', Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O', Ρ: 'P', Τ: 'T', Υ: 'Y', Χ: 'X' };
+  function cleanCode(raw) {
+    const s = String(raw || '').normalize('NFKC').toUpperCase().replace(/[\s\u00AD\u200B-\u200F\u2060\uFEFF]/g, '');
+    return Array.from(s).map((c) => LOOKALIKE[c] || c).join('');
+  }
+
   /** Top bar with the site name and the signed-in user. */
   function renderTopbar(me, site, links) {
     const bar = document.createElement('header');
@@ -261,5 +268,5 @@
     return { dataUrl: out, note: 'Shrunk from ' + (file.size / 1048576).toFixed(1) + ' MB to ' + (bytes(out) / 1048576).toFixed(2) + ' MB (' + w + ' × ' + h + ')' };
   }
 
-  window.App = { $, $$, esc, api, toast, dialog, dropZone, confirmBox, fmtDate, fmtDay, toLocalInput, fromLocalInput, copyText, renderTopbar, requireRole, homeFor, pictureToDataUrl, avatarHtml, openProfile };
+  window.App = { $, $$, esc, api, toast, dialog, dropZone, cleanCode, confirmBox, fmtDate, fmtDay, toLocalInput, fromLocalInput, copyText, renderTopbar, requireRole, homeFor, pictureToDataUrl, avatarHtml, openProfile };
 })();

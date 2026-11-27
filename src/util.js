@@ -14,6 +14,18 @@ function randomCode(len) {
   return s;
 }
 
+/**
+ * A code as typed on any keyboard → plain capital letters and numbers. Phone keyboards can type full-width letters
+ * (５ＭＦＷ), letters of another alphabet that look the same (Cyrillic М, Greek Μ) or invisible spaces; this turns them
+ * into the plain characters they look like. Dashes and other characters are kept (callers decide what to do with them).
+ */
+const LOOKALIKE = { А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', Х: 'X', У: 'Y', Ѕ: 'S', І: 'I', Ј: 'J', Ԛ: 'Q', Ԝ: 'W', Α: 'A', Β: 'B', Ε: 'E', Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O', Ρ: 'P', Τ: 'T', Υ: 'Y', Χ: 'X' };
+function cleanCode(raw, max = 40) {
+  const s = String(raw === undefined || raw === null ? '' : raw).normalize('NFKC').toUpperCase()
+    .replace(/[\s\u00AD\u200B-\u200F\u2060\uFEFF]/g, '');
+  return Array.from(s).map((c) => LOOKALIKE[c] || c).join('').slice(0, max);
+}
+
 const str = (v, max = 500) => String(v === undefined || v === null ? '' : v).trim().slice(0, max);
 const bool = (v, def) => (v === undefined || v === null || v === '' ? def : v === true || v === 'true' || v === 1 || v === '1');
 const int = (v, def = 0, min = -Infinity, max = Infinity) => {
@@ -49,4 +61,4 @@ function parseCsv(text) {
   return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
 }
 
-module.exports = { HttpError, fail, randomCode, str, bool, int, isUuid, emailOk, sha256, toCsv, parseCsv };
+module.exports = { HttpError, fail, randomCode, cleanCode, str, bool, int, isUuid, emailOk, sha256, toCsv, parseCsv };

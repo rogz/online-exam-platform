@@ -208,7 +208,17 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await student.waitForURL(/\/student/);
   await student.waitForSelector('#joinBig2');
   ok(true, 'new student sees "Join a class"');
-  await student.click('#joinBtn'); await student.fill('#joinCode', joinCode.toLowerCase()); await student.click('.dialog .btn.primary');
+  // a phone keyboard in full-width mode types ５ＭＦＷＤＧ: it looks the same and must still work
+  const oddMsgs = await student.evaluate(async () => {
+    const post = async (code) => (await (await fetch('/api/student/join', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ code }) })).json()).error;
+    return { odd: await post('5MFW✓G'), short: await post('5MFWD'), o: await post('5MFWD0') };
+  });
+  ok(oddMsgs.odd.includes('Switch your keyboard to English') && oddMsgs.short.includes('you typed 5') && oddMsgs.o.includes('never use'),
+    'a wrong class code gets a message that says what looks wrong (odd character, too short, O/0/I/1/L)');
+  const wide = Array.from(joinCode.toLowerCase()).map((c) => String.fromCodePoint(c.codePointAt(0) + 0xFEE0)).join('');
+  await student.click('#joinBtn'); await student.fill('#joinCode', wide);
+  ok((await student.inputValue('#joinCode')) === joinCode && await student.isHidden('#joinOdd'), 'full-width letters typed by a phone keyboard become plain letters in the box (' + wide + ' → ' + joinCode + ')');
+  await student.click('.dialog .btn.primary');
   await student.waitForSelector('.item:has-text("EEE 150 Quiz 1")');
   ok((await student.textContent('#list')).includes('Open now'), 'exam listed under "Open now"');
   await student.waitForSelector('#startbox a.btn.primary');

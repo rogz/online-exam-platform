@@ -17,7 +17,7 @@
 // Class join link (e.g. posted in Google Classroom): /join/ABC123
 (async function () {
   const { $, api, esc } = App;
-  const code = decodeURIComponent(location.pathname.split('/')[2] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const code = App.cleanCode(decodeURIComponent(location.pathname.split('/')[2] || '')).replace(/[^A-Z0-9]/g, '');
   const box = $('#joinBox');
   const me = await api('/auth/me', undefined, { allowSignedOut: true });
   App.renderTopbar(me.user, me.site, me.user ? [{ href: App.homeFor(me.user), label: 'Back' }] : []);

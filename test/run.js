@@ -626,7 +626,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
     'pick per topic combines the parts of a topic: ' + ptRows.join(' | '));
   await teacher.fill('#topicPicks [data-topic="Long Lines"]', '3'); await teacher.fill('#topicPicks [data-topic="Medium Lines"]', '1');
   await teacher.click('#saveBtn'); await toastSays(teacher, 'Saved');
-  const ptSaved = await dbOne('SELECT topic_counts FROM exams WHERE id = $1', [partsExam]);
+  let ptSaved = null;
+  for (let i = 0; i < 50; i++) { ptSaved = await dbOne('SELECT topic_counts FROM exams WHERE id = $1', [partsExam]); if (ptSaved.topic_counts.length) break; await new Promise((r) => setTimeout(r, 200)); }
   ok(ptSaved.topic_counts.length === 2 && ptSaved.topic_counts.every((t) => t.group === true), 'saved as combined topics');
   await teacher.evaluate(async (id) => { await fetch('/api/teacher/exams/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ publish: true }) }); }, partsExam);
   const ptSet = await student.evaluate(async (examId) => {
@@ -659,7 +660,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const mixSum = await teacher.textContent('#pSum');
   ok(mixSum.includes('each student gets 7') && mixSum.includes('3 Long Lines (fill in the blank), then 4 multiple choice from the rest'), 'per topic and per type work together: ' + mixSum.split('—').pop().trim());
   await teacher.click('#saveBtn'); await toastSays(teacher, 'Saved');
-  const mixRow = await dbOne('SELECT topic_counts, options FROM exams WHERE id = $1', [mixExam]);
+  let mixRow = null; // an earlier "Saved" message can still be showing: wait for this save to reach the database
+  for (let i = 0; i < 50; i++) { mixRow = await dbOne('SELECT topic_counts, options FROM exams WHERE id = $1', [mixExam]); if (mixRow.topic_counts.length && (mixRow.options.typePicks || []).length) break; await new Promise((r) => setTimeout(r, 200)); }
   ok(mixRow.topic_counts[0].type === 'FIB' && mixRow.options.typePicks[0].type === 'MC' && mixRow.options.typePicks[0].count === 4, 'both are saved');
   await teacher.evaluate(async (id) => { await fetch('/api/teacher/exams/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ publish: true }) }); }, mixExam);
   const mixSet = await student.evaluate(async (examId) => {

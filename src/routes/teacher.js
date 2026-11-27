@@ -727,10 +727,12 @@ router.post('/exams/:id/attempts/:aid', async (req, res) => {
     // Extra time; for an attempt that was voided or ran out, also "let them continue" with the same questions and saved answers
     if (a.status === 'SUBMITTED') throw fail(409, 'ALREADY_SUBMITTED', 'This student already submitted. Use Allow retake for a new attempt.');
     const n = int(b.continueMinutes, 0, 0, 600);
+    const wasVoided = a.status === 'VOIDED';
     await db.query(`UPDATE attempts SET status = 'IN_PROGRESS', void_reason = NULL, voided_at = NULL,
+        warnings = CASE WHEN status = 'VOIDED' THEN 0 ELSE warnings END, focus_warnings = CASE WHEN status = 'VOIDED' THEN 0 ELSE focus_warnings END,
         deadline = CASE WHEN deadline IS NULL THEN NULL ELSE GREATEST(deadline, now()) + make_interval(mins => $1::int) END,
         resume_until = now() + make_interval(mins => GREATEST(30, $1::int)) WHERE id = $2`, [n, a.id]);
-    await log('TEACHER_HELP', a.status === 'IN_PROGRESS' ? 'Teacher added ' + n + ' minutes' : 'Teacher let the student continue (was ' + a.status + '), +' + n + ' minutes');
+    await log('TEACHER_HELP', a.status === 'IN_PROGRESS' ? 'Teacher added ' + n + ' minutes' : 'Teacher let the student continue (was ' + a.status + '), +' + n + ' minutes' + (wasVoided ? '; warnings start again from zero' : ''));
   }
   if (b.submitDraft || b.answerFile) {
     if (a.status === 'SUBMITTED') throw fail(409, 'ALREADY_SUBMITTED', 'This student already submitted; their answers were not changed.');

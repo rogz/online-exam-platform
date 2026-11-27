@@ -100,6 +100,10 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   void or a crash (same questions, the server's saved answers come back; the student reopens within 30 min,
   `resume_until`), **Submit these answers** (the draft saved on the server), **Upload an answer file** (the student's
   "Save a copy of my answers" file from the offline screen), **Count as on time**. Each is logged in the events.
+  After a void, Let them continue also resets the camera and tab warnings to zero. The void copy the exam page keeps in
+  localStorage (`exam-void:<examId>`, sent again when the page opens, in case it was voided without internet) is removed
+  once the server has it, and a re-sent void (`resend: true`) is ignored once the teacher has helped (`TEACHER_HELP`):
+  before this fix a student who was let continue was voided again by their own browser.
   Unexpected errors on the exam page are reported (PAGE_ERROR, "⚠ Page problem" in Results).
 - **Results**: search, status filter, sort (name, started, finished, time taken, score), notes (void reason, camera
   and tab warnings, reconnects, device), answers per student with grading (essays), events log, **camera

@@ -454,6 +454,15 @@ const actions = {
         if (!req.body.resend) await logEvent(t.query, a.id, event, detail);
         return { status: a.status, reason: a.void_reason };
       }
+      // A void kept on the device (sent again when the exam page opens) is old news once the teacher has let the
+      // student continue: it must not void the attempt a second time.
+      if (req.body.resend) {
+        const helped = (await t.query(`SELECT 1 FROM violations WHERE attempt_id = $1 AND event = 'TEACHER_HELP' LIMIT 1`, [a.id])).rows[0];
+        if (helped) {
+          await logEvent(t.query, a.id, 'NOTE', 'An earlier void kept on the student\'s device was sent again after the teacher let them continue: ignored');
+          return { status: a.status, ignored: true };
+        }
+      }
       // Leaving the exam (tab switch, another window): warnings first, if the exam allows them.
       if (['TAB_SWITCH', 'LEFT_WINDOW'].includes(event) && req.body.final !== true) {
         const allowedF = (await examOfAttempt(t.query, a)).options.focusWarnings;

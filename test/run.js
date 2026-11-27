@@ -1320,6 +1320,21 @@ fs.mkdirSync(SHOTS, { recursive: true });
   }, contExam);
   ok(cont1.blocked === 'VOIDED' && cont2.attemptId === cont1.attemptId && cont2.resumed && cont2.draft && Object.values(cont2.draft)[0] === 'FALSE',
     'after "Let them continue" the student reopens the same attempt with the saved answers');
+  // the student's browser still had its copy of the void and sends it again when the exam page opens: it must be ignored
+  await db.query('UPDATE attempts SET warnings = 3, focus_warnings = 2 WHERE id = $1', [cont1.attemptId]);
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#results/' + contExam); await teacher.waitForSelector('[data-answers]');
+  await db.query(`UPDATE attempts SET status = 'VOIDED', void_reason = 'A mobile phone was seen on camera.' WHERE id = $1`, [cont1.attemptId]);
+  await teacher.click('[data-answers]'); await teacher.waitForSelector('.dialog [data-help="continue"]');
+  await teacher.click('.dialog [data-help="continue"]'); await toastSays(teacher, 'can open the exam link again');
+  await student.goto(BASE + '/student'); await student.waitForSelector('.item');
+  await student.evaluate(([examId, attemptId]) => localStorage.setItem('exam-void:' + examId, JSON.stringify({ attemptId, event: 'PHONE_DETECTED', detail: 'test', final: true, resend: true })), [contExam, cont1.attemptId]);
+  await student.goto(BASE + '/exam?id=' + contExam);
+  await student.waitForFunction(() => !document.querySelector('#screen-loading') || document.querySelector('#screen-loading').hidden);
+  await student.waitForFunction((k) => localStorage.getItem(k) === null, 'exam-void:' + contExam);
+  const contRow = await dbOne('SELECT status, warnings, focus_warnings FROM attempts WHERE id = $1', [cont1.attemptId]);
+  ok(contRow.status === 'IN_PROGRESS' && !(await student.isVisible('#voidReason')),
+    'an old void kept on the student\'s computer does not void the exam again after "Let them continue"');
+  ok(contRow.warnings === 0 && contRow.focus_warnings === 0, 'after a void, "Let them continue" also gives the camera and tab warnings again');
 
   // an answer file from a student whose device had no internet
   const fileExam = await mkExam('File quiz', {});

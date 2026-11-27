@@ -1013,7 +1013,7 @@
       <div class="row" style="gap:6px;align-items:center;margin-top:8px"><label for="helpMin" class="small" style="margin:0">${going ? 'Give extra time:' : 'Let them continue, with'}</label>
         <input type="number" id="helpMin" min="0" max="600" value="${going ? 10 : 15}" style="width:80px"> <span class="small">minutes</span>
         <button type="button" class="btn small primary" data-help="continue">${going ? 'Add time' : 'Let them continue'}</button></div>
-      ${going ? '' : '<div class="hint">Same questions; the answers saved so far are kept. The student opens the exam link again within 30 minutes.</div>'}
+      ${going ? '' : '<div class="hint">Same questions; the answers saved so far are kept' + (a.status === 'VOIDED' ? ', and the camera and tab-switch warnings start again from zero' : '') + '. The student opens the exam link again within 30 minutes.</div>'}
       <div class="row" style="gap:6px;align-items:center;margin-top:8px">${draft ? `<span class="small">${draft} answer${draft === 1 ? '' : 's'} saved on the server (${esc(App.fmtDate(a.draft_at))}).</span>
         <button type="button" class="btn small" data-help="draft">Submit these answers</button>` : '<span class="small muted">No answers saved on the server yet.</span>'}</div>
       <div class="row" style="gap:6px;align-items:center;margin-top:8px"><label class="btn small" style="margin:0">Upload an answer file<input type="file" accept=".json,application/json" data-help="file" hidden></label>

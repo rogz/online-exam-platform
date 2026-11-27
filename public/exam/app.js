@@ -1308,9 +1308,9 @@
   }
 
   /** Sends now, or keeps retrying every 5 s while offline (as long as the page is open when "keep going offline" is on). */
-  function sendReliably(action, payload) {
+  function sendReliably(action, payload, onDone) {
     let tries = 0;
-    const attempt = () => api(action, payload).then((r) => { markOnline(); return r; }).catch((e) => {
+    const attempt = () => api(action, payload).then((r) => { markOnline(); if (onDone) onDone(r); return r; }).catch((e) => {
       if (e.code === 'VOIDED') { showVoid(null, e.message); return; }
       if (e.code !== 'NETWORK') return;
       markOffline(state.lastOkAt);
@@ -1473,7 +1473,8 @@
       // The page may be closing: a beacon is delivered even if the tab is gone.
       if (!beacon('violation', payload)) sendReliably('violation', payload);
     } else {
-      sendReliably('violation', payload);
+      // once the server has the void, forget the copy kept here (otherwise it would be sent again after the teacher lets the student continue)
+      sendReliably('violation', payload, () => { try { localStorage.removeItem('exam-void:' + state.examId); } catch (e) { /* ignore */ } });
     }
     try { localStorage.removeItem(storageKey()); } catch (e) { /* ignore */ }
     showVoid(event);

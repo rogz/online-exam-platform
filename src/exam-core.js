@@ -12,12 +12,17 @@ const VIOLATION_LABELS = {
   CAMERA_BLOCKED: 'The camera was covered or blocked',
   MULTIPLE_FACES: 'More than one person was in front of the camera',
   PHONE_DETECTED: 'A mobile phone was seen on camera',
+  NO_HANDS: 'Hands were not visible to the camera',
+  FACE_CHECK: 'Did not show the face when the camera asked',
+  FULLSCREEN_EXIT: 'Left full screen during the exam',
   CAMERA_OFF: 'The camera was turned off or disconnected',
   CONNECTION_LOST: 'Was disconnected for longer than allowed',
   TOO_MANY_RECONNECTS: 'Reconnected more times than allowed',
 };
 /** Camera events give warnings first (cameraWarnings, default 1); the next one voids the exam. */
-const WARNABLE_EVENTS = ['NO_FACE', 'CAMERA_BLOCKED', 'MULTIPLE_FACES', 'PHONE_DETECTED', 'CAMERA_OFF'];
+const WARNABLE_EVENTS = ['NO_FACE', 'CAMERA_BLOCKED', 'MULTIPLE_FACES', 'PHONE_DETECTED', 'CAMERA_OFF', 'NO_HANDS', 'FACE_CHECK'];
+/** Leaving the exam: tab/window warnings (focusWarnings) first. */
+const FOCUS_EVENTS = ['TAB_SWITCH', 'LEFT_WINDOW', 'FULLSCREEN_EXIT'];
 const PING_SLACK_MS = 30000;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -45,7 +50,16 @@ const DEFAULT_OPTIONS = {
   offlineMode: false,      // students may download the exam before and take it without internet (needs a strong password)
   keepGoingOffline: true,  // internet drops while the exam page stays open: keep going, send the answers when it's back
   offlineSubmitMinutes: 60, // answers finished in time but sent this many minutes after the deadline are still accepted
+  securityLevel: 'CUSTOM', // PRACTICE | STANDARD | STRICT | CUSTOM: a preset the exam editor fills the settings from
+  requireSEB: false,       // the exam opens only in Safe Exam Browser
+  requireFullscreen: false, // leaving full screen counts like switching tabs (not needed inside Safe Exam Browser)
+  handsCamera: false,      // camera exams: watch the hands and desk; the face is checked at the start and at random times
+  blockVirtualCamera: false, // refuse camera software (OBS, ManyCam …) that can play a recorded video
 };
+
+/** Camera software that can show a recorded video instead of the real camera (OBS Virtual Camera, ManyCam …). */
+const VIRTUAL_CAMERA = /\b(obs|virtual|manycam|xsplit|snap camera|splitcam|youcam|e2esoft|vcam|webcamoid|fake|dummy|mmhmm|camtwist|nvidia broadcast|chromacam)\b/i;
+const isVirtualCamera = (name) => VIRTUAL_CAMERA.test(String(name || ''));
 
 function examOptions(raw) {
   const o = Object.assign({}, DEFAULT_OPTIONS, raw || {});
@@ -76,6 +90,11 @@ function examOptions(raw) {
     offlineMode: o.offlineMode === true,
     keepGoingOffline: o.keepGoingOffline !== false,
     offlineSubmitMinutes: Math.min(24 * 60, Math.round(num(o.offlineSubmitMinutes, 60, 0))),
+    securityLevel: ['PRACTICE', 'STANDARD', 'STRICT'].includes(o.securityLevel) ? o.securityLevel : 'CUSTOM',
+    requireSEB: o.requireSEB === true && o.offlineMode !== true, // an offline exam can't be checked for Safe Exam Browser
+    requireFullscreen: o.requireFullscreen === true,
+    handsCamera: o.handsCamera === true,
+    blockVirtualCamera: o.blockVirtualCamera === true,
   };
 }
 
@@ -515,6 +534,7 @@ function deviceAllowed(allowed, device) {
 }
 
 module.exports = {
+  FOCUS_EVENTS, isVirtualCamera,
   STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS, MAX_IMAGE_BYTES, DEFAULT_OPTIONS,
   examOptions, examConfig, questionFromRow, windowStatus,
   normText, parseTF, mcCorrectIndex, normType, validateQuestion, gradeQuestion,

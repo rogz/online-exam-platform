@@ -199,7 +199,30 @@
   <h3>Step 4: how questions are shown</h3>
   <figure class="mid"><img src="/manual/img/13-editor-display.webp" alt="Exam editor: display">
     <figcaption><ol><li><b>All on one page</b>, or <b>One question at a time</b>.</li><li>One at a time: untick to stop students from <b>going back</b>.</li><li>One at a time: an optional time limit <b>per question</b>, in seconds.</li></ol></figcaption></figure>
-  <h3>Step 5: security</h3>
+  <h3>Step 5: security level</h3>
+  <p>Choose one of four levels. Each one fills in all the security settings for you; you don't need to touch the rest.</p>
+  <figure class="narrow"><img src="/manual/img/13d-security-levels.webp" alt="Security levels: Practice, Standard, Strict, Custom">
+    <figcaption>The list under the levels shows exactly what the chosen level does.</figcaption></figure>
+  <table>
+    <tr><th>Level</th><th>Use it for</th><th>What it does</th></tr>
+    <tr><td><b>Practice</b></td><td>Practice quizzes, take-home work</td><td>Any device, no camera, 3 warnings for leaving the exam, copy and paste allowed.</td></tr>
+    <tr><td><b>Standard</b> (new exams start here)</td><td>Regular quizzes</td><td>Computers and tablets, <b>full screen</b>, face checked by the camera before starting, 2 warnings for leaving the exam, no second monitor, copy and paste blocked, camera software refused.</td></tr>
+    <tr><td><b>Strict</b></td><td>Midterms and finals</td><td><b>Safe Exam Browser</b> required; camera on the <b>hands and desk</b> during the whole exam, with the face checked at the start and at random times; typing while the hands don't move is flagged for you; phone on camera: 2 warnings, then void; about 6 random pictures per hour.</td></tr>
+    <tr><td><b>Custom</b></td><td>When you want to choose</td><td>Shows every setting (described below). "Change these settings one by one" under a level opens Custom with that level's settings filled in.</td></tr>
+  </table>
+  <h3>Strict exams and Safe Exam Browser</h3>
+  <p><b>Safe Exam Browser</b> is a free exam browser used by many universities (Windows, Mac and iPad; <b>not</b> Android). While it is open, students cannot use other apps, other websites, AI helpers, screen sharing, remote control (AnyDesk, TeamViewer) or a second screen. You don't set anything up: the site makes its settings for each exam.</p>
+  <figure class="mid"><img src="/manual/img/32-seb-open.webp" alt="The exam page asks the student to open it in Safe Exam Browser">
+    <figcaption>In a normal browser, a Strict exam shows these steps instead of the Start button.</figcaption></figure>
+  <ul>
+    <li><b>Students:</b> install Safe Exam Browser once, then click <b>Open in Safe Exam Browser</b> on the exam page, sign in again inside it, and start. After submitting they click <b>Quit Safe Exam Browser</b>.</li>
+    <li><b>Before exam day</b>, have students open the <b>Safe Exam Browser test page</b> (link on the exam page): it shows whether Safe Exam Browser works and whether the camera sees their face and then their hands.</li>
+    <li><b>Hands camera:</b> students tilt the laptop screen back (or point an external camera down) so it shows their hands on the keyboard. At random times (every 8 to 20 minutes) the exam asks them to show their face for a moment; they have 20 seconds.</li>
+    <li><b>Results:</b> 🔒 shows that the student used Safe Exam Browser; <b>🖐 … to check</b> means keys were pressed while no hands were moving on camera (someone else may have been controlling the computer). Look at the Events and snapshots before deciding; it never voids the exam by itself.</li>
+    <li>Run one short <b>practice quiz on Strict</b> with each class first: installing and setting up the camera is where problems happen.</li>
+  </ul>
+
+  <h3>Custom: each setting</h3>
   <figure class="mid"><img src="/manual/img/13b-editor-security.webp" alt="Exam editor: security">
     <figcaption><ol><li><b>Allowed devices</b>: computers only, computers and tablets, or any device. Phones are blocked even in "desktop site" mode.</li><li><b>Camera</b>: not required, check the face at the start only, or monitor during the whole exam.</li><li>Show students a small preview of their camera.</li><li><b>Take random snapshots</b> (optional): small pictures at random times, <b>6 per hour</b> unless you change the number. Only for exams with the camera monitored throughout.</li><li><b>Tab/window warnings</b> (click <i>Advanced settings</i> to see these): how many times a student may switch tabs or apps before the exam is voided. 0 = voided the first time. 1–2 is a good choice.</li><li><b>Focus grace</b>: seconds a student may be away before it counts.</li><li><b>Camera warnings</b>: how many camera problems (phone seen, no face, covered camera, another person) before the exam is voided.</li><li><b>Camera grace</b>: seconds a camera problem must last before it counts (default 3).</li></ol></figcaption></figure>
   <table>
@@ -380,6 +403,8 @@
     <tr><td>TAB_SWITCH</td><td>The exam page was hidden</td><td>Another tab, minimizing, the screen turning off</td></tr>
     <tr><td>SECOND_MONITOR</td><td>A second screen was connected</td><td>An HDMI cable or projector plugged in</td></tr>
     <tr><td>PHONE_DETECTED, NO_FACE, CAMERA_BLOCKED, MULTIPLE_FACES, CAMERA_OFF</td><td>A camera problem lasted longer than the camera grace</td><td>A calculator held up, poor lighting, someone walking behind</td></tr>
+    <tr><td>NO_HANDS, FACE_CHECK</td><td>Strict: the hands left the camera's view, or the face wasn't shown within 20 seconds when asked</td><td>Hands on the lap, the screen tilted, a slow reaction to the face check</td></tr>
+    <tr><td>FULLSCREEN_EXIT</td><td>The student left full screen</td><td>Pressing Esc by accident</td></tr>
     <tr><td>Reconnect / page closed</td><td>The page was closed or reloaded and the student did not return in time</td><td>Browser crash, slow internet</td></tr>
   </table>
   <div class="tip">If you believe the student, tick <b>Allow retake</b>. To make an exam more forgiving, set <b>Tab/window warnings</b> and <b>Camera warnings</b> to 1 or 2 in the exam's Advanced settings.</div>

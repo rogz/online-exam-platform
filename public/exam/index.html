@@ -57,6 +57,8 @@
           <li id="ruleFocus"><b>Switching tabs or windows will VOID your exam.</b> This includes opening another tab, minimizing the browser, using Alt+Tab / Cmd+Tab, or clicking another application.</li>
           <li id="ruleMonitor"><b>Multiple monitors are prohibited.</b> Disconnect any second monitor, TV or projector <u>before</u> starting. Connecting one during the exam will void it.</li>
           <li id="ruleReload"><b>Do not refresh, close, or navigate away from this page.</b> That also voids your exam.</li>
+          <li id="ruleSeb" hidden>🔒 <b>This exam runs in Safe Exam Browser.</b> While it is open you cannot use other apps, other websites, screen sharing or remote control, or a second screen.</li>
+          <li id="ruleFullscreen" hidden>⛶ <b>The exam runs in full screen.</b> Leaving full screen (for example by pressing Esc) counts like leaving the exam.</li>
           <li id="ruleCamera" hidden></li>
           <li id="ruleCalc" class="rule-calc" hidden>🧮 <b>Using a calculator? Keep it flat on your desk, below the camera.</b> Do not hold it up near your face or screen: the camera can mistake it for a phone, and that counts as a warning.</li>
           <li id="ruleNav" hidden></li>
@@ -87,8 +89,21 @@
           <p id="camHelp">This exam requires your camera. Sit facing the screen in a well-lit place, with only you in view.</p>
           <button type="button" class="btn" id="camBtn">Turn on camera</button>
           <p class="error" id="camError" hidden></p>
+          <label class="cam-pick" id="camPickWrap" hidden>Camera <select id="camPick" aria-label="Choose a camera"></select></label>
           <p class="muted small">The camera picture is checked on this computer only. It is not recorded or uploaded.</p>
         </div>
+      </div>
+
+      <div class="seb-panel" id="sebPanel" hidden>
+        <h2>🔒 Open this exam in Safe Exam Browser</h2>
+        <p id="sebWhy">Your teacher set this exam to <b>Strict</b>: it can only be taken in <b>Safe Exam Browser</b>, a free exam browser for Windows, Mac and iPad. Android phones and tablets can't be used.</p>
+        <ol class="seb-steps">
+          <li><b>Install Safe Exam Browser</b> (once): <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noopener">safeexambrowser.org</a> for Windows or Mac; on an iPad, search the App Store for <b>"SEB"</b>.</li>
+          <li>Click <a class="btn primary" id="sebOpen" href="#">Open in Safe Exam Browser</a> and allow it to open.</li>
+          <li>Sign in again inside Safe Exam Browser. This exam page opens there; start the exam as usual.</li>
+        </ol>
+        <p class="small muted">Before exam day, try it once: <a id="sebTest" href="#">open the Safe Exam Browser test page</a> (checks that it works and that your camera works in it). To leave Safe Exam Browser after the exam, use the <b>Quit</b> button shown at the end.</p>
+        <p class="notice warn" id="sebMismatch" hidden></p>
       </div>
 
       <form id="startForm" autocomplete="off" novalidate>
@@ -153,6 +168,7 @@
       <p class="rank" id="resultRank" hidden></p>
       <p class="muted" id="resultNote"></p>
       <a class="btn" href="/student" id="resultBack">← Back to My Exams</a>
+      <a class="btn primary" href="/seb-quit" id="sebQuit" hidden>Quit Safe Exam Browser</a>
     </section>
   </main>
 
@@ -183,6 +199,25 @@
       </dl>
       <p class="notice warn" id="voidOffline" hidden>Offline exam: this will be sent to your teacher automatically when you are back online. Keep this page open, or open the exam link again later with internet.</p>
       <p style="margin-top:16px"><a class="btn" href="/student" id="voidBack">← Back to My Exams</a></p>
+    </div>
+  </div>
+
+  <!-- Face check (hands camera): show the face now -->
+  <div class="modal-backdrop warn" id="faceCheckModal" hidden>
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="faceCheckTitle">
+      <h2 id="faceCheckTitle">📷 Face check: show your face to the camera</h2>
+      <p>Lean in or tilt your screen up so the camera sees your face. This closes by itself once your face is seen.</p>
+      <div class="cam-box" id="faceCheckBox"><video id="faceCheckVideo" muted playsinline></video><span class="cam-badge" id="faceCheckBadge">Looking for your face…</span></div>
+      <p><b id="faceCheckLeft"></b></p>
+    </div>
+  </div>
+
+  <!-- Full screen left -->
+  <div class="modal-backdrop warn" id="fsModal" hidden>
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="fsTitle">
+      <h2 id="fsTitle">⛶ Go back to full screen</h2>
+      <p id="fsText">This exam runs in full screen. Click the button to continue.</p>
+      <div class="modal-actions"><button type="button" class="btn primary" id="fsBtn">Return to full screen</button></div>
     </div>
   </div>
 

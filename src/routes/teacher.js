@@ -453,6 +453,8 @@ async function examProblems(teacherId, e, forPublish) {
   if (!e.title) p.push('enter a title');
   if (!isUuid(e.classId) || !(await db.one('SELECT 1 FROM classes WHERE id = $1 AND teacher_id = $2', [e.classId, teacherId]))) p.push('choose a class');
   if (e.start && e.end && e.end <= e.start) p.push('the closing time must be after the opening time');
+  if (e.options.offlineMode && e.options.securityLevel === 'STRICT') p.push('a Strict exam can\'t be an offline exam (Safe Exam Browser needs internet): choose "Good or unstable internet"');
+  if (e.options.handsCamera && e.faceMode !== 'ALWAYS') p.push('watching the hands needs "Monitor during the whole exam" under Camera');
   if (e.options.offlineMode && require('../offline').normPassword(e.password).length < 8) {
     p.push('an offline exam needs an exam password of at least 8 letters or numbers (click "Make a strong password")');
   }
@@ -573,6 +575,7 @@ router.post('/exams/:id', async (req, res) => {
       classId: x.class_id, title: x.title, instructions: x.instructions, questionIds: x.question_ids, startAt: x.start_at, endAt: x.end_at,
       timeLimitMinutes: x.time_limit_min, displayMode: x.display_mode, allowBack: x.allow_back, questionSeconds: x.question_seconds,
       pickCount: x.pick_count, topicCounts: x.topic_counts, options: x.options, password: x.password,
+      faceMode: x.face_mode, cameraPreview: x.camera_preview, allowedDevices: x.allowed_devices,
     });
     const p = await examProblems(req.user.id, e, true);
     if (p.length) throw fail(400, 'BAD_INPUT', 'Before publishing, please fix: ' + p.join('; ') + '.');
@@ -608,6 +611,8 @@ router.get('/exams/:id/results', async (req, res) => {
   const attempts = await db.many(
     `SELECT a.*, u.name AS student_name, u.email AS student_email, u.student_no,
             (SELECT count(*) FROM violations v WHERE v.attempt_id = a.id)::int AS event_count,
+            (SELECT count(*) FROM violations v WHERE v.attempt_id = a.id AND v.event IN ('INPUT_NO_HANDS', 'INPUT_HANDS_STILL'))::int AS hand_checks,
+            (SELECT detail FROM violations v WHERE v.attempt_id = a.id AND v.event = 'SEB' LIMIT 1) AS seb_note,
             (SELECT count(*) FROM responses r WHERE r.attempt_id = a.id AND r.note <> '' AND NOT r.note_checked)::int AS to_check,
             (SELECT updated_at FROM avatars av WHERE av.user_id = u.id) AS avatar_updated
        FROM attempts a JOIN users u ON u.id = a.student_id WHERE a.exam_id = $1 ORDER BY u.name, a.started_at`, [x.id]);

@@ -96,6 +96,32 @@ students. Time zone Asia/Manila. Students often use phones for everything except
   helper at a **collector link** (`/collect?t=TOKEN`, Helper links: this exam only, no scores, 4 h–3 days, can be turned
   off). The scanner (phone camera; BarcodeDetector or `public/vendor/jsqr.js`) keeps scans when the phone is offline and
   sends them later. The receipt is checked as for any offline hand-in; the same answers arriving twice count once.
+- **Security levels** (exam editor, top of Security; `options.securityLevel`): **Practice / Standard / Strict / Custom**.
+  A level is a preset that fills in the existing settings (`SEC` in `public/assets/teacher.js`); the list under it shows
+  what it does; "Change these settings one by one" opens Custom with those values. New exams start on Standard; existing
+  exams (no level saved) show as Custom. A saved level whose values were changed elsewhere shows as Custom.
+  New options (all off unless a level or Custom turns them on): `requireSEB`, `requireFullscreen`, `handsCamera`,
+  `blockVirtualCamera`. Strict can't be an offline exam; the hands camera needs camera monitoring (ALWAYS).
+- **Safe Exam Browser** (`src/seb.js`): `/seb/<examId>.seb` is a plain XML settings file (start page = the exam, camera
+  allowed, quit page `/seb-quit`); the exam page offers a `sebs://…/seb/<id>.seb` link. SEB sends
+  `X-SafeExamBrowser-ConfigKeyHash` = sha256(URL + Config Key); the Config Key is sha256 of the settings as compact JSON
+  (keys sorted ignoring case, without originatorVersion), so the server can check it without the database. Opening
+  `/exam?id=…` that way sets a signed 12-hour cookie for that exam (`verified`; or `detected` when the user agent says
+  SEB but the key doesn't match); `start` needs it (`SEB_REQUIRED`). **Not yet confirmed with a real SEB**: until then
+  `detected` is accepted; the admin setting "accept Safe Exam Browser only with this site's exact settings"
+  (`sebStrict`) makes it `verified` only. `/seb-check` (and `/seb/check.seb`) is a test page for students and for
+  confirming the key. Inside SEB the monitor check is skipped (SEB blocks second screens) and full screen isn't asked.
+  Results shows 🔒 (event `SEB`).
+- **Full screen** (`requireFullscreen`): requested on the Start click; leaving it is `FULLSCREEN_EXIT`, counted with the
+  tab/window warnings (`FOCUS_EVENTS`); a "Return to full screen" button; staying out 60 s voids like being away.
+- **Camera software** (`blockVirtualCamera`): camera names like OBS Virtual Camera, ManyCam, XSplit, Snap Camera are
+  refused on the exam page (with a camera chooser) and by the server (`isVirtualCamera`, `VIRTUAL_CAMERA`). Phone-as-webcam
+  apps (DroidCam, Camo) are allowed.
+- **Hands camera** (`handsCamera`, MediaPipe HandLandmarker in `public/exam/camera.js`, mode 'hands'): before starting, the
+  face is checked, then the hands must be visible; during the exam `NO_HANDS` (grace at least 8 s) is a camera event; face
+  checks every 8–20 min (first after 3–10) give 20 s to show the face (`FACE_CHECK` otherwise), with a small snapshot when
+  snapshots are on. Keys/clicks while no hands are visible or the fingertips don't move are logged with the `note`
+  action (`INPUT_NO_HANDS` / `INPUT_HANDS_STILL`, at most 30, never a warning) and shown in Results as "🖐 … to check".
 - **Help this student** (Results → Answers, for an attempt not submitted): extra time / **Let them continue** after a
   void or a crash (same questions, the server's saved answers come back; the student reopens within 30 min,
   `resume_until`), **Submit these answers** (the draft saved on the server), **Upload an answer file** (the student's

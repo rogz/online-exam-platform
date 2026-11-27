@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Safe Exam Browser test</title>
+<link rel="stylesheet" href="/exam/styles.css">
+<script src="/assets/theme-mode.js"></script>
+</head>
+<body>
+  <header class="topbar"><div class="brand">Safe Exam Browser test</div><div class="theme-slot" data-theme-slot></div></header>
+  <main>
+    <section class="card">
+      <h1>Is everything ready for a Strict exam?</h1>
+      <div class="checks"><ul>
+        <li id="cSeb"><span class="dot"></span><span class="label">Safe Exam Browser</span></li>
+        <li id="cFace"><span class="dot"></span><span class="label">Camera: face</span></li>
+        <li id="cHands"><span class="dot"></span><span class="label">Camera: hands</span></li>
+      </ul></div>
+      <div class="camera-panel">
+        <div class="cam-slot"><div class="cam-box" id="camBox"><video id="camVideo" muted playsinline></video><span class="cam-badge" id="camBadge">Camera off</span></div></div>
+        <div class="cam-side">
+          <p id="camHelp">Click the button, then face the screen. After your face is seen, tilt your screen back (or point the camera down) so it shows your hands on the keyboard.</p>
+          <button type="button" class="btn" id="camBtn">Test my camera</button>
+          <p class="error" id="camError" hidden></p>
+          <p class="muted small">The camera picture is checked on this computer only. It is not recorded or uploaded.</p>
+        </div>
+      </div>
+      <p id="allDone" class="notice" hidden>✓ All set. On exam day, open the exam link and click <b>Open in Safe Exam Browser</b>.</p>
+      <p><a class="btn primary" href="/seb-quit" id="quitBtn">Quit Safe Exam Browser</a></p>
+      <details class="small muted"><summary>Technical details (for your teacher)</summary><p id="tech" style="word-break:break-all"></p></details>
+    </section>
+  </main>
+  <script src="/exam/camera.js"></script>
+  <script>
+  (function () {
+    const info = /*SEB_INFO*/null || {};
+    const $ = (id) => document.getElementById(id);
+    const set = (id, ok, text) => {
+      const li = $(id); li.className = ok === null ? '' : ok ? 'ok' : 'bad';
+      let m = li.querySelector('.msg'); if (!m) { m = document.createElement('span'); m.className = 'msg'; li.appendChild(m); } m.textContent = text;
+    };
+    set('cSeb', !!info.level, info.level === 'verified' ? '✓ Working (settings verified)'
+      : info.level === 'detected' ? 'Working, but the settings could not be verified. Tell your teacher (it still works for exams unless they turned on the strict check).'
+        : info.sebAgent ? 'Safe Exam Browser found, but this page was not opened with the test link.' : 'Not open: this page must be opened in Safe Exam Browser (use the test link on the exam page).');
+    $('quitBtn').hidden = !info.sebAgent;
+    $('tech').textContent = 'Level: ' + (info.level || 'none') + ' · Key header: ' + (info.keyHeader ? 'yes' : 'no') + ' · ' + (info.userAgent || '');
+    set('cFace', null, 'Not tested yet'); set('cHands', null, 'Not tested yet');
+    let faceOk = false, handsOk = false;
+    $('camBtn').onclick = async () => {
+      $('camBtn').disabled = true; $('camError').hidden = true;
+      try {
+        await window.ExamCamera.start($('camVideo'), { phoneDetection: true, handsMode: true, onStatus: (st) => {
+          const hands = window.ExamCamera.mode() === 'hands';
+          $('camBadge').textContent = st === 'OK' ? (hands ? '✓ Hands visible' : '✓ Face detected') : st === 'NO_HANDS' ? 'Hands not visible' : st === 'NO_FACE' ? 'No face detected' : st === 'LOADING' ? 'Loading…' : st;
+          $('camBox').classList.toggle('ok', st === 'OK'); $('camBox').classList.toggle('bad', !['OK', 'LOADING', 'OFF'].includes(st));
+          if (!hands && st === 'OK' && !faceOk) { faceOk = true; set('cFace', true, '✓ Face seen'); set('cHands', false, 'Now tilt your screen back so the camera shows your hands'); window.ExamCamera.setMode('hands'); }
+          if (hands && st === 'OK' && !handsOk) { handsOk = true; set('cHands', true, '✓ Hands seen'); }
+          if (st === 'PHONE_DETECTED') set(hands ? 'cHands' : 'cFace', false, 'A phone is in view: put it away');
+          $('allDone').hidden = !(faceOk && handsOk && info.level);
+        } });
+        const name = window.ExamCamera.cameraName();
+        if (window.ExamCamera.isVirtual(name)) { $('camError').textContent = '"' + name + '" is camera software, not a real camera: Strict exams refuse it.'; $('camError').hidden = false; }
+        $('tech').textContent += ' · Camera: ' + name;
+      } catch (e) { $('camError').textContent = e.message; $('camError').hidden = false; $('camBtn').disabled = false; }
+    };
+  })();
+  </script>
+</body>
+</html>

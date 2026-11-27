@@ -37,6 +37,14 @@ fs.mkdirSync(SHOTS, { recursive: true });
   /** Waits until a message containing `text` is shown. */
   const toastSays = async (p, text) => { try { await p.waitForFunction((t) => { const e = document.querySelector('#toast'); return e && !e.hidden && e.textContent.includes(t); }, text, { timeout: 10000 }); return true; } catch (e) { return false; } };
   const dbOne = (sql, params) => db.one(sql, params);
+  /** Exam editor: Custom security with the settings these tests were written for (computer, no camera, no warnings, no full screen). */
+  const classicSecurity = async (p) => {
+    await p.check('input[name=eSec][value=CUSTOM]');
+    await p.evaluate(() => {
+      const set = (id, v) => { const el = document.getElementById(id); if (el.type === 'checkbox') el.checked = v; else el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+      set('eDev', 'COMPUTER'); set('eFace', 'OFF'); set('oFocusWarn', 0); set('oFs', false); set('oSEB', false); set('oHands', false); set('oCopy', true); set('oMon', true);
+    });
+  };
 
   // ── Admin creates an access code ──
   const admin = await newUser();
@@ -153,6 +161,14 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await teacher.click('a[href="#exams"]');
   await teacher.click('a[href="#exam/new"]');
   await teacher.waitForSelector('#pRows [data-q]');
+  // a new exam starts on the Standard security level; Custom shows each setting (here: the old defaults, no camera)
+  ok(await teacher.isChecked('input[name=eSec][value=STANDARD]') && await teacher.isHidden('#secCustom') && (await teacher.textContent('#secSummary')).includes('Full screen'),
+    'a new exam starts on the Standard security level, shown as a short list');
+  await teacher.check('input[name=eSec][value=STRICT]');
+  ok((await teacher.textContent('#secSummary')).includes('Safe Exam Browser') && await teacher.evaluate(() => document.querySelector('#oSEB').checked && document.querySelector('#oHands').checked && document.querySelector('#eFace').value === 'ALWAYS'),
+    'choosing Strict turns on Safe Exam Browser, the hands camera and camera monitoring');
+  await shot(teacher, '05b-security-levels');
+  await classicSecurity(teacher);
   await teacher.fill('#eTitle', 'EEE 150 Quiz 1');
   await teacher.fill('#eLimit', '20');
   await teacher.fill('#ePass', 'ohm');
@@ -329,6 +345,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await t2.click('a[href="#questions"]'); await t2.click('#addQ'); await t2.selectOption('#qeType', 'TF'); await t2.fill('#qeText', 'g ≈ 9.8 m/s²'); await t2.check('input[name=tf][value=TRUE]');
   await t2.click('.dialog .btn.primary'); await t2.waitForSelector('#qRows td:has-text("Q001")');
   await t2.click('a[href="#exams"]'); await t2.click('a[href="#exam/new"]'); await t2.waitForSelector('#pRows [data-q]');
+  await classicSecurity(t2);
   await t2.fill('#eTitle', 'Physics quiz'); await t2.check('#pAll');
   await t2.click('#pubBtn');
   ok(await toastSays(t2, 'access code or 1 credit'), 'publishing without credits is refused');
@@ -673,6 +690,111 @@ fs.mkdirSync(SHOTS, { recursive: true });
   const fibs = mixSet.qs.filter((q) => q.startsWith('FIB:Long line value')).length, mcs = mixSet.qs.filter((q) => q.startsWith('MC:')).length;
   ok(mixSet.qs.length === 7 && fibs === 3 && mcs === 4 && mixSet.told === 7 && mixSet.types.FIB === 3 && mixSet.types.MC === 4,
     'each student gets 3 fill-in-the-blank from Long Lines and 4 multiple choice; the rules screen says 7 (3 FIB, 4 MC)');
+
+  // ── Strict security: Safe Exam Browser, full screen, camera software, hands camera ──
+  const sebLib = require('../src/seb');
+  const mkStrict = async (title, faceMode, options) => teacher.evaluate(async ([title, faceMode, options]) => {
+    const post = async (u, b) => (await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) })).json();
+    const cls = (await (await fetch('/api/teacher/classes')).json()).classes[0];
+    const q = (await (await fetch('/api/teacher/questions')).json()).questions.find((x) => x.type === 'TF');
+    const r = await post('/api/teacher/exams', { classId: cls.id, title, questionIds: [q.id], timeLimitMinutes: 10, faceMode, allowedDevices: 'TABLET', options,
+      startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString() });
+    await post('/api/teacher/exams/' + r.exam.id, { publish: true });
+    return r.exam.id;
+  }, [title, faceMode, options]);
+  const sebExam = await mkStrict('SEB quiz', 'OFF', { securityLevel: 'CUSTOM', requireSEB: true });
+  // the settings file for Safe Exam Browser
+  const sebFile = await (await fetch(BASE + '/seb/' + sebExam + '.seb')).text();
+  ok(sebFile.includes('<key>startURL</key>') && sebFile.includes('/exam?id=' + sebExam) && sebFile.includes('<key>allowVideoCapture</key>\n  <true/>'),
+    'the site makes a Safe Exam Browser settings file for the exam (start page, camera allowed)');
+  // in a normal browser: the exam page explains how to open it in Safe Exam Browser; starting is refused
+  await student.goto(BASE + '/exam?id=' + sebExam); await student.waitForSelector('#screen-rules:not([hidden])');
+  ok(await student.isVisible('#sebPanel') && await student.isHidden('#startForm') && (await student.getAttribute('#sebOpen', 'href')).startsWith('seb://localhost'),
+    'in a normal browser, a Strict exam shows "Open in Safe Exam Browser" instead of the Start button');
+  await shot(student, '25-seb-required');
+  const sebNo = await student.evaluate(async (examId) => (await (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+    body: JSON.stringify({ action: 'start', examId, env: { monitorCheck: 'supported', userAgent: navigator.userAgent } }) })).json()).code, sebExam);
+  ok(sebNo === 'SEB_REQUIRED', 'starting it from a normal browser is refused');
+  // opened by Safe Exam Browser: its headers prove the settings; the exam can start
+  const sebCtx = await browser.newContext({ viewport: { width: 1280, height: 860 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEB/3.7.1' });
+  const sebPage = await sebCtx.newPage(); sebPage.on('pageerror', (e) => errors.push(e.message));
+  await sebPage.route('**/*', (route) => {
+    const u = route.request().url();
+    const key = sebLib.configKey(sebLib.settings(BASE, u.includes('/seb-check') ? 'check' : sebExam));
+    route.continue({ headers: Object.assign({}, route.request().headers(), { 'x-safeexambrowser-configkeyhash': sebLib.sha256(u.split('#')[0] + key) }) });
+  });
+  await sebPage.goto(BASE + '/'); await sebPage.fill('#inEmail', 'juan@student.edu'); await sebPage.fill('#inPass', 'student-pass-1'); await sebPage.click('#signIn button[type=submit]');
+  await sebPage.waitForURL(/\/student/);
+  await sebPage.goto(BASE + '/exam?id=' + sebExam); await sebPage.waitForSelector('#screen-rules:not([hidden])');
+  ok(await sebPage.isHidden('#sebPanel') && await sebPage.isVisible('#startBtn') && await sebPage.isVisible('#ruleSeb'), 'opened in Safe Exam Browser, the Start button appears');
+  await sebPage.check('#agree'); await sebPage.click('#startBtn'); await sebPage.waitForSelector('#screen-exam:not([hidden])');
+  const sebEv = await dbOne(`SELECT v.detail FROM violations v JOIN attempts a ON a.id = v.attempt_id WHERE a.exam_id = $1 AND v.event = 'SEB'`, [sebExam]);
+  ok(sebEv && sebEv.detail.includes('verified'), 'the exam starts, and Results records "Safe Exam Browser: verified"');
+  await sebPage.click('#submitBtn'); await sebPage.click('#confirmYes'); await sebPage.waitForSelector('#screen-result:not([hidden])');
+  ok(await sebPage.isVisible('#sebQuit') && (await sebPage.getAttribute('#sebQuit', 'href')) === '/seb-quit', 'after submitting, a "Quit Safe Exam Browser" button is shown');
+  await sebPage.goto(BASE + '/seb-check'); await sebPage.waitForSelector('#cSeb.ok');
+  ok((await sebPage.textContent('#cSeb')).includes('settings verified'), 'the Safe Exam Browser test page confirms it works');
+  await sebCtx.close();
+  // full screen: leaving it counts like leaving the exam (a warning, then void)
+  const fsExam = await mkStrict('Full screen quiz', 'OFF', { securityLevel: 'CUSTOM', requireFullscreen: true, focusWarnings: 2 });
+  await student.goto(BASE + '/exam?id=' + fsExam); await student.waitForSelector('#screen-rules:not([hidden])');
+  ok(await student.isVisible('#ruleFullscreen'), 'the rules say the exam runs in full screen');
+  await student.check('#agree'); await student.click('#startBtn'); await student.waitForSelector('#screen-exam:not([hidden])');
+  const fsOn = await student.evaluate(() => !!document.fullscreenElement);
+  if (fsOn) {
+    await student.evaluate(() => document.exitFullscreen());
+    await student.waitForSelector('#focusWarnModal:not([hidden])');
+    const fsRow = await dbOne(`SELECT focus_warnings FROM attempts WHERE exam_id = $1`, [fsExam]);
+    ok(fsRow.focus_warnings === 1 && (await student.textContent('#focusWarnReason')).includes('full screen') && await student.isVisible('#fsModal'),
+      'leaving full screen gives a tab/window warning and a "Return to full screen" button');
+  } else ok(true, 'full screen is not available in this test browser (skipped)');
+  await student.goto(BASE + '/student');
+  // camera software is refused; typing without hands is noted for the teacher
+  const handsExam = await mkStrict('Hands quiz', 'ALWAYS', { securityLevel: 'CUSTOM', handsCamera: true, blockVirtualCamera: true, cameraWarnings: 2, phoneDetection: true });
+  const virt = await student.evaluate(async (examId) => (await (await fetch('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+    body: JSON.stringify({ action: 'start', examId, env: { monitorCheck: 'supported', camera: 'ok', cameraName: 'OBS Virtual Camera', userAgent: navigator.userAgent } }) })).json()), handsExam);
+  ok(virt.code === 'VIRTUAL_CAMERA' && virt.error.includes('OBS Virtual Camera'), 'camera software (OBS Virtual Camera) is refused');
+  // a pretend camera, to walk through the hands camera steps
+  const fakeCam = `window.ExamCamera = (function () {
+    let on = null, mode = 'face', timer = null;
+    const st = () => { const c = window.__cam; if (!timer) return 'OFF'; if (c.phone) return 'PHONE_DETECTED'; return mode === 'hands' ? (c.hands ? 'OK' : 'NO_HANDS') : (c.face ? 'OK' : 'NO_FACE'); };
+    let last = null, since = Date.now();
+    const tick = () => { const s = st(); if (s !== last) { last = s; since = Date.now(); } if (on) on(s, Date.now() - since); };
+    return { files: [], handFiles: [],
+      async start(v, o) { on = o.onStatus; timer = setInterval(tick, 200); tick(); },
+      async restart() {}, stop() { clearInterval(timer); timer = null; }, mirrorTo() {}, resume() {}, snapshot() { return null; }, allowHead() {},
+      setMode(m) { mode = m; tick(); }, mode: () => mode, status: st, statusAge: () => Date.now() - since,
+      handInfo: () => ({ count: window.__cam.hands ? 2 : 0, motion: 0, at: Date.now() }),
+      cameraName: () => window.__cam.name, isVirtual: (n) => /virtual|obs/i.test(n === undefined ? window.__cam.name : n),
+      async listCameras() { return [{ deviceId: 'a', label: window.__cam.name }, { deviceId: 'b', label: 'HD WebCam' }]; }, currentDeviceId: () => 'a',
+      async useCamera(id) { window.__cam.name = id === 'b' ? 'HD WebCam' : window.__cam.name; } };
+  })();`;
+  await student.route('**/exam/camera.js', (route) => route.fulfill({ contentType: 'application/javascript', body: fakeCam }));
+  await student.addInitScript(() => { window.__cam = { face: true, hands: false, phone: false, name: 'OBS Virtual Camera' }; });
+  await student.goto(BASE + '/exam?id=' + handsExam); await student.waitForSelector('#screen-rules:not([hidden])');
+  ok((await student.textContent('#ruleCamera')).includes('hands and desk'), 'the rules explain the hands camera and the face checks');
+  await student.click('#camBtn');
+  await student.waitForFunction(() => document.querySelector('#checkCamera').textContent.includes('camera software'));
+  ok(await student.isVisible('#camPickWrap'), 'camera software is refused on the exam page too, with a list to choose the real camera');
+  await student.selectOption('#camPick', 'b');
+  await student.waitForFunction(() => document.querySelector('#checkCamera').textContent.includes('Step 2'));
+  ok((await student.textContent('#camHelp')).includes('Face checked'), 'with the real camera: the face is checked first, then the student shows their hands');
+  await student.evaluate(() => { window.__cam.hands = true; });
+  await student.waitForFunction(() => document.querySelector('#checkCamera').textContent.includes('Hands visible'));
+  await shot(student, '26-hands-camera');
+  await student.check('#agree'); await student.click('#startBtn'); await student.waitForSelector('#screen-exam:not([hidden])');
+  const handsAttempt = (await dbOne('SELECT id FROM attempts WHERE exam_id = $1', [handsExam])).id;
+  await student.evaluate(() => { window.__cam.hands = false; });
+  await student.waitForTimeout(3500); // no hands on camera for a few seconds, then keys are pressed
+  for (let i = 0; i < 8; i++) await student.keyboard.press('Shift');
+  await student.waitForSelector('#faceWarnModal:not([hidden])', { timeout: 15000 });
+  const handRows = await dbOne(`SELECT a.warnings, (SELECT count(*) FROM violations v WHERE v.attempt_id = a.id AND v.event = 'INPUT_NO_HANDS')::int AS n FROM attempts a WHERE a.id = $1`, [handsAttempt]);
+  ok((await student.textContent('#faceWarnReason')).includes('hands') && handRows.warnings === 1, 'hands out of view for a while: a camera warning');
+  ok(handRows.n === 1, 'typing while no hands are on camera is noted for the teacher (no warning for that)');
+  await teacher.goto(BASE + '/teacher#exams'); await teacher.goto(BASE + '/teacher#results/' + handsExam); await teacher.waitForSelector('[data-answers]');
+  ok((await teacher.textContent('#aRows')).includes('to check (typing, hands not moving)'), 'Results shows it as something to check');
+  await student.unroute('**/exam/camera.js');
+  await student.goto(BASE + '/student');
 
   // ── Tab/window warnings: 2 allowed, the 3rd time away voids; staying away over 1 minute voids ──
   const mkExam = async (title, options) => teacher.evaluate(async ([title, options]) => {

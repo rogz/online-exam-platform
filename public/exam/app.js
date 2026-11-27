@@ -33,7 +33,7 @@
     allowBack: true,     // may return to earlier questions (one-at-a-time mode)
     index: 0,            // current question in one-at-a-time mode
     locked: new Set(),   // questions that can no longer be changed
-    cam: { required: false, continuous: false, warnings: 0, warningOpen: false, offenseArmed: true },
+    cam: { required: false, continuous: false, warnings: 0, warningOpen: false, offenseArmed: true, hands: false, faceChecked: false, virtual: false, faceCheckOpen: false },
     pageToken: newToken(), // this open page; lets the server tell "internet dropped" from "page was closed"
     answersVer: 0,         // changes each time an answer changes
     savedVer: 0,           // the version the server has
@@ -168,13 +168,15 @@
       return devOk && cameraCheckPasses();
     }
     const m = monitorStatus();
-    const browserOk = m !== 'unsupported' || !state.rules.requireMonitorCheck;
+    const inSeb = !!(state.info.seb && state.info.seb.inSeb); // Safe Exam Browser blocks a second screen itself
+    const browserOk = m !== 'unsupported' || !state.rules.requireMonitorCheck || inSeb;
     setCheck('checkBrowser', browserOk, m === 'unsupported'
       ? (state.rules.requireMonitorCheck
         ? 'This browser cannot check for extra monitors. Open this link in Google Chrome or Microsoft Edge on a laptop or desktop computer.'
         : 'This browser cannot check for extra monitors. Make sure only one screen is connected.')
       : 'Supported');
-    if (m === 'unsupported') setCheck('checkMonitor', !state.rules.requireMonitorCheck, 'Cannot be checked in this browser');
+    if (m === 'unsupported' && inSeb) { setCheck('checkBrowser', true, 'Safe Exam Browser'); setCheck('checkMonitor', true, 'Checked by Safe Exam Browser'); }
+    else if (m === 'unsupported') setCheck('checkMonitor', !state.rules.requireMonitorCheck, 'Cannot be checked in this browser');
     else setCheck('checkMonitor', m === 'single', m === 'single'
       ? 'One screen detected'
       : 'A second monitor is connected. Disconnect it to start the exam.');
@@ -192,13 +194,18 @@
     MULTIPLE_FACES: 'More than one person in view',
     PHONE_DETECTED: 'Phone detected',
     CAMERA_OFF: 'Camera turned off',
+    NO_HANDS: 'Hands not visible',
+    FACE_CHECK: 'Face not shown when asked',
   };
+  /** The badge text; in hands mode "OK" means the hands are visible. */
+  const camText = (st) => (st === 'OK' && window.ExamCamera && window.ExamCamera.mode && window.ExamCamera.mode() === 'hands' ? '✓ Hands visible' : CAM_TEXT[st] || st);
   const CAM_HELP = {
     NO_FACE: 'Make sure your whole face is visible and well lit, facing the screen.',
     CAMERA_BLOCKED: 'Uncover the camera and make sure the room is bright enough.',
     MULTIPLE_FACES: 'Only you may be in front of the camera.',
     PHONE_DETECTED: 'Put your phone away, out of the camera\'s view. Using a calculator? Keep it flat on your desk, below the camera.',
     CAMERA_OFF: 'Your camera stopped. Turn it back on to continue.',
+    NO_HANDS: 'Tilt your screen back (or point your camera down) so it shows your hands on the keyboard and your desk.',
   };
 
   function camRuleText() {
@@ -210,6 +217,26 @@
   function cameraCheckPasses() {
     if (!state.cam.required) return true;
     const st = window.ExamCamera.status();
+    if (state.cam.virtual) {
+      setCheck('checkCamera', false, '"' + window.ExamCamera.cameraName() + '" is camera software, not a real camera. Choose your real camera below.');
+      return false;
+    }
+    if (state.cam.hands) {
+      // Strict: the face is checked first (who is taking the exam), then the camera is turned to the hands and desk
+      if (!state.cam.faceChecked) {
+        if (st === 'OK' && window.ExamCamera.mode() === 'face') {
+          state.cam.faceChecked = true;
+          window.ExamCamera.setMode('hands');
+          $('camHelp').innerHTML = '✓ Face checked. <b>Now tilt your screen back (or point your camera down) so it shows your hands on the keyboard and your desk.</b> Keep them in view during the exam; from time to time you will be asked to show your face.';
+        } else {
+          setCheck('checkCamera', false, st === 'OFF' ? 'Turn on your camera below.' : st === 'LOADING' ? 'Loading the camera checks…' : 'Step 1: show your face. ' + (CAM_TEXT[st] || '') + '.');
+          return false;
+        }
+      }
+      const okH = window.ExamCamera.status() === 'OK';
+      setCheck('checkCamera', okH, okH ? '✓ Face checked · ✓ Hands visible' : 'Step 2: show your hands. ' + (CAM_HELP.NO_HANDS));
+      return okH;
+    }
     setCheck('checkCamera', st === 'OK', st === 'OK' ? 'Face detected'
       : st === 'OFF' ? 'Turn on your camera below.'
         : st === 'LOADING' ? 'Loading face detection…' : CAM_TEXT[st] + '. ' + (CAM_HELP[st] || ''));
@@ -220,15 +247,16 @@
     const box = $(boxId);
     box.classList.toggle('ok', st === 'OK');
     box.classList.toggle('bad', st !== 'OK' && st !== 'LOADING' && st !== 'OFF');
-    $(badgeId).textContent = CAM_TEXT[st] || st;
+    $(badgeId).textContent = camText(st);
   }
 
   async function turnOnCamera() {
     $('camBtn').disabled = true;
     $('camError').hidden = true;
     try {
-      await window.ExamCamera.start($('camVideo'), { phoneDetection: state.rules.phoneDetection, headDetection: state.rules.headDetection !== false, onStatus: onCamStatus });
+      await window.ExamCamera.start($('camVideo'), { phoneDetection: state.rules.phoneDetection, headDetection: state.rules.headDetection !== false, handsMode: state.cam.hands, onStatus: onCamStatus });
       $('camBtn').hidden = true;
+      await checkCameraKind();
     } catch (e) {
       $('camError').textContent = e.message;
       $('camError').hidden = false;
@@ -237,11 +265,31 @@
     refreshStartButton();
   }
 
+  /** Camera software (OBS, ManyCam …) can play a recorded video: refused when the exam says so. Offers a camera list. */
+  async function checkCameraKind() {
+    const name = window.ExamCamera.cameraName();
+    state.cam.virtual = !!(state.rules.blockVirtualCamera && window.ExamCamera.isVirtual(name));
+    const cams = await window.ExamCamera.listCameras();
+    const pick = $('camPick');
+    $('camPickWrap').hidden = cams.length < 2 && !state.cam.virtual;
+    const cur = window.ExamCamera.currentDeviceId();
+    pick.innerHTML = '';
+    cams.forEach((c, i) => {
+      const o = document.createElement('option');
+      o.value = c.deviceId; o.textContent = c.label || 'Camera ' + (i + 1);
+      if (c.deviceId === cur) o.selected = true;
+      pick.appendChild(o);
+    });
+    refreshStartButton();
+  }
+
   /** Called by camera.js about twice a second. */
   function onCamStatus(st, ageMs) {
     paintCamBadge('camBox', 'camBadge', st);
     $('camIndicator').classList.toggle('bad', st !== 'OK');
-    $('camIndicator').textContent = st === 'OK' ? '📷 Camera on' : '📷 ' + (CAM_TEXT[st] || st);
+    $('camIndicator').textContent = st === 'OK' ? '📷 Camera on' : '📷 ' + camText(st);
+    if (state.cam.hands) noteHands();
+    if (state.cam.faceCheckOpen) { faceCheckStatus(st); return; }
     if (!state.attemptId) { refreshStartButton(); return; }
     if (state.cam.warningOpen) {
       paintCamBadge('faceWarnBox', 'faceWarnBadge', st);
@@ -252,7 +300,7 @@
     if (!state.active || !state.cam.continuous) return;
     if (st === 'OK') { state.cam.offenseArmed = true; return; }
     if (st === 'LOADING' || st === 'OFF' || !state.cam.offenseArmed) return;
-    const graceMs = st === 'CAMERA_OFF' ? 0 : Math.max(1, state.rules.faceGraceSeconds || 3) * 1000;
+    const graceMs = st === 'CAMERA_OFF' ? 0 : st === 'NO_HANDS' ? Math.max(8, state.rules.faceGraceSeconds || 3) * 1000 : Math.max(1, state.rules.faceGraceSeconds || 3) * 1000;
     if (ageMs >= graceMs) cameraOffense(st, CAM_TEXT[st] + ' for ' + Math.round(ageMs / 1000) + ' s.');
   }
 
@@ -297,6 +345,67 @@
     api('violation', { attemptId: state.attemptId, event, detail }, 3)
       .then((r) => { if (r.status === 'VOIDED') { state.violations.push({ event, detail }); showVoid(event); } })
       .catch((e) => { if (e.code === 'VOIDED') showVoid(event); else beacon('violation', { attemptId: state.attemptId, event, detail }); });
+  }
+
+  // ── Hands camera: face checks at random times, and typing while no hands are moving (remote control?) ──
+  const FACE_CHECK_S = 20;
+  function startFaceChecks() {
+    if (!state.cam.hands || state.faceCheckTimer) return;
+    const plan = (first) => {
+      const ms = (first ? 3 + Math.random() * 7 : 8 + Math.random() * 12) * 60000; // first within 3–10 min, then every 8–20 min
+      state.faceCheckTimer = setTimeout(runFaceCheck, ms);
+    };
+    state.planFaceCheck = plan;
+    plan(true);
+  }
+  function runFaceCheck() {
+    state.faceCheckTimer = null;
+    if (!state.active) return;
+    if (state.cam.warningOpen || !$('focusWarnModal').hidden) { state.faceCheckTimer = setTimeout(runFaceCheck, 30000); return; }
+    state.cam.faceCheckOpen = true;
+    state.faceCheckEnds = Date.now() + FACE_CHECK_S * 1000;
+    window.ExamCamera.setMode('face');
+    window.ExamCamera.mirrorTo($('faceCheckVideo'));
+    $('faceCheckModal').hidden = false;
+    faceCheckStatus(window.ExamCamera.status());
+  }
+  function faceCheckStatus(st) {
+    const left = Math.max(0, Math.ceil((state.faceCheckEnds - Date.now()) / 1000));
+    $('faceCheckLeft').textContent = left + ' s left';
+    $('faceCheckBadge').textContent = st === 'OK' ? '✓ Face seen' : 'Looking for your face…';
+    if (st === 'OK' || left <= 0) {
+      if (st === 'OK' && (state.rules.cameraSnapshots || state.rules.randomSnapshots)) {
+        let dataUrl = null; // the face, for the teacher: who is taking the exam
+        try { dataUrl = window.ExamCamera.snapshot('Face check', { small: true }); } catch (e) { dataUrl = null; }
+        if (dataUrl) api('snapshot', { attemptId: state.attemptId, event: 'RANDOM', dataUrl }, 2).catch(() => {});
+      }
+      state.cam.faceCheckOpen = false;
+      $('faceCheckModal').hidden = true;
+      window.ExamCamera.setMode('hands');
+      if (st !== 'OK' && state.active) cameraOffense('FACE_CHECK', 'Did not show the face within ' + FACE_CHECK_S + ' s when asked.');
+      if (state.active && state.planFaceCheck) state.planFaceCheck(false);
+    }
+  }
+  /** Keys and clicks while no hand is visible or the hands don't move: noted for the teacher (never a warning or void). */
+  function noteHands() {
+    const h = window.ExamCamera.handInfo();
+    state.handLog = (state.handLog || []).filter((x) => Date.now() - x.at < 4000);
+    state.handLog.push(h);
+  }
+  function onInputForHands() {
+    if (!state.active || !state.cam.hands || state.cam.faceCheckOpen || window.ExamCamera.mode() !== 'hands') return;
+    const now = Date.now();
+    state.inputLog = (state.inputLog || []).filter((t) => now - t < 3000);
+    state.inputLog.push(now);
+    if (state.inputLog.length < 5 || (state.lastHandNote && now - state.lastHandNote < 120000)) return;
+    const log = (state.handLog || []).filter((x) => now - x.at < 3000);
+    if (log.length < 4) return;
+    const noHands = log.every((x) => x.count === 0);
+    const still = !noHands && log.every((x) => x.count > 0 && x.motion < 0.002);
+    if (!noHands && !still) return;
+    state.lastHandNote = now;
+    api('note', { attemptId: state.attemptId, event: noHands ? 'INPUT_NO_HANDS' : 'INPUT_HANDS_STILL',
+      detail: (noHands ? 'Typing or clicking while no hands were visible' : 'Typing or clicking while the hands on camera were not moving') + ' (' + state.inputLog.length + ' in 3 s)' }, 1).catch(() => {});
   }
 
   const camAllowed = () => { const n = Number(state.rules.cameraWarnings); return Number.isFinite(n) ? n : 1; };
@@ -378,6 +487,9 @@
     }
     state.cam.required = exam.faceMode === 'START' || exam.faceMode === 'ALWAYS';
     state.cam.continuous = exam.faceMode === 'ALWAYS';
+    state.cam.hands = state.cam.continuous && rules.handsCamera === true;
+    $('ruleFullscreen').hidden = !needFullscreen();
+    renderSeb();
     const fw = focusAllowed();
     if (fw > 0) {
       $('ruleFocus').innerHTML = '<b>Stay on the exam page.</b> Opening another tab, minimizing the browser, Alt+Tab / Cmd+Tab or clicking another app counts as leaving. ' +
@@ -398,6 +510,12 @@
       const n = camAllowed();
       $('agreeText').textContent = 'I have read the rules. I understand that ' + (focusAllowed() ? 'leaving the exam page (after my warnings) ' : 'switching tabs or windows ') + 'or using a second monitor will void my exam, ' +
         'and that my camera is monitored: ' + (n === 0 ? 'any camera problem will void my exam.' : 'I get ' + (n === 1 ? 'one warning' : n + ' warnings') + ', and the next camera problem will void my exam.');
+      if (state.cam.hands) {
+        $('ruleCamera').innerHTML = '📷 <b>Your camera watches your hands and desk during the whole exam.</b> Before you start, the camera checks your face; then tilt your screen back (or point your camera down) so it shows your hands on the keyboard. ' +
+          'Keep your hands in view. <b>At random times you will be asked to show your face</b> (you have ' + FACE_CHECK_S + ' seconds). If your hands leave the view, the camera is covered, a phone is seen, or you don\'t show your face when asked, ' + camRuleText() +
+          (state.rules.cameraSnapshots || state.rules.randomSnapshots ? ' Small still pictures are saved for your teacher (when the camera flags something, and at each face check). No video is recorded.' : '');
+        $('camHelp').textContent = 'Step 1: turn on your camera and face the screen so the camera can check your face. Step 2 follows.';
+      }
     } else if (state.cam.required) {
       $('ruleCamera').innerHTML = '📷 <b>Your face must be visible to the camera before you can start.</b> Sit facing the screen in a well-lit place, with only you in view.';
       $('camHelp').textContent = 'Turn on your camera so we can check that your face is visible. The camera turns off when the exam starts.';
@@ -425,6 +543,7 @@
         ? 'Questions are shown <b>one at a time</b>. You can go back to earlier questions before submitting.'
         : 'Questions are shown <b>one at a time</b>. <b>You cannot go back</b> to a question once you click <i>Next</i>, so answer each one before moving on.';
     }
+    if (!$('sebPanel').hidden) $('cameraPanel').hidden = true; // the camera is turned on inside Safe Exam Browser
     show('rules');
     refreshStartButton();
   }
@@ -433,6 +552,7 @@
     ev.preventDefault();
     const err = $('startError');
     err.hidden = true;
+    if (needFullscreen() && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); // must happen on the click
     if (state.info.exam.requiresPassword && !$('examPassword').value.trim()) {
       err.textContent = 'Enter the exam password from your teacher.';
       err.hidden = false;
@@ -461,6 +581,7 @@
           isExtended: m === 'multiple',
           monitorCheck: m === 'unsupported' ? 'unsupported' : 'supported',
           camera: state.cam.required && window.ExamCamera.status() === 'OK' ? 'ok' : 'none',
+          cameraName: state.cam.required ? window.ExamCamera.cameraName() : '',
         },
       }, 2);
       busy(false);
@@ -844,7 +965,9 @@
       $('camIndicator').hidden = preview;
       window.ExamCamera.resume();
       startRandomSnapshots();
+      startFaceChecks();
     }
+    if (needFullscreen() && !document.fullscreenElement) showFsModal(false);
     tick();
     state.timerId = setInterval(tick, 250);
     state.lastOkAt = Date.now();
@@ -1427,6 +1550,8 @@
 
   function showResult(r) {
     show('result');
+    if (state.info && state.info.seb && state.info.seb.inSeb) { $('sebQuit').hidden = false; $('resultBack').hidden = true; }
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     $('resultText').textContent = 'Thank you, ' + (state.student ? state.student.name : '') + '. Your answers have been recorded.';
     if (r.showScore) {
       $('resultScore').hidden = false;
@@ -1457,6 +1582,9 @@
     MULTIPLE_FACES: 'More than one person was in front of the camera.',
     PHONE_DETECTED: 'A mobile phone was seen on camera. If it was your calculator, keep it flat on your desk, below the camera.',
     CAMERA_OFF: 'Your camera was turned off or disconnected.',
+    NO_HANDS: 'Your hands were not visible to the camera.',
+    FACE_CHECK: 'You did not show your face when the camera asked.',
+    FULLSCREEN_EXIT: 'You left full screen.',
     CONNECTION_LOST: 'Your internet connection was lost for longer than allowed.',
   };
 
@@ -1560,6 +1688,43 @@
 
   // ── Tab/window warnings (the exam's "Tab/window warnings" setting; 0 = leaving voids at once) ──
   const AWAY_LIMIT_MS = 60000; // with warnings on, staying away longer than this voids the exam
+  // ── Full screen (exam option; Safe Exam Browser is full screen by itself) ──
+  function needFullscreen() {
+    return !!(state.rules && state.rules.requireFullscreen && !(state.info && state.info.seb && state.info.seb.inSeb) && document.fullscreenEnabled && !state.offline);
+  }
+  function showFsModal(counted) {
+    $('fsText').textContent = counted ? 'Leaving full screen counts like leaving the exam. Click the button to go back.' : 'This exam runs in full screen. Click the button to continue.';
+    $('fsModal').hidden = false;
+  }
+  function onFullscreenChange() {
+    if (!needFullscreen()) return;
+    if (document.fullscreenElement) { $('fsModal').hidden = true; if (state.awayFs) { state.awayFs = false; state.awaySince = null; } return; }
+    if (!state.active || state.voided || state.unloading) return;
+    setTimeout(() => {
+      if (document.fullscreenElement || !state.active || document.visibilityState === 'hidden') return; // a tab switch counts on its own
+      if (!state.awaySince) state.awayFs = true;
+      leftExam('FULLSCREEN_EXIT', 'Left full screen.');
+      if (state.active) showFsModal(true);
+    }, 300);
+  }
+
+  // ── Safe Exam Browser (Strict exams) ──
+  function renderSeb() {
+    const sb = state.info && state.info.seb;
+    const need = !!(sb && sb.required && !state.offline);
+    $('ruleSeb').hidden = !need;
+    if (!need) { $('sebPanel').hidden = true; return; }
+    const ok = sb.strict ? sb.status === 'verified' : !!sb.status;
+    $('sebPanel').hidden = ok;
+    $('startForm').hidden = !ok;
+    $('sebOpen').href = sb.launchUrl;
+    $('sebTest').href = sb.checkUrl;
+    const mm = $('sebMismatch');
+    mm.hidden = !(sb.inSeb && !ok);
+    mm.textContent = sb.status === 'detected' ? 'Safe Exam Browser was found, but not with this exam\'s settings. Quit it, then open the exam again with the "Open in Safe Exam Browser" button.'
+      : 'This page is open in Safe Exam Browser, but not through this exam\'s link. Quit it, then use the "Open in Safe Exam Browser" button.';
+  }
+
   const focusAllowed = () => { const n = Number(state.rules.focusWarnings); return Number.isFinite(n) && n > 0 ? n : 0; };
 
   /** The student left the exam (tab switch, another window). One warning per time away, then void. */
@@ -1585,7 +1750,8 @@
   function showFocusWarning(event) {
     const n = focusAllowed(), used = state.focusWarnings, left = n - used;
     $('focusWarnTitle').textContent = '⚠ You left the exam — warning ' + used + ' of ' + n;
-    $('focusWarnReason').textContent = event === 'TAB_SWITCH' ? 'The exam page was hidden (another tab, or the browser was minimized).' : 'Another window or app was in front of the exam.';
+    $('focusWarnReason').textContent = event === 'TAB_SWITCH' ? 'The exam page was hidden (another tab, or the browser was minimized).'
+      : event === 'FULLSCREEN_EXIT' ? 'You left full screen (for example by pressing Esc).' : 'Another window or app was in front of the exam.';
     $('focusWarnNext').textContent = left === 0 ? 'This was your last warning: if you leave the exam again, it will be voided.'
       : 'You have ' + left + ' warning' + (left === 1 ? '' : 's') + ' left. After that, leaving the exam voids it.';
     $('focusWarnModal').hidden = false;
@@ -1679,6 +1845,15 @@
     });
     $('nextBtn').addEventListener('click', goNext);
     $('camBtn').addEventListener('click', turnOnCamera);
+    $('camPick').addEventListener('change', async () => {
+      try { await window.ExamCamera.useCamera($('camPick').value); } catch (e) { $('camError').textContent = e.message; $('camError').hidden = false; }
+      state.cam.faceChecked = false; if (window.ExamCamera.setMode) window.ExamCamera.setMode('face');
+      await checkCameraKind();
+    });
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    $('fsBtn').addEventListener('click', () => { document.documentElement.requestFullscreen().catch(() => {}); });
+    document.addEventListener('keydown', onInputForHands, true);
+    document.addEventListener('mousedown', onInputForHands, true);
     $('faceWarnOk').addEventListener('click', closeFaceWarning);
     $('focusWarnOk').addEventListener('click', () => { $('focusWarnModal').hidden = true; backInExam(); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') backInExam(); });

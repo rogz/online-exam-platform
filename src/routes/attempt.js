@@ -10,7 +10,8 @@ const { fail, str, isUuid } = require('../util');
 const snapshots = require('../snapshots');
 const offline = require('../offline');
 
-const { STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, PING_SLACK_MS } = core;
+const seb = require('../seb');
+const { STATUS, VIOLATION_LABELS, WARNABLE_EVENTS, FOCUS_EVENTS, PING_SLACK_MS } = core;
 const router = express.Router();
 router.use(auth.requireRole('student'));
 
@@ -230,6 +231,8 @@ const actions = {
         faceMode: exam.faceMode, cameraPreview: exam.cameraPreview, allowedDevices: exam.allowedDevices,
         requiresPassword: !!exam.password,
       },
+      seb: { required: exam.options.requireSEB, status: seb.fromCookie(req, exam.id), launchUrl: seb.launchUrl(req, exam.id),
+        checkUrl: seb.launchUrl(req, 'check'), inSeb: seb.isSebAgent(req.get('user-agent')), strict: !!s.sebStrict },
       rules: exam.options,
       student: { name: req.user.name, id: req.user.student_no || req.user.email },
     };
@@ -245,6 +248,11 @@ const actions = {
       const exam = core.examConfig(x);
       const opts = exam.options;
       const pool = await loadPool(q, exam);
+      // Strict exams: only in Safe Exam Browser (the exam page set a signed cookie when SEB opened it)
+      const sebLevel = seb.fromCookie(req, exam.id);
+      if (opts.requireSEB && !(s.sebStrict ? sebLevel === 'verified' : sebLevel)) {
+        throw fail(403, 'SEB_REQUIRED', 'This exam must be taken in Safe Exam Browser. Click "Open in Safe Exam Browser" on the exam page.');
+      }
       await q('SELECT id FROM users WHERE id = $1 FOR UPDATE', [req.user.id]); // one start at a time per student
       const mine = (await q('SELECT * FROM attempts WHERE exam_id = $1 AND student_id = $2 ORDER BY started_at', [exam.id, req.user.id])).rows;
       const last = mine[mine.length - 1];
@@ -302,9 +310,12 @@ const actions = {
         }
         if (device === 'computer') {
           if (env.isExtended === true) throw fail(409, 'SECOND_MONITOR', 'A second monitor is connected. Disconnect it before starting the exam.');
-          if (opts.requireMonitorCheck && env.monitorCheck !== 'supported') {
+          if (opts.requireMonitorCheck && env.monitorCheck !== 'supported' && !sebLevel) { // SEB blocks a second screen itself
             throw fail(409, 'UNSUPPORTED_BROWSER', 'Please open the exam in Google Chrome or Microsoft Edge on a laptop or desktop computer.');
           }
+        }
+        if (exam.faceMode !== 'OFF' && opts.blockVirtualCamera && core.isVirtualCamera(env.cameraName)) {
+          throw fail(409, 'VIRTUAL_CAMERA', '"' + str(env.cameraName, 80) + '" is camera software, not a real camera. Choose your real camera.');
         }
         if (exam.faceMode !== 'OFF' && env.camera !== 'ok') {
           throw fail(409, 'CAMERA_REQUIRED', 'This exam requires your camera. Turn it on and make sure your face is visible.');
@@ -316,6 +327,8 @@ const actions = {
         attempt = (await q(`INSERT INTO attempts (id, exam_id, student_id, status, started_at, deadline, max_score, is_retake, user_agent, device, last_seen)
                             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$5) RETURNING *`,
           [id, exam.id, req.user.id, STATUS.IN_PROGRESS, now, deadline, maxScore, isRetake, str(env.userAgent, 300), device])).rows[0];
+        if (sebLevel) await logEvent(q, attempt.id, 'SEB', sebLevel === 'verified' ? 'Safe Exam Browser: verified (settings match)' : 'Safe Exam Browser: detected (settings not verified)');
+        if (env.cameraName) await logEvent(q, attempt.id, 'CAMERA', 'Camera: ' + str(env.cameraName, 120));
       }
 
       if (typeof b.pageToken === 'string' && /^[0-9a-f-]{36}$/.test(b.pageToken)) {
@@ -403,6 +416,18 @@ const actions = {
     return withRank(await receiveOffline(req.body, { studentId: req.user.id, source: 'the student\'s device' }), req.body.packageId, req.user.id);
   },
 
+  /** Something for the teacher to look at, with no warning or void (e.g. typing while no hands were on camera). At most 30 per attempt. */
+  async note(req) {
+    const event = ['INPUT_NO_HANDS', 'INPUT_HANDS_STILL'].includes(req.body.event) ? req.body.event : null;
+    if (!event || !isUuid(req.body.attemptId)) return { logged: false };
+    const a = await db.one('SELECT id, status FROM attempts WHERE id = $1 AND student_id = $2', [req.body.attemptId, req.user.id]);
+    if (!a || a.status !== STATUS.IN_PROGRESS) return { logged: false };
+    const n = (await db.one('SELECT count(*)::int AS n FROM violations WHERE attempt_id = $1 AND event = ANY($2::text[])', [a.id, ['INPUT_NO_HANDS', 'INPUT_HANDS_STILL']])).n;
+    if (n >= 30) return { logged: false };
+    await logEvent((sql, p) => db.query(sql, p), a.id, event, 'CHECK: ' + str(req.body.detail, 200));
+    return { logged: true };
+  },
+
   /** An unexpected error on the exam page (a bug): logged for the teacher. At most 5 per attempt. */
   async clientError(req) {
     if (!isUuid(req.body.attemptId)) return { logged: false };
@@ -464,7 +489,7 @@ const actions = {
         }
       }
       // Leaving the exam (tab switch, another window): warnings first, if the exam allows them.
-      if (['TAB_SWITCH', 'LEFT_WINDOW'].includes(event) && req.body.final !== true) {
+      if (FOCUS_EVENTS.includes(event) && req.body.final !== true) {
         const allowedF = (await examOfAttempt(t.query, a)).options.focusWarnings;
         const usedF = Number(a.focus_warnings) || 0;
         if (usedF < allowedF) {

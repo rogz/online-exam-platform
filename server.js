@@ -76,7 +76,26 @@ function createApp() {
   app.get('/student', page('student.html'));
   app.get('/teacher', page('teacher.html'));
   app.get('/admin', page('admin.html'));
-  app.get('/exam', page('exam/index.html'));
+  // Strict exams: opened in Safe Exam Browser, the exam page remembers it (a signed cookie for that exam; no database)
+  const seb = require('./src/seb');
+  app.get('/exam', (req, res, next) => { if (/^[0-9a-f-]{36}$/i.test(String(req.query.id || ''))) seb.rememberPage(req, res, String(req.query.id).toLowerCase()); next(); },
+    page('exam/index.html'));
+  app.get('/seb/:file', (req, res) => {
+    const m = /^([0-9a-f-]{36}|check)\.seb$/i.exec(req.params.file);
+    if (!m) return res.status(404).type('text').send('Not found.');
+    res.set('Cache-Control', 'no-store').type('application/seb').set('Content-Disposition', 'attachment; filename="exam.seb"')
+      .send(seb.plist(seb.settings(seb.baseUrl(req), m[1].toLowerCase())));
+  });
+  // A test page to open in Safe Exam Browser before the exam day: is it working, and does the camera work in it?
+  app.get('/seb-check', async (req, res, next) => {
+    try {
+      const html = await fs.promises.readFile(path.join(pub, 'seb-check.html'), 'utf8');
+      const info = { level: seb.check(req, 'check'), sebAgent: seb.isSebAgent(req.get('user-agent')), keyHeader: !!req.get('x-safeexambrowser-configkeyhash'),
+        userAgent: String(req.get('user-agent') || '').slice(0, 300) };
+      res.set('Cache-Control', 'no-store').type('html').send(html.replace('/*SEB_INFO*/null', JSON.stringify(info).replace(/</g, '\\u003c')));
+    } catch (e) { next(e); }
+  });
+  app.get('/seb-quit', (req, res) => res.type('html').send('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Done</title><body style="font:16px system-ui;padding:40px;text-align:center"><p>You can close Safe Exam Browser now.</p></body>'));
   app.get('/preview', page('exam/preview.html'));
   app.get('/reset', page('reset.html'));
   app.get('/join/:code', page('join.html'));

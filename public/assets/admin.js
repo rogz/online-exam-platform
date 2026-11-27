@@ -255,6 +255,8 @@
       <div class="paymethod"><div id="sEmailStatus" class="note small info">Checking…</div>
         <button type="button" class="btn small" id="sTestEmail" style="margin-top:8px">Send me a test email</button></div>
       <h3 class="settings-h">Safety: updates and backups</h3>
+      <div class="paymethod"><label class="check"><input type="checkbox" id="sSebStrict"${s.sebStrict ? ' checked' : ''}> <b>Strict exams: accept Safe Exam Browser only with this site's exact settings</b></label>
+        <div class="hint">Leave this off until a test on a real computer shows "verified" on the Safe Exam Browser test page (open <b>${location.origin.replace(/^http/, 'seb')}/seb/check.seb</b> there). Off: any Safe Exam Browser is accepted and Results shows whether it was verified.</div></div>
       <div class="paymethod"><label class="check"><input type="checkbox" id="sPause"${s.updatesPaused ? ' checked' : ''}> <b>Pause site updates</b> (e.g. during exam week)</label>
         <div class="hint">While on, new versions of the site are not installed, so nothing changes during your exams. Updates also wait by themselves while students are taking an exam. Turn it off after the exams.</div></div>
       <div class="paymethod" id="sBackups"><div class="small muted">Checking backups…</div></div>
@@ -303,7 +305,7 @@
       await api('/admin/settings', { siteName: $('#sName').value, timeZone: $('#sTz').value, teacherSignup: $('#sTeachMode').value !== 'closed', teacherApproval: $('#sTeachMode').value === 'approval', studentSignup: $('#sStud').checked, signupCredits: $('#sWelcome').value,
         paymentsEnabled: $('#sPayOn').checked, creditPackages: $('#sPack').value, currency: $('#sCur').value, bankEnabled: $('#sBankOn').checked, bankDetails: $('#sBank').value,
         paypalEnabled: $('#sPpOn').checked, paypalLink: $('#sPpLink').value, otherEnabled: $('#sOtherOn').checked,
-        paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value, updatesPaused: $('#sPause').checked });
+        paymentInstructions: $('#sPay').value, supportContact: $('#sSupport').value, updatesPaused: $('#sPause').checked, sebStrict: $('#sSebStrict').checked });
       toast('Settings saved');
     };
   }

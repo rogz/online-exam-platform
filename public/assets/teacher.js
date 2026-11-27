@@ -594,7 +594,7 @@
               <span class="hint">Students take it online. If the internet drops, the exam keeps going and the answers are sent when it is back.</span></span></label>
             <label class="netopt"><input type="radio" name="eNet" value="OFFLINE"${net === 'OFFLINE' ? ' checked' : ''}> <span><b>No internet, or very weak</b>: offline exam
               <span class="hint">Students download it before, with internet. In the room you give the password. They hand in with a receipt code: online later, or by QR code.</span></span></label>
-            <label class="netopt"><input type="radio" name="eNet" value="STRICT"${net === 'STRICT' ? ' checked' : ''}> <span><b>Strict</b>
+            <label class="netopt"><input type="radio" name="eNet" value="STRICT"${net === 'STRICT' ? ' checked' : ''}> <span><b>Must stay online</b>
               <span class="hint">Void the exam if a student is offline longer than the reconnect window (Advanced settings).</span></span></label>
           </div>
           <div id="offlineMore" class="offlinebox"${net === 'OFFLINE' ? '' : ' hidden'}>
@@ -605,8 +605,20 @@
             <input type="number" id="oOfflineMin" min="0" max="1440" value="${o.offlineSubmitMinutes === undefined ? 60 : o.offlineSubmitMinutes}" style="width:80px" aria-label="Minutes after the deadline">
             <span class="small">minutes after the deadline</span></div></fieldset>
         <fieldset><legend>Security</legend>
+          <div class="netchoice seclevels" id="secLevels">
+            ${[['PRACTICE', 'Practice', 'Practice quizzes and take-home work: any device, no camera, a few tab warnings.'],
+              ['STANDARD', 'Standard', 'Regular quizzes: computer or tablet, full screen, face checked at the start, 2 tab warnings.'],
+              ['STRICT', 'Strict', 'Midterms and finals: Safe Exam Browser, camera on the hands the whole exam with random face checks.'],
+              ['CUSTOM', 'Custom', 'Choose each setting yourself.']].map(([k, t, h]) => `<label class="netopt"><input type="radio" name="eSec" value="${k}"> <span><b>${t}</b><span class="hint">${h}</span></span></label>`).join('')}
+          </div>
+          <div class="secsum small" id="secSummary"></div>
+          <div id="secCustom">
+          <label class="check"><input type="checkbox" id="oSEB"${o.requireSEB ? ' checked' : ''}> 🔒 Require <b>Safe Exam Browser</b> (free; Windows, Mac, iPad). Blocks other apps, websites, screen sharing, remote control and a second screen.</label>
+          <label class="check"><input type="checkbox" id="oFs"${o.requireFullscreen ? ' checked' : ''}> ⛶ Require <b>full screen</b>: leaving it counts like switching tabs</label>
           <div class="field"><label for="eDev">Allowed devices</label><select id="eDev">${opt('COMPUTER', v('allowed_devices', 'COMPUTER'), 'Computers only')}${opt('TABLET', v('allowed_devices', 'COMPUTER'), 'Computers and tablets')}${opt('ANY', v('allowed_devices', 'COMPUTER'), 'Any device, including phones')}</select></div>
           <div class="field"><label for="eFace">Camera / face check</label><select id="eFace">${opt('OFF', v('face_mode', 'OFF'), 'Not required')}${opt('START', v('face_mode', 'OFF'), 'Check face at the start only')}${opt('ALWAYS', v('face_mode', 'OFF'), 'Monitor during the whole exam (warnings, then void)')}</select></div>
+          <label class="check"><input type="checkbox" id="oHands"${o.handsCamera ? ' checked' : ''}> 🖐 Camera watches the <b>hands and desk</b> (face checked at the start and at random times; also notices typing while the hands don't move)</label>
+          <label class="check"><input type="checkbox" id="oVirt"${o.blockVirtualCamera ? ' checked' : ''}> Refuse camera software (OBS, ManyCam …) that can play a recorded video</label>
           <label class="check"><input type="checkbox" id="ePrev"${v('camera_preview', true) ? ' checked' : ''}> Show students their camera preview</label>
           <div class="row" style="gap:6px;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="oRandSnap"${o.randomSnapshots ? ' checked' : ''}> Take random snapshots:</label>
             <input type="number" id="oSnapHour" min="1" max="30" value="${o.snapshotsPerHour || 6}" style="width:70px" aria-label="Random snapshots per hour"> <span>per hour</span></div>
@@ -626,7 +638,8 @@
             <label class="check"><input type="checkbox" id="oPhone"${o.phoneDetection ? ' checked' : ''}> Camera exams: watch for a phone</label>
             <label class="check"><input type="checkbox" id="oHead"${o.headDetection !== false ? ' checked' : ''}> Camera exams: accept the head when the student looks down (writing or solving), not only the face</label>
             <label class="check"><input type="checkbox" id="oSnap"${o.cameraSnapshots !== false ? ' checked' : ''}> Camera exams: save a small snapshot as proof when the camera flags something</label>
-            <label class="check"><input type="checkbox" id="oCount"${o.openCountdown ? ' checked' : ''}> Show a countdown before the exam opens</label></details></fieldset>
+            <label class="check"><input type="checkbox" id="oCount"${o.openCountdown ? ' checked' : ''}> Show a countdown before the exam opens</label></details>
+          </div></fieldset>
         <div class="row"><button type="button" class="btn" id="saveBtn">Save</button>
           ${x && x.published ? '<button type="button" class="btn" id="unpubBtn">Unpublish</button>' : '<button type="button" class="btn primary" id="pubBtn">Save &amp; publish</button>'}</div>
         <div class="hint" id="pubHint"></div>
@@ -768,6 +781,40 @@
     $('#ePass').addEventListener('input', showPass);
     $('#genPass').onclick = async () => { $('#ePass').value = (await api('/teacher/new-offline-password')).password; showPass(); };
     showPass();
+    // ── Security level: one choice fills in the settings below ──
+    const SEC = {
+      PRACTICE: { eDev: 'ANY', eFace: 'OFF', ePrev: true, oRandSnap: false, oFocusWarn: 3, oCamWarn: 1, oMon: false, oCopy: false, oPhone: true, oHead: true, oSnap: true, oSEB: false, oFs: false, oHands: false, oVirt: true },
+      STANDARD: { eDev: 'TABLET', eFace: 'START', ePrev: true, oRandSnap: false, oFocusWarn: 2, oCamWarn: 2, oMon: true, oCopy: true, oPhone: true, oHead: true, oSnap: true, oSEB: false, oFs: true, oHands: false, oVirt: true },
+      STRICT: { eDev: 'TABLET', eFace: 'ALWAYS', ePrev: true, oRandSnap: true, oSnapHour: 6, oFocusWarn: 0, oCamWarn: 2, oMon: true, oCopy: true, oPhone: true, oHead: true, oSnap: true, oSEB: true, oFs: true, oHands: true, oVirt: true },
+    };
+    const SEC_SUM = {
+      PRACTICE: ['Any device, including phones', 'No camera', '3 warnings for leaving the exam, then void', 'Copy and paste allowed'],
+      STANDARD: ['Computers and tablets', 'Full screen (leaving it counts like switching tabs)', 'Face checked by the camera before starting', '2 warnings for leaving the exam, then void', 'No second monitor; copy and paste blocked', 'Camera software (OBS, ManyCam) refused'],
+      STRICT: ['<b>Safe Exam Browser</b> (Windows, Mac or iPad): no other apps, websites, screen sharing, remote control or second screen', 'Camera on the <b>hands and desk</b> the whole exam, face checked at the start and at random times',
+        'Typing while the hands don\'t move is flagged for you (remote control)', 'Phone on camera: 2 warnings, then void; about 6 random pictures per hour', 'Camera software (OBS, ManyCam) refused', 'Students: test Safe Exam Browser before exam day (link on the exam page)'],
+    };
+    const fieldVal = (id) => { const el = $('#' + id); return el.type === 'checkbox' ? el.checked : el.type === 'number' ? +el.value : el.value; };
+    const matches = (k) => Object.keys(SEC[k]).every((id) => fieldVal(id) === SEC[k][id]);
+    let secLevel = x ? (o.securityLevel && o.securityLevel !== 'CUSTOM' && SEC[o.securityLevel] && matches(o.securityLevel) ? o.securityLevel : 'CUSTOM') : 'STANDARD';
+    function applySec(k, fill) {
+      secLevel = k;
+      $$('input[name=eSec]').forEach((r) => { r.checked = r.value === k; });
+      if (fill && SEC[k]) {
+        Object.keys(SEC[k]).forEach((id) => { const el = $('#' + id); if (el.type === 'checkbox') el.checked = SEC[k][id]; else el.value = SEC[k][id]; });
+        if (k === 'STRICT' && ($('input[name=eNet]:checked') || {}).value === 'OFFLINE') {
+          $('input[name=eNet][value=ONLINE]').checked = true; toast('Strict exams need internet (Safe Exam Browser): the exam is set to "Good or unstable internet".');
+        }
+      }
+      $('#secCustom').hidden = k !== 'CUSTOM';
+      $('#secSummary').innerHTML = SEC_SUM[k] ? '<ul>' + SEC_SUM[k].map((t) => '<li>' + t + '</li>').join('') + '</ul><button type="button" class="linkbtn" id="secEdit">Change these settings one by one</button>' : '';
+      if ($('#secEdit')) $('#secEdit').onclick = () => applySec('CUSTOM', false);
+      syncMode();
+    }
+    $$('input[name=eSec]').forEach((r) => r.addEventListener('change', () => applySec(r.value, r.value !== 'CUSTOM')));
+    applySec(secLevel, !x && secLevel !== 'CUSTOM');
+    $('#oHands').addEventListener('change', () => { if ($('#oHands').checked && $('#eFace').value !== 'ALWAYS') { $('#eFace').value = 'ALWAYS'; syncMode(); } });
+    $('#eFace').addEventListener('change', () => { if ($('#eFace').value !== 'ALWAYS') $('#oHands').checked = false; });
+
     drawPicker(); syncMode();
     const a = me.user.access || {};
     $('#pubHint').textContent = me.user.role === 'admin' || a.timeOk ? 'Publishing is included in your access.' : x && x.credit_spent ? 'Already paid for: publishing again is free.' : 'Publishing uses 1 credit (you have ' + (a.credits || 0) + ').';
@@ -784,6 +831,8 @@
         randomSnapshots: $('#oRandSnap').checked && $('#eFace').value === 'ALWAYS', snapshotsPerHour: $('#oSnapHour').value,
         keepGoingOffline: ($('input[name=eNet]:checked') || {}).value !== 'STRICT', offlineSubmitMinutes: $('#oOfflineMin').value, showRank: $('#oRank').checked,
         offlineMode: ($('input[name=eNet]:checked') || {}).value === 'OFFLINE',
+        securityLevel: secLevel, requireSEB: $('#oSEB').checked, requireFullscreen: $('#oFs').checked,
+        handsCamera: $('#oHands').checked && $('#eFace').value === 'ALWAYS', blockVirtualCamera: $('#oVirt').checked,
         pointsRule: { mode: pr.mode, all: pr.all, byType: pr.byType, byTopic: pr.byTopic } },
     });
     async function save() {
@@ -858,7 +907,7 @@
         <td data-label="Result">${STATUS_TAG[a.status] || esc(a.status)}${a.offline ? ' <span class="tag grey" title="Taken without internet from the downloaded copy">Offline</span>' : ''}${a.is_retake ? ' <span class="tag grey">Retake</span>' : ''}${a.late ? ' <span class="tag warn">Late</span>' : ''}
           ${a.score !== null ? '<div class="score">' + a.score + ' / ' + a.max_score + ' <span class="muted">(' + a.percent + '%)</span></div>' : ''}${a.pending_essays ? '<div class="small" style="color:var(--warn)">' + a.pending_essays + ' to grade</div>' : ''}${a.to_check ? '<div class="small" style="color:var(--warn)" title="Close spelling, a number just outside the range, or a different unit: open Answers to decide">⚠ ' + a.to_check + ' to check</div>' : ''}</td>
         <td data-label="Time" class="small"><div class="nowrap">${esc(App.fmtDate(a.started_at))}</div>${a.submitted_at ? '<div class="muted nowrap">→ ' + esc(endText) + ' · ' + mins + ' min</div>' : ''}</td>
-        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}${Number(a.offline_ms) >= 60000 ? '<div title="The internet was down; the exam page stayed open and kept checking">📶 Offline ' + Math.round(a.offline_ms / 60000) + ' min</div>' : ''}${Array.isArray(a.review) && a.review.length ? '<div style="color:var(--bad)" title="' + esc(a.review.join('\n')) + '">⚠ Check: ' + esc(a.review[0]) + (a.review.length > 1 ? ' (+' + (a.review.length - 1) + ' more)' : '') + '</div>' : ''}${a.receipt ? '<div class="muted">Receipt ' + esc(a.receipt) + '</div>' : ''}${a.page_errors ? '<div style="color:var(--warn)" title="The exam page had an unexpected problem; see Answers → Events (PAGE_ERROR)">⚠ Page problem (' + a.page_errors + ')</div>' : ''}${a.sent_late ? '<div style="color:var(--warn)" title="Finished while offline; the answers were sent when the internet came back. See Answers → Events.">⏳ Sent after the internet came back</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
+        <td data-label="Notes" class="small">${shortReason ? '<div class="bad-text" title="' + esc(reason) + '">' + esc(shortReason) + '</div>' : ''}${a.focus_warnings ? '<div>' + a.focus_warnings + ' tab warning' + (a.focus_warnings === 1 ? '' : 's') + '</div>' : ''}${a.warnings ? '<div>' + a.warnings + ' camera warning' + (a.warnings === 1 ? '' : 's') + '</div>' : ''}${a.hand_checks ? '<div class="bad-text" title="Keys or clicks while no hands were moving on camera: someone else may have been controlling the computer. See Answers → Events.">🖐 ' + a.hand_checks + ' to check (typing, hands not moving)</div>' : ''}${a.seb_note ? '<div title="' + esc(a.seb_note) + '">🔒 ' + (a.seb_note.includes('verified (') ? 'Safe Exam Browser ✓' : 'Safe Exam Browser (not verified)') + '</div>' : ''}${a.reconnects ? '<div>' + a.reconnects + ' reconnect' + (a.reconnects === 1 ? '' : 's') + '</div>' : ''}${Number(a.offline_ms) >= 60000 ? '<div title="The internet was down; the exam page stayed open and kept checking">📶 Offline ' + Math.round(a.offline_ms / 60000) + ' min</div>' : ''}${Array.isArray(a.review) && a.review.length ? '<div style="color:var(--bad)" title="' + esc(a.review.join('\n')) + '">⚠ Check: ' + esc(a.review[0]) + (a.review.length > 1 ? ' (+' + (a.review.length - 1) + ' more)' : '') + '</div>' : ''}${a.receipt ? '<div class="muted">Receipt ' + esc(a.receipt) + '</div>' : ''}${a.page_errors ? '<div style="color:var(--warn)" title="The exam page had an unexpected problem; see Answers → Events (PAGE_ERROR)">⚠ Page problem (' + a.page_errors + ')</div>' : ''}${a.sent_late ? '<div style="color:var(--warn)" title="Finished while offline; the answers were sent when the internet came back. See Answers → Events.">⏳ Sent after the internet came back</div>' : ''}<div class="muted">${esc(a.device || '')}</div></td>
         <td class="actions"><button type="button" class="btn small" data-answers="${a.id}">Answers</button>
           ${a.status !== 'IN_PROGRESS' ? `<label class="check small" title="Let this student take the exam again"><input type="checkbox" data-retake="${a.id}"${a.allow_retake ? ' checked' : ''}> Allow retake</label>` : ''}</td></tr>`;
       }).join('')

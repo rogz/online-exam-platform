@@ -267,6 +267,11 @@ table.list.exams tr.grouprow td { background: var(--panel-alt); padding: 0; bord
 table.exams tr[hidden] { display: none !important; }
 @media (max-width: 760px) { table.exams tr.grouprow { padding: 0; } table.exams tr.grouprow td { padding: 0; } }
 
+/* Exam editor: security level */
+.seclevels { margin-bottom: 8px; }
+.secsum ul { margin: 4px 0 6px 18px; padding: 0; }
+.secsum li { margin: 2px 0; }
+
 /* Drop a file here (CSV import, question pictures) */
 .dropzone { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; border: 2px dashed var(--line); border-radius: 8px; padding: 18px 16px; background: var(--panel-alt); cursor: pointer; font-weight: 400; font-size: 14px; color: var(--text); margin: 0; transition: border-color .15s, background .15s; }
 .dropzone:hover, .dropzone:focus-within { border-color: var(--primary); }

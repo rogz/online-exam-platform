@@ -8,7 +8,7 @@
 (function () {
   'use strict';
   // \$ (a plain dollar), or $…$ that doesn't start or end with a space and isn't followed by a digit
-  const MATH = /\\\$|\$(?=[^\s$])((?:\\.|[^$\\\n])*?[^\s\\$])\$(?!\d)/g;
+  const MATH = /\\\$|\$(?=[^\s$])((?:\\.|[^$\\\n])*?(?:\\.|[^\s\\$]))\$(?!\d)/g; // the last character may be escaped: $100\%$
   const BLANK = /_{3,}/;
 
   const SKIP = { INPUT: 1, TEXTAREA: 1, SCRIPT: 1, STYLE: 1, SELECT: 1, OPTION: 1, CODE: 1 };

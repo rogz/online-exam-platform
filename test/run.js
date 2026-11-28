@@ -601,6 +601,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
   ok(auto.b.lines[0].label === 'the full-load regulation is' && auto.b.lines[0].unit === '% at unity pf' && auto.b.lines[1].label === '' && auto.b.lines[1].unit === '% at 0.85 pf lagging',
     '"… is ____% at unity pf and ____% at 0.85 pf" splits into two clean lines');
   ok(auto.cells.every((n) => n === 4), 'every answer line has the same parts, so the boxes stay lined up');
+  const escEnd = await student.evaluate(() => { const d = document.createElement('div'); EWQ.setText(d, 'Regulation is $\\frac{a}{b} \\times 100\\%$. Done'); return !!d.querySelector('.katex') && !d.textContent.includes('\\frac'); });
+  ok(escEnd, 'math that ends with an escaped symbol ($… 100\\%$) is drawn too');
   await student.locator('#questions .blank-lines input.blank').nth(0).fill('120.4 V');
   ok((await student.textContent('#progress')).startsWith('0 /'), 'with one blank still empty, the question does not count as answered yet');
   await student.locator('#questions .blank-lines input.blank').nth(1).fill('7');

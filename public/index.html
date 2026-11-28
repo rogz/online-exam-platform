@@ -88,7 +88,7 @@
         <button type="button" class="btn light big" data-signup="student">Create a free student account</button>
         <button type="button" class="btn ghost big" data-signup="teacher">I'm a teacher</button>
       </div>
-      <ul class="ticks"><li>Free for students</li><li>Automatic grading</li><li>Works on computers and tablets</li></ul>
+      <ul class="ticks"><li>Free for students</li><li>Automatic grading</li><li>Works with weak internet</li><li>Practice to Strict security</li></ul>
     </div>
 
     <div class="auth" id="auth" aria-label="Sign in or create an account">
@@ -153,8 +153,8 @@
       <div class="card"><h3>For teachers</h3><p class="who" id="teacherStart">Start with an access code or credits</p>
         <ol class="steps">
           <li><div><b>Create a class</b><span>Each class gets its own join code to share with students.</span></div></li>
-          <li><div><b>Build your question bank</b><span>Multiple choice, true/false, fill in the blank and essays, with pictures and topics. Import from a spreadsheet.</span></div></li>
-          <li><div><b>Schedule an exam</b><span>Set when it opens and closes, the time limit, and the security you want.</span></div></li>
+          <li><div><b>Build your question bank</b><span>Multiple choice, true/false, fill in the blank and essays, with pictures, math and topics. Drag in a spreadsheet to add many at once.</span></div></li>
+          <li><div><b>Schedule an exam</b><span>Set when it opens and closes and the time limit, then pick a security level: Practice, Standard or Strict.</span></div></li>
           <li><div><b>See results instantly</b><span>Scores are calculated on submit. Grade essays, allow retakes, download to Excel.</span></div></li>
         </ol></div>
     </div>
@@ -164,15 +164,16 @@
     <div class="split">
       <div><div class="frame"><div class="chrome"><i></i><i></i><i></i></div>
         <img src="/assets/shot-exam.webp" width="2400" height="1520" loading="lazy" alt="Exam screen with a countdown timer, answered-question counter and multiple-choice questions."></div>
-        <p class="caption">The exam screen</p></div>
+        <p class="caption">The exam screen: math drawn properly, one answer line per blank</p></div>
       <div>
-        <h2 id="secH">A secure exam screen</h2>
-        <p class="sub">Students are told the rules before they start. Every event is logged for the teacher.</p>
+        <h2 id="secH">Security you choose with one click</h2>
+        <p class="sub">Pick a level for each exam. Students are told the rules before they start, and every event is logged for the teacher.</p>
         <ul class="checklist">
-          <li><div><b>Leaving the exam voids it</b><span>Switching tabs or apps, Alt+Tab, or a second monitor ends the attempt.</span></div></li>
-          <li><div><b>Optional camera check</b><span>Face visible at the start, or throughout: warnings (you choose how many), then void. No video is recorded.</span></div></li>
-          <li><div><b>Fair timing</b><span>A countdown on the server's clock, auto-submit at zero, and warnings before time runs out.</span></div></li>
-          <li><div><b>Bad internet isn't a failure</b><span>Students can reconnect within a minute and continue where they left off.</span></div></li>
+          <li><div><b>Practice, Standard or Strict</b><span>From relaxed practice quizzes to midterms. Each level sets everything for you; Custom lets you fine-tune.</span></div></li>
+          <li><div><b>Strict: Safe Exam Browser</b><span>The free exam browser locks the computer: no other apps, websites, AI helpers, screen sharing, remote control or second screen.</span></div></li>
+          <li><div><b>Camera checks, no video recorded</b><span>Face, hands and desk, a phone in view, camera software refused, random face checks and pictures. Warnings first, then void.</span></div></li>
+          <li><div><b>Leaving the exam counts</b><span>Switching tabs or apps, leaving full screen or a second monitor: warnings you choose, then void.</span></div></li>
+          <li><div><b>Bad internet isn't a failure</b><span>Answers are kept on the device and sent when the internet is back. No internet at all? Students download the exam and hand in by QR code.</span></div></li>
         </ul>
       </div>
     </div>
@@ -182,12 +183,15 @@
     <h2 id="featH">Built for real classrooms</h2>
     <p class="sub">Everything a teacher needs to run quizzes, long exams and midterms online.</p>
     <div class="features">
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><b>Automatic grading</b><span>Multiple choice, true/false and fill-in-the-blank are scored on submit. You grade the essays.</span></div>
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 9v11"/></svg><b>Reusable question bank</b><span>Pictures, topics and points per question. Import or export as a spreadsheet.</span></div>
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg><b>A different set per student</b><span>Shuffle questions and choices, or pick 10 of 50, even 5 easy and 5 hard per student.</span></div>
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg><b>Schedules and time limits</b><span>Opening and closing times, per-exam or per-question limits, and an exam password.</span></div>
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="12" height="16" rx="1"/><path d="M15 8h4a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-4"/></svg><b>Computers and tablets</b><span>Choose per exam: computers only, computers and tablets, or any device.</span></div>
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg><b>Results you can use</b><span>Class averages, every answer, an event log, retakes, and downloads for Excel.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><b>Automatic grading</b><span>Multiple choice, true/false and fill-in-the-blank are scored on submit. Numbers within a range (122.5 ± 1%), several blanks with partial points, close spellings flagged for you.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20h4l9-16"/><path d="M14 14l6 6M20 14l-6 6"/></svg><b>Math and engineering</b><span>Subscripts, powers, fractions and symbols drawn properly (<i>V</i><sub>S</sub>, 10<sup>−3</sup>, Ω, √3). Each blank of a problem gets its own answer line.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 9v11"/></svg><b>Reusable question bank</b><span>Folders, pictures (paste a screenshot), topics and points. Drag in a spreadsheet to import; export any time.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg><b>A different set per student</b><span>Shuffle questions and choices, or pick per topic and per type: say 3 from Long Lines and 10 multiple choice from the rest.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg><b>Schedules and time limits</b><span>Opening and closing times, per-exam or per-question limits, an exam password, and extra time for one student when needed.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/><path d="M3 3l18 18"/></svg><b>Weak or no internet</b><span>Answers are saved on the device and sent later. Offline exams are downloaded ahead and handed in with a receipt code or a QR code.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="12" height="16" rx="1"/><path d="M15 8h4a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-4"/></svg><b>Computers, tablets, phones</b><span>Choose per exam which devices are allowed. Light and dark look on every page.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg><b>Results you can use</b><span>Class mean, median and each student's rank; every answer and event; grade essays, help one student continue, download for Excel.</span></div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><b>Safe and backed up</b><span>Nightly backups, site updates wait until no one is taking an exam, and sign-up is protected against spam accounts.</span></div>
     </div>
   </section>
 
